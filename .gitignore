@@ -1,0 +1,39 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+**/doc/api/
+# 注：drift/build_runner 的 *.g.dart 生成代码随库分发，保证 clone 即可构建
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+
+# Android
+android/local.properties
+android/key.properties
+*.jks
+*.keystore
+android/app/debug/
+android/app/profile/
+android/app/release/
+
+# 运行产物 / 本机数据
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.apk
+*.aab
+*.log
+
+# 系统
+.DS_Store
+Thumbs.db
