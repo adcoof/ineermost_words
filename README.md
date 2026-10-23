@@ -8,7 +8,8 @@
 
 <p align="center">
   安卓 AI 角色扮演聊天应用：自备 API、导入角色卡、Live2D 桌宠互动、双向语音对话。<br>
-  奇点重现工作室出品 · <a href="https://www.sigborn.xyz">www.sigborn.xyz</a>
+  奇点重现工作室出品 · <a href="https://www.sigborn.xyz">www.sigborn.xyz</a><br>
+  English：<a href="README.en.md">README.en.md</a>
 </p>
 
 ---
