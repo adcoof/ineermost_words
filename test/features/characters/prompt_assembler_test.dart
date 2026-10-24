@@ -122,4 +122,37 @@ void main() {
       expect(window.map((m) => m.content), ['正常']);
     });
   });
+
+  group('PromptAssembler 跨会话记忆', () {
+    test('注入位置：场景后、标签规范前；原文片段按角色名标注', () {
+      final messages = PromptAssembler().assemble(
+        character: character,
+        history: [msg(ChatRole.user, '嗨')],
+        memorySummary: '用户叫小明',
+        pastTranscript: [
+          msg(ChatRole.user, '上次聊了天气'),
+          msg(ChatRole.assistant, '嗯，很热'),
+        ],
+      );
+
+      expect(messages[2].content, contains('记忆摘要'));
+      expect(messages[2].content, contains('用户叫小明'));
+      expect(messages[3].content, contains('【其他对话】'));
+      expect(messages[3].content, contains('【用户】上次聊了天气'));
+      expect(messages[3].content, contains('【林小雨】嗯，很热'));
+      expect(messages[4].content, PromptAssembler.tagSpecInstruction);
+      // 历史消息不受影响。
+      final nonSystems = messages.where((m) => m.role != 'system').toList();
+      expect(nonSystems.single.content, '嗨');
+    });
+
+    test('记忆参数缺省或空白：不产生额外 system', () {
+      final bare = PromptAssembler().assemble(character: character, history: const []);
+      expect(bare.where((m) => m.role == 'system').length, 4); // 人设+场景+标签+示例
+
+      final blank = PromptAssembler().assemble(
+          character: character, history: const [], memorySummary: '  ');
+      expect(blank.length, bare.length);
+    });
+  });
 }

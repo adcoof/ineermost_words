@@ -91,6 +91,9 @@ class Conversation {
   final DateTime updatedAt;
   final bool archived;
 
+  /// 本会话是否自动朗读（与全局 voice_enabled 相与生效）。
+  final bool voiceEnabled;
+
   const Conversation({
     required this.id,
     required this.title,
@@ -100,5 +103,6 @@ class Conversation {
     required this.createdAt,
     required this.updatedAt,
     required this.archived,
+    this.voiceEnabled = true,
   });
 }

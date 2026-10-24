@@ -176,7 +176,8 @@ class TtsProfileRepository {
     ));
   }
 
-  /// ASR 引擎：'mimo' | 'system'，缺省 'mimo'。
+  /// ASR 引擎：'mimo'（复用聊天配置）| 'custom'（独立配置）| 'system'，
+  /// 缺省 'mimo'。
   Future<String> asrEngine() async {
     final q = db.select(db.settings)..where((t) => t.key.equals('asr_engine'));
     final row = await q.getSingleOrNull();
@@ -187,6 +188,39 @@ class TtsProfileRepository {
     await db.into(db.settings).insertOnConflictUpdate(SettingsCompanion(
       key: const Value('asr_engine'),
       value: Value(engine),
+    ));
+  }
+
+  /// ASR 独立配置（asr_engine='custom' 时生效；与 TTS 的 profile 字段分离）。
+  Future<({String baseUrl, String apiKey, String model})> asrCustomConfig() async {
+    final q = db.select(db.settings)
+      ..where((t) =>
+          t.key.isIn(const ['asr_base_url', 'asr_api_key', 'asr_model']));
+    final rows = await q.get();
+    final map = {for (final r in rows) r.key: r.value};
+    return (
+      baseUrl: map['asr_base_url'] ?? '',
+      apiKey: map['asr_api_key'] ?? '',
+      model: map['asr_model'] ?? '',
+    );
+  }
+
+  Future<void> setAsrCustomConfig({
+    required String baseUrl,
+    required String apiKey,
+    required String model,
+  }) async {
+    await db.into(db.settings).insertOnConflictUpdate(SettingsCompanion(
+      key: const Value('asr_base_url'),
+      value: Value(baseUrl.trim()),
+    ));
+    await db.into(db.settings).insertOnConflictUpdate(SettingsCompanion(
+      key: const Value('asr_api_key'),
+      value: Value(apiKey.trim()),
+    ));
+    await db.into(db.settings).insertOnConflictUpdate(SettingsCompanion(
+      key: const Value('asr_model'),
+      value: Value(model.trim()),
     ));
   }
 

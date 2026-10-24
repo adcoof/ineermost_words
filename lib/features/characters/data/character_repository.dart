@@ -43,6 +43,28 @@ class CharacterRepository {
     return Character(id: newId(), name: '', createdAt: now, updatedAt: now);
   }
 
+  /// 读取角色跨会话记忆（摘要与水位线）。
+  ///
+  /// 记忆列不进 Character 领域模型：save() 是整行 upsert，
+  /// 若领域模型带记忆字段，编辑角色卡会用陈旧值覆盖 summarizer 刚写入的记忆。
+  Future<({String summary, DateTime? updatedAt})> getMemory(
+      String characterId) async {
+    final q = db.select(db.characters)..where((t) => t.id.equals(characterId));
+    final row = await q.getSingleOrNull();
+    if (row == null) return (summary: '', updatedAt: null);
+    return (summary: row.memorySummary, updatedAt: row.memoryUpdatedAt);
+  }
+
+  /// 更新记忆与水位线（只写这两列）。角色已删时静默无操作。
+  Future<void> setMemory(String characterId,
+      {required String summary, required DateTime updatedAt}) async {
+    await (db.update(db.characters)..where((t) => t.id.equals(characterId)))
+        .write(CharactersCompanion(
+      memorySummary: Value(summary),
+      memoryUpdatedAt: Value(updatedAt),
+    ));
+  }
+
   Future<void> delete(String id) async {
     final character = await getById(id);
     await (db.delete(db.characters)..where((t) => t.id.equals(id))).go();

@@ -1,11 +1,12 @@
 /// 提示词组装：把角色卡 + 会话历史拼成 /chat/completions 的 messages。
 ///
-/// 顺序（M2 定案）：
+/// 顺序（M2 定案 + v6 记忆注入）：
 /// 1. system 人设（名字/描述/性格）
 /// 2. system 场景（可选）
-/// 3. system 情绪/动作标签输出规范
-/// 4. system 对话示例（few-shot，只进 system 不进历史）
-/// 5. 滑动窗口：最近 40 条完成状态的消息（含角色开场白，它以 assistant 消息入库）
+/// 3. system 跨会话记忆：长期摘要 + 近期原文片段（可选，v6）
+/// 4. system 情绪/动作标签输出规范
+/// 5. system 对话示例（few-shot，只进 system 不进历史）
+/// 6. 滑动窗口：最近 40 条完成状态的消息（含角色开场白，它以 assistant 消息入库）
 library;
 
 import '../../chat/data/chat_api_client.dart';
@@ -28,9 +29,14 @@ class PromptAssembler {
       '除此之外不要输出任何其他标记或解释。';
 
   /// 组装完整请求消息列表。
+  ///
+  /// [memorySummary] 长期记忆摘要、[pastTranscript] 同角色其他会话的
+  /// 近期完成消息（时序）；两者任一为空则跳过对应段。
   List<ApiMessage> assemble({
     required Character character,
     required List<ChatMessage> history,
+    String memorySummary = '',
+    List<ChatMessage> pastTranscript = const [],
   }) {
     final system = <ApiMessage>[];
 
@@ -47,6 +53,28 @@ class PromptAssembler {
     if (character.scenario.trim().isNotEmpty) {
       system.add(
           ApiMessage(role: 'system', content: '场景：${character.scenario.trim()}'));
+    }
+
+    if (memorySummary.trim().isNotEmpty) {
+      system.add(ApiMessage(
+        role: 'system',
+        content: '以下是该角色对过往对话的记忆摘要（第一人称，由历次对话自动整理，'
+            '可能不完整），请自然延续这些记忆与关系进展，不要生硬复述：\n'
+            '${memorySummary.trim()}',
+      ));
+    }
+
+    if (pastTranscript.isNotEmpty) {
+      final lines = [
+        for (final m in pastTranscript)
+          '【${m.role == ChatRole.user ? '用户' : character.name}】${m.content}',
+      ];
+      system.add(ApiMessage(
+        role: 'system',
+        content: '以下是该角色与用户在【其他对话】中的近期片段，仅作背景参考，'
+            '不是当前对话正在发生的内容，不要逐条复述：\n'
+            '${lines.join('\n')}',
+      ));
     }
 
     system.add(const ApiMessage(role: 'system', content: tagSpecInstruction));

@@ -1,4 +1,4 @@
-/// 按设置选择 ASR 引擎（'mimo' 云端 / 'system' 本机），
+/// 按设置选择 ASR 引擎（'mimo' 复用聊天配置 / 'custom' 独立配置 / 'system' 本机），
 /// 启动失败且尚无结果时自动回退另一引擎；
 /// 回退只在 start 阶段发生（初始化失败场景），识别中途出错、
 /// stop/cancel 之后的错误直接上报，避免松手后再开一路僵尸识别会话。
@@ -10,9 +10,14 @@ import 'mimo_asr_provider.dart';
 import 'speech_to_text_asr_provider.dart';
 
 class ResolvingAsrProvider implements AsrProvider {
-  /// 读取设置里的 ASR 引擎（'mimo' | 'system'）。
+  /// 读取设置里的 ASR 引擎（'mimo' | 'custom' | 'system'）。
   final Future<String> Function() engineGet;
+
+  /// 复用聊天配置的云端实例（'mimo' 档）。
   final MimoAsrProvider mimo;
+
+  /// 独立配置的云端实例（'custom' 档）。
+  final MimoAsrProvider custom;
   final SpeechToTextAsrProvider system;
 
   /// 当前实际生效的引擎。
@@ -29,6 +34,7 @@ class ResolvingAsrProvider implements AsrProvider {
   ResolvingAsrProvider({
     required this.engineGet,
     required this.mimo,
+    required this.custom,
     required this.system,
   });
 
@@ -45,11 +51,13 @@ class ResolvingAsrProvider implements AsrProvider {
     final engine = await engineGet();
     late final AsrProvider primary;
     AsrProvider? secondary;
+    // 云端腿：按档位选实例（custom 档未配独立配置时自动回落聊天配置）。
+    final cloud = engine == 'custom' ? custom : mimo;
     if (engine == 'system') {
       primary = system;
       secondary = await mimo.canUse() ? mimo : null;
-    } else if (await mimo.canUse()) {
-      primary = mimo;
+    } else if (await cloud.canUse()) {
+      primary = cloud;
       secondary = system;
     } else {
       // 没聊天配置时云端不可用，直接本机，且此时无备引擎。

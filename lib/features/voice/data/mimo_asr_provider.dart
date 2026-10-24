@@ -35,6 +35,11 @@ class MimoAsrProvider implements AsrProvider {
   final String model;
   final ApiProfileRepository chatProfilesRepo;
 
+  /// 独立配置（语音界面「独立配置」档）：非空时优先于聊天配置。
+  /// mimo 档实例不注入（永远回落聊天配置），custom 档实例注入。
+  final Future<({String baseUrl, String apiKey, String model})?> Function()?
+      customConfigGet;
+
   AsrCallbacks? _callbacks;
   bool _recording = false;
   String? _recordPath;
@@ -44,6 +49,7 @@ class MimoAsrProvider implements AsrProvider {
     required this.apiKey,
     required this.model,
     required this.chatProfilesRepo,
+    this.customConfigGet,
     Dio? dio,
     AudioRecorder? recorder,
   })  : _dio = dio ??
@@ -53,6 +59,24 @@ class MimoAsrProvider implements AsrProvider {
         _rec = recorder;
 
   static const String defaultModel = 'mimo-v2.5-asr';
+
+  /// 独立配置（若注入且回调返回非空 baseUrl）。
+  Future<ApiProfile?> _customEndpoint() async {
+    final get = customConfigGet;
+    if (get == null) return null;
+    final c = await get();
+    if (c == null || c.baseUrl.trim().isEmpty) return null;
+    return ApiProfile(
+      id: '',
+      name: '',
+      baseUrl: c.baseUrl.trim(),
+      apiKey: c.apiKey.trim(),
+      model: c.model,
+      temperature: 1.0,
+      extraHeaders: '{}',
+      isDefault: false,
+    );
+  }
 
   Future<ApiProfile> _resolveEndpoint() async {
     if (baseUrl.trim().isNotEmpty) {
@@ -67,6 +91,8 @@ class MimoAsrProvider implements AsrProvider {
         isDefault: false,
       );
     }
+    final custom = await _customEndpoint();
+    if (custom != null) return custom;
     final chat = await chatProfilesRepo.getDefault();
     if (chat == null) {
       throw const AuthException('请先在设置中添加 API 供应商配置');
@@ -74,9 +100,11 @@ class MimoAsrProvider implements AsrProvider {
     return chat;
   }
 
-  /// 该 ASR 能否启用：专用 baseUrl 非空，或存在默认聊天配置可回落。
+  /// 该 ASR 能否启用：专用 baseUrl 非空，或独立配置非空，
+  /// 或存在默认聊天配置可回落。
   Future<bool> canUse() async {
     if (baseUrl.trim().isNotEmpty) return true;
+    if (await _customEndpoint() != null) return true;
     return (await chatProfilesRepo.getDefault()) != null;
   }
 
@@ -148,12 +176,19 @@ class MimoAsrProvider implements AsrProvider {
   /// 公开方法：供单测直调（不经过录音链路），录音链路在 [stop] 里调用它。
   Future<String> transcribe(List<int> wavBytes) async {
     final endpoint = await _resolveEndpoint();
+    // 模型优先级：构造 model > 独立配置 model > 默认（聊天回落档用默认，
+    // 不能拿聊天模型名当 ASR 模型）。
+    var asrModel = model.trim();
+    if (asrModel.isEmpty) {
+      asrModel = (await _customEndpoint())?.model.trim() ?? '';
+    }
+    if (asrModel.isEmpty) asrModel = defaultModel;
     final wavB64 = base64Encode(wavBytes);
     try {
       final response = await _dio.post<dynamic>(
         OpenAiChatApiClient.completionsUrl(endpoint.baseUrl),
         data: {
-          'model': model.trim().isEmpty ? defaultModel : model.trim(),
+          'model': asrModel,
           'messages': [
             {
               'role': 'user',

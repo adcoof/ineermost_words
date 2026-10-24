@@ -14,6 +14,7 @@ import '../data/chat_api_client.dart';
 import '../domain/models.dart';
 import 'emotion_tag_parser.dart';
 import 'keyword_emotion_detector.dart';
+import 'speech_sink.dart' show NoopSpeechSink;
 
 /// 聊天页 UI 状态。
 class ChatUiState {
@@ -92,7 +93,7 @@ class ChatController extends Notifier<ChatUiState> {
     final chatRepo = ref.read(chatRepositoryProvider);
     final profileRepo = ref.read(apiProfileRepositoryProvider);
     final api = ref.read(chatApiClientProvider);
-    final speechSink = ref.read(speechSinkProvider);
+    final realSink = ref.read(speechSinkProvider);
 
     if (_sendSeq == seq) state = state.copyWith(clearError: true);
 
@@ -127,6 +128,11 @@ class ChatController extends Notifier<ChatUiState> {
       await chatRepo.renameConversation(conversationId, _titleFrom(trimmed));
     }
 
+    // 会话级语音开关在本回合开始时取快照（流式中途改开关下一回合生效）；
+    // 会话不存在（并发删除）按开处理，与旧版行为一致。
+    final sink =
+        (conv?.voiceEnabled ?? true) ? realSink : const NoopSpeechSink();
+
     // 3. 助手占位消息。
     final assistant = await chatRepo.insertMessage(
       conversationId: conversationId,
@@ -137,20 +143,40 @@ class ChatController extends Notifier<ChatUiState> {
     );
 
     // 4. 组装请求消息：绑定角色走 PromptAssembler（人设 system + 40 条窗口），
-    //    否则保持 M1 的裸历史。
+    //    否则保持 M1 的裸历史。角色会话注入跨会话记忆（近期原文+长期摘要，
+    //    设置可关）；无角色会话不注入。
     final history = await chatRepo.watchMessages(conversationId).first;
     final Character? character = conv?.characterId == null
         ? null
         : await ref.read(characterRepositoryProvider).getById(conv!.characterId!);
-    final apiMessages = character == null
-        ? [
-            for (final m in history)
-              if (m.id != assistant.id &&
-                  m.status == MessageStatus.done &&
-                  m.content.trim().isNotEmpty)
-                ApiMessage(role: m.role.wire, content: m.content),
-          ]
-        : PromptAssembler().assemble(character: character, history: history);
+    final List<ApiMessage> apiMessages;
+    if (character == null) {
+      apiMessages = [
+        for (final m in history)
+          if (m.id != assistant.id &&
+              m.status == MessageStatus.done &&
+              m.content.trim().isNotEmpty)
+            ApiMessage(role: m.role.wire, content: m.content),
+      ];
+    } else {
+      var memorySummary = '';
+      var pastTranscript = const <ChatMessage>[];
+      if (await ref.read(appSettingsRepositoryProvider).memoryEnabled()) {
+        final memory =
+            await ref.read(characterRepositoryProvider).getMemory(character.id);
+        memorySummary = memory.summary;
+        pastTranscript = await chatRepo.getRecentOtherMessages(
+          characterId: character.id,
+          excludeConversationId: conversationId,
+        );
+      }
+      apiMessages = PromptAssembler().assemble(
+        character: character,
+        history: history,
+        memorySummary: memorySummary,
+        pastTranscript: pastTranscript,
+      );
+    }
 
     // 5. 解析 profile。
     final profile = await profileRepo.getById(conv?.apiProfileId ?? '') ??
@@ -264,13 +290,22 @@ class ChatController extends Notifier<ChatUiState> {
           }
           // 语音出口：干净文本增量（内部句切分+朗读，按开关自判断）。
           if (cleanDelta.isNotEmpty) {
-            await speechSink.onAssistantDelta(cleanDelta);
+            await sink.onAssistantDelta(cleanDelta);
           }
           scheduleFlush(assistant.id);
         }
       }
       await finalize(MessageStatus.done);
-      await speechSink.onAssistantDone();
+      await sink.onAssistantDone();
+      // 成功回合后尝试更新跨会话记忆（fire-and-forget，内部自兜底；
+      // 只在 done 路径触发——error/中断的半截消息不值得摘要）。
+      if (character != null) {
+        unawaited(ref
+            .read(memorySummarizerProvider)
+            .maybeUpdateMemory(
+                conversationId: conversationId, characterId: character.id)
+            .catchError((_) {}));
+      }
     } on CancelledException {
       if (contentBuf.isEmpty && rawBuf.isEmpty) {
         // 首 token 前取消：不留空占位消息。
@@ -280,14 +315,14 @@ class ChatController extends Notifier<ChatUiState> {
         // 用户主动停止：保留已生成部分。
         await finalize(MessageStatus.done);
       }
-      await speechSink.onAssistantInterrupted();
+      await sink.onAssistantInterrupted();
     } on AppException catch (e) {
       await finalize(MessageStatus.error);
-      await speechSink.onAssistantInterrupted();
+      await sink.onAssistantInterrupted();
       if (_sendSeq == seq) state = state.copyWith(errorText: e.message);
     } catch (e) {
       await finalize(MessageStatus.error);
-      await speechSink.onAssistantInterrupted();
+      await sink.onAssistantInterrupted();
       if (_sendSeq == seq) state = state.copyWith(errorText: '生成失败：$e');
     } finally {
       if (_cancelToken == cancelToken) _cancelToken = null;

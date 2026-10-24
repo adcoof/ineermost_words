@@ -16,6 +16,50 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('时间分隔（微信式）', () {
+    final now = DateTime(2026, 10, 24, 15, 30);
+
+    test('formatMessageTime：今天/昨天/同年/跨年四档', () {
+      expect(formatMessageTime(DateTime(2026, 10, 24, 9, 5), now: now), '09:05');
+      expect(formatMessageTime(DateTime(2026, 10, 23, 23, 59), now: now),
+          '昨天 23:59');
+      expect(formatMessageTime(DateTime(2026, 1, 3, 8, 0), now: now),
+          '1月3日 08:00');
+      expect(formatMessageTime(DateTime(2025, 12, 31, 0, 0), now: now),
+          '2025年12月31日 00:00');
+    });
+
+    ChatMessage msg(DateTime at, {String id = 'm'}) => ChatMessage(
+          id: id,
+          conversationId: 'c',
+          role: ChatRole.user,
+          content: 'x',
+          rawContent: 'x',
+          emotionEvents: '[]',
+          status: MessageStatus.done,
+          createdAt: at,
+        );
+
+    test('首条必显示；相邻间隔 >5 分钟才显示，≤5 分钟不显示', () {
+      final t0 = DateTime(2026, 10, 24, 10, 0);
+      final labels = timeSeparators([
+        msg(t0, id: 'a'),
+        msg(t0.add(const Duration(minutes: 5)), id: 'b'), // 恰好 5 分钟：不显示
+        msg(t0.add(const Duration(minutes: 10, seconds: 1)),
+            id: 'c'), // 距 b 5分01秒：显示
+        msg(t0.add(const Duration(minutes: 11)), id: 'd'), // 距 c 59 秒：不显示
+      ], now: now);
+      expect(labels[0], '10:00');
+      expect(labels[1], isNull);
+      expect(labels[2], '10:10');
+      expect(labels[3], isNull);
+    });
+
+    test('空列表不产分隔', () {
+      expect(timeSeparators(const [], now: now), isEmpty);
+    });
+  });
+
   late AppDatabase db;
   late ChatRepository repo;
 

@@ -1,4 +1,4 @@
-/// 消息列表：气泡流。
+/// 消息列表：气泡流 + 微信式时间戳分隔（间隔>5分钟或首条时居中显示）。
 library;
 
 import 'package:flutter/material.dart';
@@ -6,6 +6,36 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
 import '../domain/models.dart';
+
+/// 相邻消息间隔超过该值才插入时间分隔（微信同款规则）。
+const Duration kTimeSeparatorGap = Duration(minutes: 5);
+
+/// 格式化消息时间（微信式）：今天 HH:mm；昨天 HH:mm；同年 M月d日 HH:mm；
+/// 跨年 yyyy年M月d日 HH:mm。
+String formatMessageTime(DateTime t, {DateTime? now}) {
+  final ref = now ?? DateTime.now();
+  String two(int v) => v.toString().padLeft(2, '0');
+  final hm = '${two(t.hour)}:${two(t.minute)}';
+  final today = DateTime(ref.year, ref.month, ref.day);
+  final day = DateTime(t.year, t.month, t.day);
+  final diffDays = today.difference(day).inDays;
+  if (diffDays == 0) return hm;
+  if (diffDays == 1) return '昨天 $hm';
+  if (t.year == ref.year) return '${t.month}月${t.day}日 $hm';
+  return '${t.year}年${t.month}月${t.day}日 $hm';
+}
+
+/// 逐条计算时间分隔文案；不需要分隔的位置为 null。
+List<String?> timeSeparators(List<ChatMessage> messages, {DateTime? now}) {
+  final labels = List<String?>.filled(messages.length, null);
+  for (var i = 0; i < messages.length; i++) {
+    final t = messages[i].createdAt;
+    final show = i == 0 ||
+        t.difference(messages[i - 1].createdAt) > kTimeSeparatorGap;
+    if (show) labels[i] = formatMessageTime(t, now: now);
+  }
+  return labels;
+}
 
 class MessageList extends ConsumerStatefulWidget {
   final String conversationId;
@@ -152,15 +182,38 @@ class _MessageListState extends ConsumerState<MessageList> {
           return const Center(child: Text('输入第一条消息开始对话'));
         }
         _maybeScheduleScroll(messages);
+        final separators = timeSeparators(messages);
         return ListView.builder(
           controller: _controller,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           itemCount: messages.length,
           itemBuilder: (context, index) {
             final m = messages[index];
-            return _MessageBubble(
+            final bubble = _MessageBubble(
               message: m,
               isStreaming: m.status == MessageStatus.streaming,
+            );
+            final label = separators[index];
+            if (label == null) return bubble;
+            return Column(
+              children: [
+                Padding(
+                  padding: EdgeInsets.only(top: index == 0 ? 4 : 12, bottom: 6),
+                  child: Center(
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.45),
+                      ),
+                    ),
+                  ),
+                ),
+                bubble,
+              ],
             );
           },
         );

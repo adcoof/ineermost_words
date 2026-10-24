@@ -1,4 +1,4 @@
-/// 设置主页：API / 语音 入口分列，外观主题色与版本信息，更多区展示工作室官网。
+/// 设置主页：API / 语音 入口分列，外观主题卡片与版本信息，更多区展示工作室官网。
 library;
 
 import 'dart:async';
@@ -11,7 +11,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/providers.dart';
 import '../../../app/theme.dart';
-import '../data/app_settings_repository.dart';
 import 'api_profiles_page.dart';
 import '../../voice/presentation/voice_settings_page.dart';
 
@@ -26,33 +25,38 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
-  String _accentKey = kThemeAccents.first.key;
-  bool _accentLoaded = false;
+  String _themeKey = 'deep-space';
+  bool _memoryEnabled = true;
 
   @override
   void initState() {
     super.initState();
-    _loadAccent();
+    _loadTheme();
+    _loadMemory();
   }
 
-  Future<void> _loadAccent() async {
-    final key =
-        await AppSettingsRepository(ref.read(appDatabaseProvider)).themeAccent();
-    if (mounted) {
-      setState(() {
-        _accentKey = key;
-        _accentLoaded = true;
-      });
-    }
+  Future<void> _loadTheme() async {
+    final key = await ref.read(appSettingsRepositoryProvider).themeKey();
+    if (mounted) setState(() => _themeKey = key);
   }
 
-  Future<void> _selectAccent(String key) async {
-    if (key == _accentKey) return;
-    setState(() => _accentKey = key);
-    await AppSettingsRepository(ref.read(appDatabaseProvider))
-        .setThemeAccent(key);
-    // 让 MaterialApp 重建取新强调色。
-    ref.invalidate(themeAccentProvider);
+  Future<void> _selectTheme(String key) async {
+    if (key == _themeKey) return;
+    setState(() => _themeKey = key);
+    await ref.read(appSettingsRepositoryProvider).setThemeKey(key);
+    // 让 MaterialApp 重建取新主题。
+    ref.invalidate(themePaletteProvider);
+  }
+
+  Future<void> _loadMemory() async {
+    final enabled =
+        await ref.read(appSettingsRepositoryProvider).memoryEnabled();
+    if (mounted) setState(() => _memoryEnabled = enabled);
+  }
+
+  Future<void> _setMemory(bool enabled) async {
+    setState(() => _memoryEnabled = enabled);
+    await ref.read(appSettingsRepositoryProvider).setMemoryEnabled(enabled);
   }
 
   Future<void> _openSite(BuildContext context) async {
@@ -101,32 +105,41 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               MaterialPageRoute(builder: (_) => const VoiceSettingsPage()),
             ),
           ),
+          SwitchListTile(
+            secondary: const Icon(Icons.psychology_outlined),
+            title: const Text('跨会话记忆'),
+            subtitle: const Text('同一角色在不同会话间共享近期片段与摘要记忆'),
+            value: _memoryEnabled,
+            onChanged: (v) => unawaited(_setMemory(v)),
+          ),
           const Divider(height: 32),
           _SectionHeader('外观'),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                for (final a in kThemeAccents)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 20),
-                    child: _AccentDot(
-                      accent: a,
-                      selected: _accentLoaded && a.key == _accentKey,
-                      onTap: () => unawaited(_selectAccent(a.key)),
-                    ),
-                  ),
-              ],
+          SizedBox(
+            height: 132,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              itemCount: kThemePalettes.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
+              itemBuilder: (context, index) {
+                final p = kThemePalettes[index];
+                return _ThemeCard(
+                  palette: p,
+                  selected: p.id == _themeKey,
+                  onTap: () => unawaited(_selectTheme(p.id)),
+                );
+              },
             ),
           ),
           const Divider(height: 32),
           _SectionHeader('更多'),
           ListTile(
-            leading: const Icon(Icons.language, color: BrandColors.cyan),
+            leading: Icon(Icons.language,
+                color: Theme.of(context).colorScheme.secondary),
             title: const Text('奇点重现官网'),
-            subtitle: const Text(
+            subtitle: Text(
               kSigbornSite,
-              style: TextStyle(color: BrandColors.cyan),
+              style: TextStyle(color: Theme.of(context).colorScheme.secondary),
             ),
             trailing: const Icon(Icons.open_in_new, size: 18),
             onTap: () => _openSite(context),
@@ -142,13 +155,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     'assets/branding/sigborn_logo.png',
                     width: 22,
                     height: 22,
-                    errorBuilder: (_, _, _) => const Icon(Icons.bolt,
-                        size: 16, color: BrandColors.muted),
+                    errorBuilder: (_, _, _) => Icon(Icons.bolt,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.onSurface
+                            .withValues(alpha: 0.55)),
                   ),
                   const SizedBox(width: 6),
-                  const Text(
+                  Text(
                     '心语 · 由奇点重现工作室制作',
-                    style: TextStyle(fontSize: 12, color: BrandColors.muted),
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.55)),
                   ),
                 ],
               ),
@@ -169,6 +189,8 @@ class _VersionText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final muted =
+        Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55);
     return FutureBuilder<PackageInfo>(
       future: PackageInfo.fromPlatform(),
       builder: (context, snapshot) {
@@ -176,68 +198,107 @@ class _VersionText extends StatelessWidget {
         final text = info == null
             ? '心语'
             : '心语 v${info.version}（${info.buildNumber}）';
-        return Text(
-          text,
-          style: const TextStyle(fontSize: 11, color: BrandColors.muted),
-        );
+        return Text(text, style: TextStyle(fontSize: 11, color: muted));
       },
     );
   }
 }
 
-/// 强调色圆点选择器。
-class _AccentDot extends StatelessWidget {
-  final ThemeAccent accent;
+/// 主题预览卡片：用该调色板的底色/表面/强调色拼一个迷你聊天界面预览。
+class _ThemeCard extends StatelessWidget {
+  final ThemePalette palette;
   final bool selected;
   final VoidCallback onTap;
 
-  const _AccentDot({
-    required this.accent,
+  const _ThemeCard({
+    required this.palette,
     required this.selected,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(accent.argb);
+    final p = palette;
     return InkWell(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(14),
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-                boxShadow: selected
-                    ? [
-                        BoxShadow(
-                          color: color.withValues(alpha: 0.6),
-                          blurRadius: 12,
-                          spreadRadius: 1,
-                        )
-                      ]
-                    : null,
-              ),
-              child: selected
-                  ? const Icon(Icons.check, size: 20, color: Colors.white)
-                  : null,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              accent.label,
-              style: TextStyle(
-                fontSize: 11,
-                color: selected ? color : BrandColors.muted,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 104,
+            height: 80,
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: p.background,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: selected ? p.accent : p.divider,
+                width: selected ? 2 : 1,
               ),
             ),
-          ],
-        ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // 迷你气泡：表面色卡片 + 强调色小点，示意该主题的层感。
+                Container(
+                  height: 14,
+                  width: 64,
+                  decoration: BoxDecoration(
+                    color: p.surfaceHigh,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Container(
+                    height: 14,
+                    width: 44,
+                    decoration: BoxDecoration(
+                      color: p.accent,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: p.secondary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Container(
+                      height: 4,
+                      width: 28,
+                      color: p.muted.withValues(alpha: 0.5),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            p.label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+              color: selected
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.7),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -253,8 +314,8 @@ class _SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Text(
         text,
-        style: const TextStyle(
-          color: BrandColors.muted,
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55),
           fontSize: 12,
           letterSpacing: 2,
           fontWeight: FontWeight.w600,

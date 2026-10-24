@@ -46,13 +46,15 @@ class TtsQueueService {
   TtsQueueService({required this.provider, required this.player});
 
   /// 入队一句话；空文本忽略。
-  void enqueue(String text, {double speed = 1.0, String voiceId = ''}) {
+  void enqueue(String text,
+      {double speed = 1.0, String voiceId = '', String voiceDesign = ''}) {
     // 已 dispose：静默忽略。否则 _drain 里未守卫的 _busy.add 会抛
     // StateError 且落在 try 之外，把 _draining 永久闩死成僵尸队列。
     if (_lip.isClosed) return;
     final t = text.trim();
     if (t.isEmpty) return;
-    _queue.add(TtsRequest(text: t, speed: speed, voiceId: voiceId));
+    _queue.add(TtsRequest(
+        text: t, speed: speed, voiceId: voiceId, voiceDesign: voiceDesign));
     if (!_draining) unawaited(_drain());
   }
 
