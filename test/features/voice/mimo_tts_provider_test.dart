@@ -188,4 +188,64 @@ void main() {
       expect(fast, contains('语速较快'));
     });
   });
+
+  group('MimoTtsProvider 音色设计（voiceDesign）', () {
+    test('voiceDesign 非空：model=voicedesign，user=描述，audio 无 voice',
+        () async {
+      final adapter = _FakeAdapter(utf8.encode(jsonEncode({
+        'choices': [
+          {
+            'message': {
+              'audio': {'data': base64Encode([1, 2])}
+            }
+          }
+        ],
+      })));
+      await provider(adapter).synthesize(const TtsRequest(
+        text: '你好呀',
+        voiceDesign: '温柔甜美的年轻女声',
+        voiceId: '茉莉', // 应被忽略：设计模式不带 voice 参数
+      ));
+
+      final body = adapter.lastRequest!.data as Map;
+      expect(body['model'], 'mimo-v2.5-tts-voicedesign');
+      final messages = body['messages'] as List;
+      expect(messages[0]['role'], 'user');
+      // 中性语速（1.0）时描述原样传递，不加语速提示。
+      expect(messages[0]['content'], '温柔甜美的年轻女声');
+      expect(messages[1]['role'], 'assistant');
+      expect(messages[1]['content'], '你好呀');
+      final audio = body['audio'] as Map;
+      expect(audio['format'], 'mp3');
+      expect(audio.containsKey('voice'), isFalse);
+    });
+
+    test('voiceDesign + 语速：描述后追加语速提示', () async {
+      final adapter = _FakeAdapter(utf8.encode(jsonEncode({
+        'choices': [
+          {
+            'message': {
+              'audio': {'data': base64Encode([1])}
+            }
+          }
+        ],
+      })));
+      await provider(adapter).synthesize(const TtsRequest(
+          text: 'x', voiceDesign: '低沉的男声', speed: 1.5));
+
+      final body = adapter.lastRequest!.data as Map;
+      final content = (body['messages'] as List)[0]['content'] as String;
+      expect(content, contains('低沉的男声'));
+      expect(content, contains('语速较快'));
+    });
+
+    test('designFor：档位与 styleFor 一致，1.0/0.95 中性不加提示', () {
+      expect(MimoTtsProvider.designFor('清亮少年音', 1.0), '清亮少年音');
+      expect(MimoTtsProvider.designFor('清亮少年音', 0.95), '清亮少年音');
+      expect(MimoTtsProvider.designFor('清亮少年音', 0.6), contains('语速较慢'));
+      expect(MimoTtsProvider.designFor('清亮少年音', 0.9), contains('语速稍慢'));
+      expect(MimoTtsProvider.designFor('清亮少年音', 1.15), contains('语速稍快'));
+      expect(MimoTtsProvider.designFor('清亮少年音', 1.5), contains('语速较快'));
+    });
+  });
 }

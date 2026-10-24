@@ -98,6 +98,21 @@ class $ConversationsTable extends Conversations
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _voiceEnabledMeta = const VerificationMeta(
+    'voiceEnabled',
+  );
+  @override
+  late final GeneratedColumn<bool> voiceEnabled = GeneratedColumn<bool>(
+    'voice_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("voice_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -108,6 +123,7 @@ class $ConversationsTable extends Conversations
     createdAt,
     updatedAt,
     archived,
+    voiceEnabled,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -183,6 +199,15 @@ class $ConversationsTable extends Conversations
         archived.isAcceptableOrUnknown(data['archived']!, _archivedMeta),
       );
     }
+    if (data.containsKey('voice_enabled')) {
+      context.handle(
+        _voiceEnabledMeta,
+        voiceEnabled.isAcceptableOrUnknown(
+          data['voice_enabled']!,
+          _voiceEnabledMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -224,6 +249,10 @@ class $ConversationsTable extends Conversations
         DriftSqlType.bool,
         data['${effectivePrefix}archived'],
       )!,
+      voiceEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}voice_enabled'],
+      )!,
     );
   }
 
@@ -248,6 +277,9 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   final DateTime createdAt;
   final DateTime updatedAt;
   final bool archived;
+
+  /// 本会话是否自动朗读（v6）：与全局 voice_enabled 相与决定实际发声。
+  final bool voiceEnabled;
   const ConversationRow({
     required this.id,
     required this.title,
@@ -257,6 +289,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     required this.createdAt,
     required this.updatedAt,
     required this.archived,
+    required this.voiceEnabled,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -273,6 +306,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['archived'] = Variable<bool>(archived);
+    map['voice_enabled'] = Variable<bool>(voiceEnabled);
     return map;
   }
 
@@ -290,6 +324,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       archived: Value(archived),
+      voiceEnabled: Value(voiceEnabled),
     );
   }
 
@@ -307,6 +342,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       archived: serializer.fromJson<bool>(json['archived']),
+      voiceEnabled: serializer.fromJson<bool>(json['voiceEnabled']),
     );
   }
   @override
@@ -321,6 +357,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'archived': serializer.toJson<bool>(archived),
+      'voiceEnabled': serializer.toJson<bool>(voiceEnabled),
     };
   }
 
@@ -333,6 +370,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     DateTime? createdAt,
     DateTime? updatedAt,
     bool? archived,
+    bool? voiceEnabled,
   }) => ConversationRow(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -342,6 +380,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     archived: archived ?? this.archived,
+    voiceEnabled: voiceEnabled ?? this.voiceEnabled,
   );
   ConversationRow copyWithCompanion(ConversationsCompanion data) {
     return ConversationRow(
@@ -359,6 +398,9 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       archived: data.archived.present ? data.archived.value : this.archived,
+      voiceEnabled: data.voiceEnabled.present
+          ? data.voiceEnabled.value
+          : this.voiceEnabled,
     );
   }
 
@@ -372,7 +414,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
           ..write('apiProfileId: $apiProfileId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('archived: $archived')
+          ..write('archived: $archived, ')
+          ..write('voiceEnabled: $voiceEnabled')
           ..write(')'))
         .toString();
   }
@@ -387,6 +430,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     createdAt,
     updatedAt,
     archived,
+    voiceEnabled,
   );
   @override
   bool operator ==(Object other) =>
@@ -399,7 +443,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
           other.apiProfileId == this.apiProfileId &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
-          other.archived == this.archived);
+          other.archived == this.archived &&
+          other.voiceEnabled == this.voiceEnabled);
 }
 
 class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
@@ -411,6 +456,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<bool> archived;
+  final Value<bool> voiceEnabled;
   final Value<int> rowid;
   const ConversationsCompanion({
     this.id = const Value.absent(),
@@ -421,6 +467,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.archived = const Value.absent(),
+    this.voiceEnabled = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ConversationsCompanion.insert({
@@ -432,6 +479,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     required DateTime createdAt,
     required DateTime updatedAt,
     this.archived = const Value.absent(),
+    this.voiceEnabled = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        apiProfileId = Value(apiProfileId),
@@ -446,6 +494,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<bool>? archived,
+    Expression<bool>? voiceEnabled,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -457,6 +506,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (archived != null) 'archived': archived,
+      if (voiceEnabled != null) 'voice_enabled': voiceEnabled,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -470,6 +520,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<bool>? archived,
+    Value<bool>? voiceEnabled,
     Value<int>? rowid,
   }) {
     return ConversationsCompanion(
@@ -481,6 +532,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       archived: archived ?? this.archived,
+      voiceEnabled: voiceEnabled ?? this.voiceEnabled,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -512,6 +564,9 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     if (archived.present) {
       map['archived'] = Variable<bool>(archived.value);
     }
+    if (voiceEnabled.present) {
+      map['voice_enabled'] = Variable<bool>(voiceEnabled.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -529,6 +584,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('archived: $archived, ')
+          ..write('voiceEnabled: $voiceEnabled, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1744,6 +1800,30 @@ class $CharactersTable extends Characters
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _memorySummaryMeta = const VerificationMeta(
+    'memorySummary',
+  );
+  @override
+  late final GeneratedColumn<String> memorySummary = GeneratedColumn<String>(
+    'memory_summary',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _memoryUpdatedAtMeta = const VerificationMeta(
+    'memoryUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> memoryUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'memory_updated_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1757,6 +1837,8 @@ class $CharactersTable extends Characters
     source,
     createdAt,
     updatedAt,
+    memorySummary,
+    memoryUpdatedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1853,6 +1935,24 @@ class $CharactersTable extends Characters
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
+    if (data.containsKey('memory_summary')) {
+      context.handle(
+        _memorySummaryMeta,
+        memorySummary.isAcceptableOrUnknown(
+          data['memory_summary']!,
+          _memorySummaryMeta,
+        ),
+      );
+    }
+    if (data.containsKey('memory_updated_at')) {
+      context.handle(
+        _memoryUpdatedAtMeta,
+        memoryUpdatedAt.isAcceptableOrUnknown(
+          data['memory_updated_at']!,
+          _memoryUpdatedAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1906,6 +2006,14 @@ class $CharactersTable extends Characters
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      memorySummary: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}memory_summary'],
+      )!,
+      memoryUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}memory_updated_at'],
+      ),
     );
   }
 
@@ -1933,6 +2041,14 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
   final String source;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  /// 跨会话长期记忆（LLM 摘要，第一人称要点，v6）。
+  /// 注意：CharacterRepository.save 是整行 upsert，本列不进 Character
+  /// 领域模型，只经 getMemory/setMemory 读写，防止编辑角色卡时覆盖。
+  final String memorySummary;
+
+  /// 记忆水位线：该时点（含）之前的 done 消息已纳入摘要；null=从未摘要。
+  final DateTime? memoryUpdatedAt;
   const CharacterRow({
     required this.id,
     required this.name,
@@ -1945,6 +2061,8 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
     required this.source,
     required this.createdAt,
     required this.updatedAt,
+    required this.memorySummary,
+    this.memoryUpdatedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1962,6 +2080,10 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
     map['source'] = Variable<String>(source);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['memory_summary'] = Variable<String>(memorySummary);
+    if (!nullToAbsent || memoryUpdatedAt != null) {
+      map['memory_updated_at'] = Variable<DateTime>(memoryUpdatedAt);
+    }
     return map;
   }
 
@@ -1980,6 +2102,10 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
       source: Value(source),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
+      memorySummary: Value(memorySummary),
+      memoryUpdatedAt: memoryUpdatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(memoryUpdatedAt),
     );
   }
 
@@ -2000,6 +2126,8 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
       source: serializer.fromJson<String>(json['source']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      memorySummary: serializer.fromJson<String>(json['memorySummary']),
+      memoryUpdatedAt: serializer.fromJson<DateTime?>(json['memoryUpdatedAt']),
     );
   }
   @override
@@ -2017,6 +2145,8 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
       'source': serializer.toJson<String>(source),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'memorySummary': serializer.toJson<String>(memorySummary),
+      'memoryUpdatedAt': serializer.toJson<DateTime?>(memoryUpdatedAt),
     };
   }
 
@@ -2032,6 +2162,8 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
     String? source,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? memorySummary,
+    Value<DateTime?> memoryUpdatedAt = const Value.absent(),
   }) => CharacterRow(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -2044,6 +2176,10 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
     source: source ?? this.source,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
+    memorySummary: memorySummary ?? this.memorySummary,
+    memoryUpdatedAt: memoryUpdatedAt.present
+        ? memoryUpdatedAt.value
+        : this.memoryUpdatedAt,
   );
   CharacterRow copyWithCompanion(CharactersCompanion data) {
     return CharacterRow(
@@ -2068,6 +2204,12 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
       source: data.source.present ? data.source.value : this.source,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      memorySummary: data.memorySummary.present
+          ? data.memorySummary.value
+          : this.memorySummary,
+      memoryUpdatedAt: data.memoryUpdatedAt.present
+          ? data.memoryUpdatedAt.value
+          : this.memoryUpdatedAt,
     );
   }
 
@@ -2084,7 +2226,9 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
           ..write('avatarPath: $avatarPath, ')
           ..write('source: $source, ')
           ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('memorySummary: $memorySummary, ')
+          ..write('memoryUpdatedAt: $memoryUpdatedAt')
           ..write(')'))
         .toString();
   }
@@ -2102,6 +2246,8 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
     source,
     createdAt,
     updatedAt,
+    memorySummary,
+    memoryUpdatedAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -2117,7 +2263,9 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
           other.avatarPath == this.avatarPath &&
           other.source == this.source &&
           other.createdAt == this.createdAt &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.memorySummary == this.memorySummary &&
+          other.memoryUpdatedAt == this.memoryUpdatedAt);
 }
 
 class CharactersCompanion extends UpdateCompanion<CharacterRow> {
@@ -2132,6 +2280,8 @@ class CharactersCompanion extends UpdateCompanion<CharacterRow> {
   final Value<String> source;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
+  final Value<String> memorySummary;
+  final Value<DateTime?> memoryUpdatedAt;
   final Value<int> rowid;
   const CharactersCompanion({
     this.id = const Value.absent(),
@@ -2145,6 +2295,8 @@ class CharactersCompanion extends UpdateCompanion<CharacterRow> {
     this.source = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.memorySummary = const Value.absent(),
+    this.memoryUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CharactersCompanion.insert({
@@ -2159,6 +2311,8 @@ class CharactersCompanion extends UpdateCompanion<CharacterRow> {
     this.source = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
+    this.memorySummary = const Value.absent(),
+    this.memoryUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        name = Value(name),
@@ -2176,6 +2330,8 @@ class CharactersCompanion extends UpdateCompanion<CharacterRow> {
     Expression<String>? source,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
+    Expression<String>? memorySummary,
+    Expression<DateTime>? memoryUpdatedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2190,6 +2346,8 @@ class CharactersCompanion extends UpdateCompanion<CharacterRow> {
       if (source != null) 'source': source,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (memorySummary != null) 'memory_summary': memorySummary,
+      if (memoryUpdatedAt != null) 'memory_updated_at': memoryUpdatedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2206,6 +2364,8 @@ class CharactersCompanion extends UpdateCompanion<CharacterRow> {
     Value<String>? source,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
+    Value<String>? memorySummary,
+    Value<DateTime?>? memoryUpdatedAt,
     Value<int>? rowid,
   }) {
     return CharactersCompanion(
@@ -2220,6 +2380,8 @@ class CharactersCompanion extends UpdateCompanion<CharacterRow> {
       source: source ?? this.source,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      memorySummary: memorySummary ?? this.memorySummary,
+      memoryUpdatedAt: memoryUpdatedAt ?? this.memoryUpdatedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2260,6 +2422,12 @@ class CharactersCompanion extends UpdateCompanion<CharacterRow> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (memorySummary.present) {
+      map['memory_summary'] = Variable<String>(memorySummary.value);
+    }
+    if (memoryUpdatedAt.present) {
+      map['memory_updated_at'] = Variable<DateTime>(memoryUpdatedAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2280,6 +2448,8 @@ class CharactersCompanion extends UpdateCompanion<CharacterRow> {
           ..write('source: $source, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('memorySummary: $memorySummary, ')
+          ..write('memoryUpdatedAt: $memoryUpdatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4099,6 +4269,375 @@ class SettingsCompanion extends UpdateCompanion<SettingRow> {
   }
 }
 
+class $CustomVoicesTable extends CustomVoices
+    with TableInfo<$CustomVoicesTable, CustomVoiceRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CustomVoicesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    description,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'custom_voices';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CustomVoiceRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_descriptionMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CustomVoiceRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CustomVoiceRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CustomVoicesTable createAlias(String alias) {
+    return $CustomVoicesTable(attachedDatabase, alias);
+  }
+}
+
+class CustomVoiceRow extends DataClass implements Insertable<CustomVoiceRow> {
+  final String id;
+
+  /// 显示名（如「萝莉音」「磁性男声」）。
+  final String name;
+
+  /// 音色描述（如「温柔甜美的年轻女声，语速稍慢」）。
+  final String description;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const CustomVoiceRow({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['description'] = Variable<String>(description);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  CustomVoicesCompanion toCompanion(bool nullToAbsent) {
+    return CustomVoicesCompanion(
+      id: Value(id),
+      name: Value(name),
+      description: Value(description),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory CustomVoiceRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CustomVoiceRow(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      description: serializer.fromJson<String>(json['description']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'description': serializer.toJson<String>(description),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  CustomVoiceRow copyWith({
+    String? id,
+    String? name,
+    String? description,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => CustomVoiceRow(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    description: description ?? this.description,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  CustomVoiceRow copyWithCompanion(CustomVoicesCompanion data) {
+    return CustomVoiceRow(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CustomVoiceRow(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('description: $description, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, description, createdAt, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CustomVoiceRow &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.description == this.description &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class CustomVoicesCompanion extends UpdateCompanion<CustomVoiceRow> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String> description;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const CustomVoicesCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.description = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CustomVoicesCompanion.insert({
+    required String id,
+    required String name,
+    required String description,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       description = Value(description),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<CustomVoiceRow> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? description,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (description != null) 'description': description,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CustomVoicesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String>? description,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return CustomVoicesCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CustomVoicesCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('description: $description, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -4112,6 +4651,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final $TtsProfilesTable ttsProfiles = $TtsProfilesTable(this);
   late final $SettingsTable settings = $SettingsTable(this);
+  late final $CustomVoicesTable customVoices = $CustomVoicesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4125,6 +4665,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     emotionMappings,
     ttsProfiles,
     settings,
+    customVoices,
   ];
 }
 
@@ -4138,6 +4679,7 @@ typedef $$ConversationsTableCreateCompanionBuilder =
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<bool> archived,
+      Value<bool> voiceEnabled,
       Value<int> rowid,
     });
 typedef $$ConversationsTableUpdateCompanionBuilder =
@@ -4150,6 +4692,7 @@ typedef $$ConversationsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<bool> archived,
+      Value<bool> voiceEnabled,
       Value<int> rowid,
     });
 
@@ -4199,6 +4742,11 @@ class $$ConversationsTableFilterComposer
 
   ColumnFilters<bool> get archived => $composableBuilder(
     column: $table.archived,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get voiceEnabled => $composableBuilder(
+    column: $table.voiceEnabled,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -4251,6 +4799,11 @@ class $$ConversationsTableOrderingComposer
     column: $table.archived,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get voiceEnabled => $composableBuilder(
+    column: $table.voiceEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ConversationsTableAnnotationComposer
@@ -4291,6 +4844,11 @@ class $$ConversationsTableAnnotationComposer
 
   GeneratedColumn<bool> get archived =>
       $composableBuilder(column: $table.archived, builder: (column) => column);
+
+  GeneratedColumn<bool> get voiceEnabled => $composableBuilder(
+    column: $table.voiceEnabled,
+    builder: (column) => column,
+  );
 }
 
 class $$ConversationsTableTableManager
@@ -4332,6 +4890,7 @@ class $$ConversationsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<bool> archived = const Value.absent(),
+                Value<bool> voiceEnabled = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ConversationsCompanion(
                 id: id,
@@ -4342,6 +4901,7 @@ class $$ConversationsTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 archived: archived,
+                voiceEnabled: voiceEnabled,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -4354,6 +4914,7 @@ class $$ConversationsTableTableManager
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<bool> archived = const Value.absent(),
+                Value<bool> voiceEnabled = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ConversationsCompanion.insert(
                 id: id,
@@ -4364,6 +4925,7 @@ class $$ConversationsTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 archived: archived,
+                voiceEnabled: voiceEnabled,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -4968,6 +5530,8 @@ typedef $$CharactersTableCreateCompanionBuilder = CharactersCompanion Function({
   Value<String> source,
   required DateTime createdAt,
   required DateTime updatedAt,
+  Value<String> memorySummary,
+  Value<DateTime?> memoryUpdatedAt,
   Value<int> rowid,
 });
 typedef $$CharactersTableUpdateCompanionBuilder = CharactersCompanion Function({
@@ -4982,6 +5546,8 @@ typedef $$CharactersTableUpdateCompanionBuilder = CharactersCompanion Function({
   Value<String> source,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
+  Value<String> memorySummary,
+  Value<DateTime?> memoryUpdatedAt,
   Value<int> rowid,
 });
 
@@ -5046,6 +5612,16 @@ class $$CharactersTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get memorySummary => $composableBuilder(
+    column: $table.memorySummary,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get memoryUpdatedAt => $composableBuilder(
+    column: $table.memoryUpdatedAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -5113,6 +5689,16 @@ class $$CharactersTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get memorySummary => $composableBuilder(
+    column: $table.memorySummary,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get memoryUpdatedAt => $composableBuilder(
+    column: $table.memoryUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$CharactersTableAnnotationComposer
@@ -5166,6 +5752,16 @@ class $$CharactersTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get memorySummary => $composableBuilder(
+    column: $table.memorySummary,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get memoryUpdatedAt => $composableBuilder(
+    column: $table.memoryUpdatedAt,
+    builder: (column) => column,
+  );
 }
 
 class $$CharactersTableTableManager
@@ -5210,6 +5806,8 @@ class $$CharactersTableTableManager
                 Value<String> source = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<String> memorySummary = const Value.absent(),
+                Value<DateTime?> memoryUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CharactersCompanion(
                 id: id,
@@ -5223,6 +5821,8 @@ class $$CharactersTableTableManager
                 source: source,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                memorySummary: memorySummary,
+                memoryUpdatedAt: memoryUpdatedAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -5238,6 +5838,8 @@ class $$CharactersTableTableManager
                 Value<String> source = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
+                Value<String> memorySummary = const Value.absent(),
+                Value<DateTime?> memoryUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CharactersCompanion.insert(
                 id: id,
@@ -5251,6 +5853,8 @@ class $$CharactersTableTableManager
                 source: source,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                memorySummary: memorySummary,
+                memoryUpdatedAt: memoryUpdatedAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -6257,6 +6861,217 @@ typedef $$SettingsTableProcessedTableManager =
       SettingRow,
       PrefetchHooks Function()
     >;
+typedef $$CustomVoicesTableCreateCompanionBuilder =
+    CustomVoicesCompanion Function({
+      required String id,
+      required String name,
+      required String description,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$CustomVoicesTableUpdateCompanionBuilder =
+    CustomVoicesCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String> description,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$CustomVoicesTableFilterComposer
+    extends Composer<_$AppDatabase, $CustomVoicesTable> {
+  $$CustomVoicesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CustomVoicesTableOrderingComposer
+    extends Composer<_$AppDatabase, $CustomVoicesTable> {
+  $$CustomVoicesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CustomVoicesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CustomVoicesTable> {
+  $$CustomVoicesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$CustomVoicesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CustomVoicesTable,
+          CustomVoiceRow,
+          $$CustomVoicesTableFilterComposer,
+          $$CustomVoicesTableOrderingComposer,
+          $$CustomVoicesTableAnnotationComposer,
+          $$CustomVoicesTableCreateCompanionBuilder,
+          $$CustomVoicesTableUpdateCompanionBuilder,
+          (
+            CustomVoiceRow,
+            BaseReferences<_$AppDatabase, $CustomVoicesTable, CustomVoiceRow>,
+          ),
+          CustomVoiceRow,
+          PrefetchHooks Function()
+        > {
+  $$CustomVoicesTableTableManager(_$AppDatabase db, $CustomVoicesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CustomVoicesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CustomVoicesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CustomVoicesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> description = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CustomVoicesCompanion(
+                id: id,
+                name: name,
+                description: description,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required String description,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => CustomVoicesCompanion.insert(
+                id: id,
+                name: name,
+                description: description,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$CustomVoicesTable, CustomVoiceRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $CustomVoicesTable,
+                    CustomVoiceRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CustomVoicesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CustomVoicesTable,
+      CustomVoiceRow,
+      $$CustomVoicesTableFilterComposer,
+      $$CustomVoicesTableOrderingComposer,
+      $$CustomVoicesTableAnnotationComposer,
+      $$CustomVoicesTableCreateCompanionBuilder,
+      $$CustomVoicesTableUpdateCompanionBuilder,
+      (
+        CustomVoiceRow,
+        BaseReferences<_$AppDatabase, $CustomVoicesTable, CustomVoiceRow>,
+      ),
+      CustomVoiceRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6277,4 +7092,6 @@ class $AppDatabaseManager {
       $$TtsProfilesTableTableManager(_db, _db.ttsProfiles);
   $$SettingsTableTableManager get settings =>
       $$SettingsTableTableManager(_db, _db.settings);
+  $$CustomVoicesTableTableManager get customVoices =>
+      $$CustomVoicesTableTableManager(_db, _db.customVoices);
 }

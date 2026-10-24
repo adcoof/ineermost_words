@@ -1,7 +1,9 @@
-/// 语音设置：语音回复开关/语速、TTS 引擎与发音人（MiMo 默认）、ASR 引擎与语言、试听。
+/// 语音设置：语音回复开关/语速、TTS 引擎与发音人（MiMo 默认）、
+/// ASR 引擎与语言、试听。
 ///
-/// TTS/ASR 的 MiMo 云端配置（Key/地址）留空时复用默认聊天 API 配置；
-/// 云端 ASR 失败自动回退系统本机识别。
+/// API 配置跟着引擎选项走：TTS 的 OpenAI 档挂 URL/Key/模型名表单
+///（存 tts_profiles 行，空则回落聊天配置）；ASR 的「独立配置」档挂
+/// 同样表单（存 settings KV）。MiMo 档永远复用聊天配置。
 library;
 
 import 'dart:async';
@@ -15,6 +17,7 @@ import '../data/mimo_tts_provider.dart';
 import '../data/openai_tts_provider.dart';
 import '../data/system_tts_provider.dart';
 import '../domain/tts_provider.dart';
+import 'voice_design_page.dart';
 
 class VoiceSettingsPage extends ConsumerStatefulWidget {
   const VoiceSettingsPage({super.key});
@@ -30,24 +33,62 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
   String _voiceId = 'zh-CN-XiaoxiaoNeural';
   String _model = 'tts-1';
 
-  /// ASR 引擎：'mimo'（云端）| 'system'（本机）。
+  /// ASR 引擎：'mimo'（复用聊天配置）| 'custom'（独立配置）| 'system'（本机）。
   String _asrEngine = 'mimo';
   String _asrLocale = 'zh_CN';
+
   bool _loaded = false;
   List<TtsVoice> _voices = const [];
   late final TextEditingController _modelController;
+
+  /// TTS OpenAI 档的独立 API（存 tts_profiles 行；Key 落库前不回填明文到 UI）。
+  late final TextEditingController _openaiUrlController;
+  late final TextEditingController _openaiKeyController;
+
+  /// ASR 独立配置档的表单（存 settings KV）。
+  late final TextEditingController _asrUrlController;
+  late final TextEditingController _asrKeyController;
+  late final TextEditingController _asrModelController;
 
   @override
   void initState() {
     super.initState();
     _modelController = TextEditingController(text: _model);
+    _openaiUrlController = TextEditingController();
+    _openaiKeyController = TextEditingController();
+    _asrUrlController = TextEditingController();
+    _asrKeyController = TextEditingController();
+    _asrModelController = TextEditingController();
     _load();
   }
 
   @override
   void dispose() {
     _modelController.dispose();
+    _openaiUrlController.dispose();
+    _openaiKeyController.dispose();
+    _asrUrlController.dispose();
+    _asrKeyController.dispose();
+    _asrModelController.dispose();
     super.dispose();
+  }
+
+  /// 各引擎发音人清单；MiMo 档尾部并入自定义音色（音色工坊创建）。
+  Future<List<TtsVoice>> _voicesFor(String provider) async {
+    final base = switch (provider) {
+      'mimo' => MimoTtsProvider.staticVoices,
+      'openai' => OpenAiTtsProvider.staticVoices,
+      // 系统分支取设备系统音色，不能用解析器列表（那会显示默认引擎的发音人）。
+      'system' => await SystemTtsProvider().listVoices(),
+      _ => EdgeTtsProvider.staticVoices,
+    };
+    if (provider != 'mimo') return base;
+    final customs = await ref.read(customVoiceRepositoryProvider).listAll();
+    return [
+      ...base,
+      for (final v in customs)
+        TtsVoice('custom:${v.id}', '${v.name}（自定义）'),
+    ];
   }
 
   Future<void> _load() async {
@@ -61,15 +102,12 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
         ((await ref.read(apiProfileRepositoryProvider).getDefault()) != null
             ? repo.builtinMimo()
             : repo.builtinEdge());
-    final voices = await ref
-        .read(voiceOrchestratorProvider)
-        .queue
-        .provider
-        .listVoices();
+    final voices = await _voicesFor(profile.provider);
     final enabled = await repo.voiceEnabled();
     final speed = await repo.voiceSpeed();
     final asrEngine = await repo.asrEngine();
     final asrLocale = await repo.asrLocale();
+    final asrCustom = await repo.asrCustomConfig();
     if (!mounted) return;
     setState(() {
       _enabled = enabled;
@@ -85,20 +123,26 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
           ? (profile.provider == 'mimo' ? MimoTtsProvider.defaultModel : 'tts-1')
           : profile.model;
       _modelController.text = _model;
+      _openaiUrlController.text = profile.baseUrl;
+      _openaiKeyController.text = profile.apiKey;
+      _asrUrlController.text = asrCustom.baseUrl;
+      _asrKeyController.text = asrCustom.apiKey;
+      _asrModelController.text = asrCustom.model;
       _voices = voices;
       _loaded = true;
     });
   }
 
+  /// 从音色工坊返回时只刷新发音人清单，保留本页未保存的其他编辑。
+  Future<void> _refreshVoices() async {
+    final voices = await _voicesFor(_provider);
+    if (!mounted) return;
+    setState(() => _voices = voices);
+  }
+
   Future<void> _providerChanged(String? v) async {
     final provider = v ?? 'edge';
-    final voices = switch (provider) {
-      'mimo' => MimoTtsProvider.staticVoices,
-      'openai' => OpenAiTtsProvider.staticVoices,
-      // 系统分支取设备系统音色，不能用解析器列表（那会显示默认引擎的发音人）。
-      'system' => await SystemTtsProvider().listVoices(),
-      _ => EdgeTtsProvider.staticVoices,
-    };
+    final voices = await _voicesFor(provider);
     setState(() {
       _provider = provider;
       _voices = voices;
@@ -126,6 +170,10 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
       voiceId: _voiceId,
       speed: _speed,
       model: _modelController.text.trim(),
+      // 独立 API 只在 OpenAI 档生效（存 profile 行）；其余引擎清空，
+      // 保持「MiMo 永远复用聊天配置」的语义。
+      baseUrl: _provider == 'openai' ? _openaiUrlController.text.trim() : '',
+      apiKey: _provider == 'openai' ? _openaiKeyController.text.trim() : '',
       isDefault: true,
       name: switch (_provider) {
         'mimo' => 'MiMo 语音',
@@ -141,6 +189,11 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
     await repo.setVoiceSpeed(_speed);
     await repo.setAsrEngine(_asrEngine);
     await repo.setAsrLocale(_asrLocale);
+    await repo.setAsrCustomConfig(
+      baseUrl: _asrUrlController.text,
+      apiKey: _asrKeyController.text,
+      model: _asrModelController.text,
+    );
     if (mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('语音设置已保存')));
@@ -204,26 +257,62 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
               switch (_provider) {
                 'mimo' =>
                   '小米 MiMo 云端语音（chat/completions + audio），Key/地址复用聊天配置，推荐',
-                'openai' => '走中转站或官方 /audio/speech 接口，API Key 默认复用聊天供应商配置',
+                'openai' => '走中转站或官方 /audio/speech 接口，可配独立 API（留空回落聊天配置）',
                 'system' => '离线兜底，依赖设备自带 TTS 引擎',
                 _ => '微软神经语音，免费，需联网',
               },
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
-          if (_provider == 'openai' || _provider == 'mimo')
+          if (_provider == 'mimo')
             ListTile(
               title: TextField(
-                decoration: InputDecoration(
-                  labelText: _provider == 'mimo'
-                      ? 'MiMo 模型（默认 mimo-v2.5-tts，API Key 走默认供应商配置）'
-                      : 'TTS 模型（留空用 tts-1，API Key 走默认供应商配置）',
-                  border: const OutlineInputBorder(),
+                decoration: const InputDecoration(
+                  labelText: 'MiMo 模型（默认 mimo-v2.5-tts，API Key 走默认供应商配置）',
+                  border: OutlineInputBorder(),
                 ),
                 controller: _modelController,
                 maxLines: 1,
               ),
             ),
+          if (_provider == 'openai') ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: TextField(
+                controller: _openaiUrlController,
+                decoration: const InputDecoration(
+                  labelText: 'API 地址（如 https://api.openai.com/v1）',
+                  helperText: '留空则复用「API 供应商」里的默认配置',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.url,
+                maxLines: 1,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: TextField(
+                controller: _openaiKeyController,
+                decoration: const InputDecoration(
+                  labelText: 'API Key',
+                  border: OutlineInputBorder(),
+                ),
+                obscureText: true,
+                maxLines: 1,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: TextField(
+                controller: _modelController,
+                decoration: const InputDecoration(
+                  labelText: '模型名（留空用 tts-1）',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 1,
+              ),
+            ),
+          ],
           if (_voices.isNotEmpty)
             ListTile(
               title: const Text('发音人'),
@@ -238,6 +327,19 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
                     setState(() => _voiceId = v ?? _voiceId),
               ),
             ),
+          ListTile(
+            leading: const Icon(Icons.record_voice_over_outlined),
+            title: const Text('音色工坊（自定义音色）'),
+            subtitle: const Text('用一句话描述定制音色，由 MiMo voicedesign 合成'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const VoiceDesignPage()),
+              );
+              // 返回后刷新发音人清单（可能新增/删除了自定义音色）。
+              await _refreshVoices();
+            },
+          ),
           const Divider(),
           const ListTile(
             title: Text('按住说话 · 识别引擎',
@@ -248,6 +350,7 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
             child: SegmentedButton<String>(
               segments: const [
                 ButtonSegment(value: 'mimo', label: Text('MiMo 云端')),
+                ButtonSegment(value: 'custom', label: Text('独立配置')),
                 ButtonSegment(value: 'system', label: Text('系统本机')),
               ],
               selected: {_asrEngine},
@@ -257,10 +360,52 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
             child: Text(
-              '云端识别需默认 API 配置、失败自动回退本机；系统识别依赖设备自带服务',
+              switch (_asrEngine) {
+                'custom' => '识别走下方独立的接口配置，失败自动回退本机',
+                'system' => '系统识别依赖设备自带服务',
+                _ => '云端识别复用「API 供应商」里的默认配置，失败自动回退本机',
+              },
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
+          if (_asrEngine == 'custom') ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: TextField(
+                controller: _asrUrlController,
+                decoration: const InputDecoration(
+                  labelText: 'API 地址（如 https://api.example.com/v1）',
+                  helperText: '需兼容 MiMo ASR 协议（chat/completions + input_audio）',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.url,
+                maxLines: 1,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: TextField(
+                controller: _asrKeyController,
+                decoration: const InputDecoration(
+                  labelText: 'API Key',
+                  border: OutlineInputBorder(),
+                ),
+                obscureText: true,
+                maxLines: 1,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: TextField(
+                controller: _asrModelController,
+                decoration: const InputDecoration(
+                  labelText: '模型名（留空用 mimo-v2.5-asr）',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 1,
+              ),
+            ),
+          ],
           ListTile(
             title: const Text('识别语言（按住说话）'),
             trailing: DropdownButton<String>(

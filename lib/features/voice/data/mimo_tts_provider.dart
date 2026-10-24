@@ -5,6 +5,11 @@
 /// audio = {format, voice}，音频在 `choices[0].message.audio.data`（base64）。
 /// 注意：不是 /audio/speech，那个路径在 MiMo 上 404。
 ///
+/// 音色设计（voicedesign）：[TtsRequest.voiceDesign] 非空时改走
+/// `mimo-v2.5-tts-voicedesign`——描述进 user 消息、文本进 assistant 消息，
+/// audio 只带 format（无 voice 参数）。实测（2026-10-24）该接口无需音色 ID，
+/// 描述即音色，每次合成独立采样。
+///
 /// baseUrl/apiKey 为空时回落到默认聊天 API 配置（同源同 Key）。
 library;
 
@@ -43,6 +48,9 @@ class MimoTtsProvider implements TtsProvider {
   String get providerId => 'mimo';
 
   static const String defaultModel = 'mimo-v2.5-tts';
+
+  /// 音色设计模型：user 消息=音色描述，assistant 消息=朗读文本。
+  static const String voiceDesignModel = 'mimo-v2.5-tts-voicedesign';
   static const String defaultVoice = 'mimo_default';
 
   /// 官方发音人清单（错误信息实测枚举）。
@@ -91,21 +99,40 @@ class MimoTtsProvider implements TtsProvider {
     return base;
   }
 
+  /// 音色设计 user 消息：用户描述 + 语速提示（描述即音色，语速仍靠提示词）。
+  static String designFor(String description, double speed) {
+    final base = description.trim();
+    if (speed >= 1.3) return '$base，语速较快，干脆利落。';
+    if (speed >= 1.1) return '$base，语速稍快。';
+    if (speed <= 0.7) return '$base，语速较慢，从容不迫。';
+    if (speed <= 0.9) return '$base，语速稍慢。';
+    return base;
+  }
+
   @override
   Future<TtsAudio> synthesize(TtsRequest req, {CancelToken? cancel}) async {
     final endpoint = await _resolveEndpoint();
+    // 音色设计：描述进 user 消息、文本进 assistant 消息，无需 voice 参数。
+    final design = req.voiceDesign.trim();
+    final isDesign = design.isNotEmpty;
     try {
       final response = await _dio.post<dynamic>(
         OpenAiChatApiClient.completionsUrl(endpoint.baseUrl),
         data: {
-          'model': model.trim().isEmpty ? defaultModel : model.trim(),
+          'model': isDesign
+              ? voiceDesignModel
+              : (model.trim().isEmpty ? defaultModel : model.trim()),
           'messages': [
-            {'role': 'user', 'content': styleFor(req.speed)},
+            {
+              'role': 'user',
+              'content': isDesign ? designFor(design, req.speed) : styleFor(req.speed),
+            },
             {'role': 'assistant', 'content': req.text},
           ],
           'audio': {
             'format': 'mp3',
-            'voice': req.voiceId.isEmpty ? defaultVoice : req.voiceId,
+            if (!isDesign)
+              'voice': req.voiceId.isEmpty ? defaultVoice : req.voiceId,
           },
         },
         options: Options(

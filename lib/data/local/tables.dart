@@ -25,6 +25,9 @@ class Conversations extends Table {
 
   BoolColumn get archived => boolean().withDefault(const Constant(false))();
 
+  /// 本会话是否自动朗读（v6）：与全局 voice_enabled 相与决定实际发声。
+  BoolColumn get voiceEnabled => boolean().withDefault(const Constant(true))();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }
@@ -109,6 +112,14 @@ class Characters extends Table {
   DateTimeColumn get createdAt => dateTime()();
 
   DateTimeColumn get updatedAt => dateTime()();
+
+  /// 跨会话长期记忆（LLM 摘要，第一人称要点，v6）。
+  /// 注意：CharacterRepository.save 是整行 upsert，本列不进 Character
+  /// 领域模型，只经 getMemory/setMemory 读写，防止编辑角色卡时覆盖。
+  TextColumn get memorySummary => text().withDefault(const Constant(''))();
+
+  /// 记忆水位线：该时点（含）之前的 done 消息已纳入摘要；null=从未摘要。
+  DateTimeColumn get memoryUpdatedAt => dateTime().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -205,4 +216,24 @@ class Settings extends Table {
 
   @override
   Set<Column<Object>> get primaryKey => {key};
+}
+
+/// 自定义音色（音色设计）：一条自然语言描述定义音色，
+/// 合成时经 mimo-v2.5-tts-voicedesign 的 user 消息传递（无需音色 ID）。
+@DataClassName('CustomVoiceRow')
+class CustomVoices extends Table {
+  TextColumn get id => text()();
+
+  /// 显示名（如「萝莉音」「磁性男声」）。
+  TextColumn get name => text()();
+
+  /// 音色描述（如「温柔甜美的年轻女声，语速稍慢」）。
+  TextColumn get description => text()();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
 }

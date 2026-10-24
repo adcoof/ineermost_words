@@ -18,14 +18,14 @@ class AiRoleplayApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // 强调色跟随设置（未加载期间用默认霓虹紫）。
-    final accent =
-        ref.watch(themeAccentProvider).value ?? BrandColors.violet;
+    // 主题跟随设置（未加载期间用默认深空紫）。
+    final palette =
+        ref.watch(themePaletteProvider).value ?? kThemePalettes.first;
     return MaterialApp(
       title: '心语',
       debugShowCheckedModeBanner: false,
-      theme: buildTheme(accent),
-      themeMode: ThemeMode.dark,
+      // 每套 palette 自带亮度；不设 darkTheme 时 themeMode 两种模式都用它。
+      theme: buildTheme(palette),
       home: SplashPage(next: const _MainShell()),
     );
   }

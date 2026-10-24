@@ -1,4 +1,4 @@
-/// 会话列表页。
+/// 会话列表页：顶部横向角色头像条过滤（对话收纳），无角色会话只在「全部」。
 library;
 
 import 'package:file_picker/file_picker.dart';
@@ -8,52 +8,102 @@ import 'package:intl/intl.dart';
 
 import '../../../app/providers.dart';
 import '../../characters/domain/character.dart';
+import '../../characters/presentation/character_avatar.dart';
 import '../../characters/presentation/start_chat.dart';
 import '../domain/models.dart';
 import 'chat_page.dart';
 
-class ConversationListPage extends ConsumerWidget {
+/// 有会话的角色（保持入参顺序，即 watchCharacters 的 updatedAt 降序）。
+List<Character> charactersWithConversations(
+    List<Conversation> convs, List<Character> chars) {
+  final ids = {
+    for (final c in convs)
+      if (c.characterId != null) c.characterId!,
+  };
+  return [for (final c in chars) if (ids.contains(c.id)) c];
+}
+
+class ConversationListPage extends ConsumerStatefulWidget {
   const ConversationListPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final repo = ref.watch(chatRepositoryProvider);
+  ConsumerState<ConversationListPage> createState() =>
+      _ConversationListPageState();
+}
+
+class _ConversationListPageState extends ConsumerState<ConversationListPage> {
+  /// 选中的角色过滤器；null=全部。
+  String? _selectedCharacterId;
+
+  @override
+  Widget build(BuildContext context) {
+    final conversations =
+        ref.watch(conversationsStreamProvider).value ?? const <Conversation>[];
+    final characters =
+        ref.watch(charactersStreamProvider).value ?? const <Character>[];
+
+    // 选中角色的最后一个会话被删/角色被删时自动回落「全部」
+    //（build 内计算，不 setState，避免构建期改状态）。
+    final withConvs = charactersWithConversations(conversations, characters);
+    final idsWithConvs = {for (final c in withConvs) c.id};
+    final effectiveSelected =
+        idsWithConvs.contains(_selectedCharacterId) ? _selectedCharacterId : null;
+    final filtered = effectiveSelected == null
+        ? conversations
+        : [
+            for (final c in conversations)
+              if (c.characterId == effectiveSelected) c,
+          ];
+
+    final fmt = DateFormat('MM-dd HH:mm');
     return Scaffold(
       appBar: AppBar(
         title: const Text('会话'),
       ),
-      body: StreamBuilder<List<Conversation>>(
-        stream: repo.watchConversations(),
-        builder: (context, snapshot) {
-          final conversations = snapshot.data ?? const [];
-          if (conversations.isEmpty) {
-            return const Center(child: Text('还没有会话，点右下角新建'));
-          }
-          final fmt = DateFormat('MM-dd HH:mm');
-          return ListView.separated(
-            itemCount: conversations.length,
-            separatorBuilder: (_, _) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final c = conversations[index];
-              return ListTile(
-                leading: const CircleAvatar(child: Icon(Icons.chat_bubble_outline)),
-                title: Text(c.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                subtitle: Text(fmt.format(c.updatedAt)),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => _confirmDelete(context, ref, c),
-                ),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => ChatPage(conversationId: c.id),
-                    ),
-                  );
-                },
-              );
-            },
-          );
-        },
+      body: Column(
+        children: [
+          if (conversations.isNotEmpty) ...[
+            _AvatarBar(
+              characters: withConvs,
+              selected: effectiveSelected,
+              onSelected: (id) => setState(() => _selectedCharacterId = id),
+            ),
+            const Divider(height: 1),
+          ],
+          Expanded(
+            child: filtered.isEmpty
+                ? Center(
+                    child: Text(effectiveSelected == null
+                        ? '还没有会话，点右下角新建'
+                        : '该角色还没有会话'),
+                  )
+                : ListView.separated(
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final c = filtered[index];
+                      return ListTile(
+                        leading: const CircleAvatar(
+                            child: Icon(Icons.chat_bubble_outline)),
+                        title: Text(c.title,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(fmt.format(c.updatedAt)),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () => _confirmDelete(context, c),
+                        ),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => ChatPage(conversationId: c.id),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         // 与角色页 FAB 同屏（IndexedStack），需不同 heroTag 防 Hero 撞车。
@@ -141,8 +191,8 @@ class ConversationListPage extends ConsumerWidget {
           children: [
             for (final c in characters)
               ListTile(
-                leading: const CircleAvatar(
-                    child: Icon(Icons.person_outline, size: 20)),
+                leading: CharacterAvatar(
+                    avatarPath: c.avatarPath, radius: 18),
                 title: Text(c.name),
                 subtitle: Text(c.source == 'st_v2' ? 'SillyTavern 卡' : '手动创建'),
                 onTap: () => Navigator.pop(context, c),
@@ -156,8 +206,7 @@ class ConversationListPage extends ConsumerWidget {
     }
   }
 
-  Future<void> _confirmDelete(
-      BuildContext context, WidgetRef ref, Conversation c) async {
+  Future<void> _confirmDelete(BuildContext context, Conversation c) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -176,5 +225,85 @@ class ConversationListPage extends ConsumerWidget {
     if (ok == true) {
       await ref.read(chatRepositoryProvider).deleteConversation(c.id);
     }
+  }
+}
+
+/// 横向角色头像条：「全部」+ 有会话的角色，点选过滤。
+class _AvatarBar extends StatelessWidget {
+  final List<Character> characters;
+  final String? selected;
+  final ValueChanged<String?> onSelected;
+
+  const _AvatarBar({
+    required this.characters,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    Widget item({required Widget avatar, required String? id, String? label}) {
+      final isSelected = selected == id;
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(28),
+          onTap: () => onSelected(id),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isSelected ? scheme.primary : Colors.transparent,
+                    width: 2,
+                  ),
+                ),
+                child: avatar,
+              ),
+              if (label != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 92,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        children: [
+          item(
+            id: null,
+            label: '全部',
+            avatar: CircleAvatar(
+              radius: 22,
+              backgroundColor: selected == null
+                  ? scheme.primaryContainer
+                  : scheme.surfaceContainerHighest,
+              child: const Icon(Icons.people_outline),
+            ),
+          ),
+          for (final c in characters)
+            item(
+              id: c.id,
+              label: c.name,
+              avatar: CharacterAvatar(avatarPath: c.avatarPath, radius: 22),
+            ),
+        ],
+      ),
+    );
   }
 }

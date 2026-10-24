@@ -1,14 +1,13 @@
 /// 角色列表页：手动新建、ST 卡导入、开始对话。
 library;
 
-import 'dart:io';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
 import '../domain/character.dart';
+import 'character_avatar.dart';
 import 'character_edit_page.dart';
 import 'start_chat.dart';
 
@@ -57,7 +56,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
             itemBuilder: (context, index) {
               final c = characters[index];
               return ListTile(
-                leading: _Avatar(avatarPath: c.avatarPath),
+                leading: CharacterAvatar(avatarPath: c.avatarPath),
                 title: Text(c.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                 subtitle: Text(
                   c.source == 'st_v2' ? 'SillyTavern 卡' : '手动创建',
@@ -128,26 +127,5 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
     } finally {
       _startingChat = false;
     }
-  }
-}
-
-class _Avatar extends StatelessWidget {
-  final String? avatarPath;
-
-  const _Avatar({this.avatarPath});
-
-  @override
-  Widget build(BuildContext context) {
-    final path = avatarPath;
-    // 解码失败（损坏/无 IDAT 的图）时仍保留占位底色，不出现空白。
-    return CircleAvatar(
-      backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-      backgroundImage: (path != null && path.isNotEmpty && File(path).existsSync())
-          ? FileImage(File(path))
-          : null,
-      child: (path == null || path.isEmpty || !File(path).existsSync())
-          ? const Icon(Icons.person_outline)
-          : null,
-    );
   }
 }

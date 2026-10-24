@@ -19,12 +19,16 @@
 ### 💬 Conversations
 - Streaming typewriter replies (SSE) with instant stop/interrupt
 - Full chat history stored locally in SQLite — nothing lost on restart
-- Character-bound sessions assemble prompts in a fixed order: persona → scenario → tag spec → few-shot examples → sliding window of the last 40 messages
+- **Character grouping**: a horizontal avatar bar atop the chat list filters conversations per character (newest first)
+- **WeChat-style timestamps**: a centered time separator appears automatically between messages more than 5 minutes apart
+- **Per-chat voice mute**: a toggle in the chat bar silences read-aloud for that conversation only (independent of the global switch)
+- Character-bound sessions assemble prompts in a fixed order: persona → scenario → **cross-chat memory** → tag spec → few-shot examples → sliding window of the last 40 messages
 
 ### 👤 Characters
 - Create manually, or **import SillyTavern V2 character cards** (PNG tEXt / JSON)
 - Description, personality, scenario, first message and example dialogues are fully mapped
 - Character artwork displayed locally
+- **Cross-chat memory**: the same character remembers across separate conversations — recent excerpts are injected into the prompt, and older history is condensed by an LLM into a first-person memory summary; globally toggleable in Settings
 
 ### 🐾 Desktop Pet (Live2D)
 - Import `.moc3` model packs (zip), rendered offline via WebView + pixi-live2d-display
@@ -37,21 +41,24 @@
 | Direction | Engine |
 |---|---|
 | TTS (read-aloud) | **MiMo Cloud** (`mimo-v2.5-tts`, default) → Edge (free) → OpenAI-compatible → system engine, auto-fallback on failure |
-| ASR (push-to-talk) | **MiMo Cloud** (`mimo-v2.5-asr`, default) → on-device recognition, auto-fallback |
+| ASR (push-to-talk) | **MiMo Cloud** (`mimo-v2.5-asr`, default) → custom endpoint → on-device recognition, auto-fallback |
 
 - Hold to talk; release to recognize and send directly; tap the mic during playback to interrupt
+- **Voice Workshop**: design a custom voice from a one-line description (e.g. "a sweet, gentle young female voice") via MiMo `voicedesign` — preview, store multiple voices, and pick them alongside the built-in ones
+- **Per-engine API config**: the OpenAI TTS option and the ASR "custom endpoint" option each have their own base URL / key / model fields (blank falls back to the chat API profile); MiMo always reuses the chat config
 - TTS input automatically strips `<tags>` — markup is never spoken
 - Pipelined synthesis queue (sentence N+1 is synthesized while sentence N plays) for near-seamless continuity
-- 9 MiMo voices, speech rate 0.5–2.0×
+- 9 MiMo voices plus custom workshop voices, speech rate 0.5–2.0×
 
 ### ⚙️ Settings
 - **API providers**: any OpenAI-compatible endpoint (DeepSeek / Kimi / Qwen / Ollama / proxies / Xiaomi MiMo), with connection test
-- **Voice**: TTS/ASR engine, voice, recognition language configured independently
-- **Appearance**: four accent themes (violet / cyan / rose / mint), applied instantly
+- **Voice**: TTS/ASR engine, voices, recognition language, optional dedicated cloud API endpoints
+- **Cross-chat memory**: global toggle (on by default)
+- **Appearance**: five complete themes — Deep Space (violet), Sakura Night, Glacier Blue, Mint, and Daylight (light) — each with a full palette and brightness, shown as preview cards and applied instantly
 - **More**: studio website, version info
 
 ### 🎨 Interface
-- Dark "deep-space" anime-tech theme (neon accents on near-black)
+- Anime-tech styling with multiple switchable full themes (including one light theme)
 - Splash transition page: icon + tagline + studio credit
 - Bottom navigation: Chats / Characters / Pet / Settings
 
@@ -78,10 +85,11 @@ flutter build apk --release
 ## Configuration
 
 1. **Add an API provider**: Settings → API Providers → enter the base URL (e.g. `https://api.xxx.com/v1`, without `/chat/completions`) and key; connection test available
-2. **Voice works out of the box**: TTS/ASR default to MiMo Cloud, reusing the default chat API profile; switch engines and voices in Settings → Voice
+2. **Voice works out of the box**: TTS/ASR default to MiMo Cloud, reusing the default chat API profile; switch engines and voices in Settings → Voice, or fill in dedicated endpoints for OpenAI TTS / custom ASR
 3. MiMo platform notes (verified in practice):
    - Keys only work on `https://token-plan-cn.xiaomimimo.com/v1` (`api.xiaomimimo.com` returns 401)
    - TTS uses `chat/completions` with an `audio` parameter (**not** `/audio/speech`); exactly 9 voices are available
+   - Custom voices go through `mimo-v2.5-tts-voicedesign`: the description goes in the user message and the spoken text in the assistant message — no voice ID involved; two syntheses of the same description differ slightly (stochastic output)
    - ASR `content` must **not** contain any text parts — only `input_audio` is accepted
 4. Edge free voices may be rejected by Microsoft's endpoint in some regions (403); the app then falls back automatically
 
@@ -93,10 +101,10 @@ lib/
   core/         # unified exceptions, SSE decoder
   data/local/   # Drift database and table definitions
   features/
-    chat/       # conversations, message list, input bar (push-to-talk)
+    chat/       # conversations, message list, input bar (push-to-talk), cross-chat memory
     characters/ # character cards, SillyTavern import, prompt assembly, emotion tag parsing
     pet/        # Live2D pet, WebView bridge, emotion→expression mapping
-    voice/      # TTS/ASR engine implementations, playback queue, voice settings
+    voice/      # TTS/ASR engine implementations, playback queue, Voice Workshop, voice settings
     settings/   # API providers, general app settings
 assets/
   pet/          # pet WebView host and offline vendor libraries
@@ -107,7 +115,7 @@ assets/
 
 ```bash
 flutter analyze   # static checks
-flutter test      # 160+ cases: SSE/tag parsing, prompt assembly, voice queue, auto-scroll, theming, …
+flutter test      # 190+ cases: SSE/tag parsing, prompt assembly, voice queue, auto-scroll, migrations, memory summarizer, voice design, …
 ```
 
 ## Acknowledgments & Copyright

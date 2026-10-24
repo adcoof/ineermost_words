@@ -16,10 +16,16 @@ class TtsRequest {
   /// 语速倍率（0.5–2.0）。
   final double speed;
 
+  /// 自定义音色描述（自然语言，如「温柔甜美的年轻女声」）。
+  /// 非空时 MiMo 走 mimo-v2.5-tts-voicedesign：描述进 user 消息，
+  /// 朗读文本进 assistant 消息，无需 voice 参数。
+  final String voiceDesign;
+
   const TtsRequest({
     required this.text,
     this.voiceId = '',
     this.speed = 1.0,
+    this.voiceDesign = '',
   });
 }
 

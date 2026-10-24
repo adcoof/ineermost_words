@@ -196,4 +196,88 @@ void main() {
       expect(await p.canUse(), isTrue);
     });
   });
+
+  group('ASR 独立配置（customConfigGet 注入）', () {
+    /// 构造带独立配置回调的被测对象（模拟语音界面「独立配置」档）。
+    MimoAsrProvider customProvider(
+      _FakeAdapter adapter, {
+      ({String baseUrl, String apiKey, String model})? config,
+    }) {
+      final dio = Dio();
+      dio.httpClientAdapter = adapter;
+      return MimoAsrProvider(
+        baseUrl: '',
+        apiKey: '',
+        model: '',
+        chatProfilesRepo: repo,
+        customConfigGet: () async => config,
+        dio: dio,
+      );
+    }
+
+    test('独立配置非空：优先于聊天配置，canUse 为真，模型名用配置值', () async {
+      // 只有独立配置，没有任何聊天配置。
+      final p = customProvider(_FakeAdapter([]), config: (
+        baseUrl: 'https://voice.example.com/v1',
+        apiKey: 'sk-voice',
+        model: 'my-asr-1',
+      ));
+      expect(await p.canUse(), isTrue);
+
+      // 转写请求应打到独立配置的地址，带独立 Key 与模型名。
+      final adapter = _FakeAdapter(utf8.encode(jsonEncode({
+        'choices': [
+          {
+            'message': {'content': 'hi'}
+          }
+        ],
+      })));
+      await customProvider(adapter, config: (
+        baseUrl: 'https://voice.example.com/v1',
+        apiKey: 'sk-voice',
+        model: 'my-asr-1',
+      )).transcribe([0x00]);
+      final req = adapter.lastRequest!;
+      expect(req.uri.toString(), 'https://voice.example.com/v1/chat/completions');
+      expect(_header(req, 'authorization'), 'Bearer sk-voice');
+      expect((req.data as Map)['model'], 'my-asr-1');
+    });
+
+    test('独立配置为空：回落聊天配置；两者皆无：canUse 为假', () async {
+      final p = customProvider(_FakeAdapter([]));
+      expect(await p.canUse(), isFalse);
+
+      await repo.save(const ApiProfile(
+        id: 'c1',
+        name: 'chat',
+        baseUrl: 'https://chat.example.com/v1',
+        apiKey: 'sk-chat',
+        model: 'm',
+        temperature: 1.0,
+        extraHeaders: '{}',
+        isDefault: true,
+      ));
+      expect(await p.canUse(), isTrue);
+      final adapter = _FakeAdapter(utf8.encode(jsonEncode({
+        'choices': [
+          {
+            'message': {'content': 'hi'}
+          }
+        ],
+      })));
+      await customProvider(adapter).transcribe([0x00]);
+      expect(adapter.lastRequest!.uri.toString(),
+          'https://chat.example.com/v1/chat/completions');
+      // 聊天回落档不拿聊天模型名当 ASR 模型。
+      expect((adapter.lastRequest!.data as Map)['model'], 'mimo-v2.5-asr');
+    });
+  });
+}
+
+/// 取请求头（大小写不敏感），缺省空串。
+String _header(RequestOptions o, String name) {
+  for (final e in o.headers.entries) {
+    if (e.key.toLowerCase() == name.toLowerCase()) return e.value.toString();
+  }
+  return '';
 }

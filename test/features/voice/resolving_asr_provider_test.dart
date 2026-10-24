@@ -91,6 +91,7 @@ void main() {
       ResolvingAsrProvider(
         engineGet: () async => engine,
         mimo: mimo,
+        custom: mimo, // 假件复用：本组测试不区分云端实例来源
         system: system,
       );
 

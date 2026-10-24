@@ -57,6 +57,12 @@ class ChatRepository {
         .write(ConversationsCompanion(petModelId: Value(petModelId)));
   }
 
+  /// 设置会话级自动朗读开关。
+  Future<void> setConversationVoiceEnabled(String id, bool enabled) async {
+    await (db.update(db.conversations)..where((t) => t.id.equals(id)))
+        .write(ConversationsCompanion(voiceEnabled: Value(enabled)));
+  }
+
   Future<void> touchConversation(String id) async {
     await (db.update(db.conversations)..where((t) => t.id.equals(id)))
         .write(ConversationsCompanion(updatedAt: Value(DateTime.now())));
@@ -114,6 +120,45 @@ class ChatRepository {
     await (db.delete(db.messages)..where((t) => t.id.equals(id))).go();
   }
 
+  /// 同角色其他会话中最近的完成消息，按时间升序返回（跨会话记忆·近期原文）。
+  ///
+  /// 两步查询（无 join，对齐项目风格）：先取同角色其他会话 id，
+  /// 再按 createdAt 倒序取 [limit] 条后反转为时序。archived 不过滤
+  ///（全库无置 true 的路径，保持与 watchConversations 同口径）。
+  Future<List<ChatMessage>> getRecentOtherMessages({
+    required String characterId,
+    required String excludeConversationId,
+    int limit = 40,
+  }) async {
+    final convQ = db.select(db.conversations)
+      ..where((t) =>
+          t.characterId.equals(characterId) &
+          t.id.equals(excludeConversationId).not());
+    final ids = (await convQ.get()).map((r) => r.id).toList();
+    if (ids.isEmpty) return const []; // isIn 空列表语义不可靠，显式短路。
+    final q = db.select(db.messages)
+      ..where((t) =>
+          t.conversationId.isIn(ids) &
+          t.status.equals(MessageStatus.done.wire) &
+          t.content.equals('').not())
+      ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+      ..limit(limit);
+    return (await q.get()).reversed.map(_msgFromRow).toList();
+  }
+
+  /// 本会话自 [since]（null=全部）之后的完成消息数（摘要触发阈值用）。
+  Future<int> countDoneMessagesSince(String conversationId, DateTime? since) async {
+    final q = db.select(db.messages)
+      ..where((t) =>
+          t.conversationId.equals(conversationId) &
+          t.status.equals(MessageStatus.done.wire) &
+          t.content.equals('').not());
+    if (since != null) {
+      q.where((t) => t.createdAt.isBiggerThanValue(since));
+    }
+    return (await q.get()).length;
+  }
+
   Future<void> updateMessage(
     String id, {
     String? content,
@@ -141,6 +186,7 @@ class ChatRepository {
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         archived: row.archived,
+        voiceEnabled: row.voiceEnabled,
       );
 
   ConversationsCompanion _convToRow(Conversation c) => ConversationsCompanion(
@@ -152,6 +198,7 @@ class ChatRepository {
         createdAt: Value(c.createdAt),
         updatedAt: Value(c.updatedAt),
         archived: Value(c.archived),
+        voiceEnabled: Value(c.voiceEnabled),
       );
 
   ChatMessage _msgFromRow(MessageRow row) => ChatMessage(
