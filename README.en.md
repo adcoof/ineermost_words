@@ -19,18 +19,24 @@
 ### 💬 Conversations
 - Streaming typewriter replies (SSE) with instant stop/interrupt
 - Full chat history stored locally in SQLite — nothing lost on restart
+- **Multi-bubble replies**: one turn is split into up to 4 short messages that appear one after another, so it reads like a real person typing; if the model still writes one big block, the client falls back to splitting it automatically
+- **Time awareness**: messages carry time anchors (`today 14:00`, `yesterday 21:35`, `3 days ago 09:12`), so the character won't call yesterday's event "just now"
 - **Character grouping**: a horizontal avatar bar atop the chat list filters conversations per character (newest first)
 - **WeChat-style timestamps**: a centered time separator appears automatically between messages more than 5 minutes apart
 - **Per-chat voice mute**: a toggle in the chat bar silences read-aloud for that conversation only (independent of the global switch)
-- Character-bound sessions assemble prompts in a fixed order: persona → scenario → **cross-chat memory** → tag spec → few-shot examples → sliding window of the last 40 messages
+- **Per-chat background**: set a wallpaper for each conversation (pick → crop → fills the screen), stays put when the keyboard appears, and can be reset anytime
+- Character-bound sessions assemble prompts in a fixed order: persona → scenario → **cross-chat memory** → **what the character knows about you** → tag spec → few-shot examples → sliding window of the last 40 messages
 
 ### 👤 Characters
 - Create manually, or **import SillyTavern V2 character cards** (PNG tEXt / JSON)
 - Description, personality, scenario, first message and example dialogues are fully mapped
-- Character artwork displayed locally
+- Character artwork displayed locally, with a 1:1 visual crop when uploading
 - **Cross-chat memory**: the same character remembers across separate conversations — recent excerpts are injected into the prompt, and older history is condensed by an LLM into a first-person memory summary; globally toggleable in Settings
+- **Memory documents + "You in their eyes"**: memories are organised into a sectioned document, plus a portrait of you written from the character's point of view. Open it by tapping the avatar in chat or from the character editor, and export as PNG / Word
+- **Sticker library**: upload stickers for 14 moods (happy / angry / sad / amused / confused / shy / …), multiple per mood. When a reply carries an emotion, a matching sticker is sent automatically; near-miss moods borrow a close one (e.g. "crying" falls back to "sad")
 
 ### 🐾 Desktop Pet (Live2D)
+- **Haru built in**: works out of the box — imported automatically on first launch and bound to new conversations; swap in your own model anytime
 - Import `.moc3` model packs (zip), rendered offline via WebView + pixi-live2d-display
 - `<emotion:happy>` / `<action:wave>` tags in replies drive expressions and motions in real time
 - Keyword-based emotion fallback (e.g. "angry" in text still triggers the expression)
@@ -59,12 +65,18 @@
 
 ### 🎨 Interface
 - Anime-tech styling with multiple switchable full themes (including one light theme)
+- **Liquid glass**: the bottom navigation, chat app bar and input bar use real background blur with translucent gradient borders; chat bubbles use translucent fills (the scrolling list is never blurred per-item, keeping it smooth)
 - Splash transition page: icon + tagline + studio credit
 - Bottom navigation: Chats / Characters / Pet / Settings
 
+## Recent Updates
+
+- **v1.3 series**: stickers, multi-bubble short replies, liquid-glass UI, memory documents with "You in their eyes" export, per-chat backgrounds and avatar cropping, built-in Haru pet, time awareness
+- Fixes: background crop limited to 1:1 / "crop failed", background shrinking with the keyboard, replies still arriving as one big block when the model ignores the format, model-invented tags leaking into bubbles, portrait avatar crop frame landing off-screen
+
 ## Tech Stack
 
-Flutter (Android, minSdk 24) · Riverpod 3 · Drift/SQLite · dio (hand-rolled SSE decoding) · just_audio · edge_tts / flutter_tts / speech_to_text / record · flutter_inappwebview + PixiJS + pixi-live2d-display
+Flutter (Android, minSdk 24) · Riverpod 3 · Drift/SQLite · dio (hand-rolled SSE decoding) · just_audio · edge_tts / flutter_tts / speech_to_text / record · flutter_inappwebview + PixiJS + pixi-live2d-display · crop_your_image (cropping) · share_plus (export/share) · image / archive (image and OOXML processing)
 
 ## Getting Started
 
@@ -99,15 +111,17 @@ flutter build apk --release
 lib/
   app/          # MaterialApp, theme, splash, global providers
   core/         # unified exceptions, SSE decoder
+    utils/      # time anchors, image compression, Word (.docx) writer, export/share
+    widgets/    # liquid-glass widgets
   data/local/   # Drift database and table definitions
   features/
-    chat/       # conversations, message list, input bar (push-to-talk), cross-chat memory
-    characters/ # character cards, SillyTavern import, prompt assembly, emotion tag parsing
-    pet/        # Live2D pet, WebView bridge, emotion→expression mapping
+    chat/       # conversations, message list, input bar (push-to-talk), segment splitter, cross-chat memory, stickers, chat background
+    characters/ # character cards, SillyTavern import, prompt assembly, emotion tag parsing, memory documents, sticker library, image cropping
+    pet/        # Live2D pet, WebView bridge, emotion→expression mapping, bundled Haru
     voice/      # TTS/ASR engine implementations, playback queue, Voice Workshop, voice settings
     settings/   # API providers, general app settings
 assets/
-  pet/          # pet WebView host and offline vendor libraries
+  pet/          # pet WebView host, offline vendor libraries, bundled Haru model and its license
   branding/     # app icon and studio logo
 ```
 
@@ -115,11 +129,12 @@ assets/
 
 ```bash
 flutter analyze   # static checks
-flutter test      # 190+ cases: SSE/tag parsing, prompt assembly, voice queue, auto-scroll, migrations, memory summarizer, voice design, …
+flutter test      # 304 cases: SSE/tag parsing, splitting and fallback, prompt time anchors, sticker mapping, voice queue, auto-scroll, migrations, memory summarizer, crop geometry, …
 ```
 
 ## Acknowledgments & Copyright
 
 - © Sigborn Studio (sigborn.xyz). The app name "Innermost Words / 心语" and icon assets are property of the studio.
 - Pet rendering is based on [pixi-live2d-display](https://github.com/guansss/pixi-live2d-display) (MIT) and Live2D Cubism Core; **Powered by Live2D**. Cubism Core is used under the Live2D license (free for individuals and small revenue; please verify the terms before commercial use).
+- The bundled default pet, Haru, is an official Live2D sample model distributed under the Live2D Sample Model License Agreement (see `assets/pet/HARU_LICENSE.txt`; the model is © Live2D).
 - Character cards and model assets imported by users are the user's own responsibility; the app renders them locally only.

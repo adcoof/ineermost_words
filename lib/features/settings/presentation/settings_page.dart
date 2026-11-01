@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/providers.dart';
 import '../../../app/theme.dart';
+import '../../../core/widgets/glass.dart';
 import 'api_profiles_page.dart';
 import '../../voice/presentation/voice_settings_page.dart';
 
@@ -49,8 +50,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _loadMemory() async {
-    final enabled =
-        await ref.read(appSettingsRepositoryProvider).memoryEnabled();
+    final enabled = await ref
+        .read(appSettingsRepositoryProvider)
+        .memoryEnabled();
     if (mounted) setState(() => _memoryEnabled = enabled);
   }
 
@@ -73,44 +75,65 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     // 打不开（无浏览器等）：复制到剪贴板兜底。
     await Clipboard.setData(const ClipboardData(text: 'https://$kSigbornSite'));
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('无法直接打开，网址已复制到剪贴板')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('无法直接打开，网址已复制到剪贴板')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    // 滚动列表里的卡片不做真模糊（性能铁律），用半透明 + 渐变描边的
+    // 伪玻璃质感（v8）。
+    final cardDeco = glassBubbleDecoration(
+      base: scheme.surface,
+      fillOpacity: 0.55,
+      radius: BorderRadius.circular(16),
+    );
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
           _SectionHeader('配置'),
-          ListTile(
-            leading: const Icon(Icons.cloud_outlined),
-            title: const Text('API 供应商'),
-            subtitle: const Text('聊天模型的接口地址与密钥（BYOK）'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ApiProfilesPage()),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: DecoratedBox(
+              decoration: cardDeco,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.cloud_outlined),
+                    title: const Text('API 供应商'),
+                    subtitle: const Text('聊天模型的接口地址与密钥（BYOK）'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ApiProfilesPage(),
+                      ),
+                    ),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.record_voice_over_outlined),
+                    title: const Text('语音'),
+                    subtitle: const Text('TTS 引擎、发音人与按住说话识别'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const VoiceSettingsPage(),
+                      ),
+                    ),
+                  ),
+                  SwitchListTile(
+                    secondary: const Icon(Icons.psychology_outlined),
+                    title: const Text('跨会话记忆'),
+                    subtitle: const Text('同一角色在不同会话间共享近期片段与摘要记忆'),
+                    value: _memoryEnabled,
+                    onChanged: (v) => unawaited(_setMemory(v)),
+                  ),
+                ],
+              ),
             ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.record_voice_over_outlined),
-            title: const Text('语音'),
-            subtitle: const Text('TTS 引擎、发音人与按住说话识别'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const VoiceSettingsPage()),
-            ),
-          ),
-          SwitchListTile(
-            secondary: const Icon(Icons.psychology_outlined),
-            title: const Text('跨会话记忆'),
-            subtitle: const Text('同一角色在不同会话间共享近期片段与摘要记忆'),
-            value: _memoryEnabled,
-            onChanged: (v) => unawaited(_setMemory(v)),
           ),
           const Divider(height: 32),
           _SectionHeader('外观'),
@@ -133,16 +156,36 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ),
           const Divider(height: 32),
           _SectionHeader('更多'),
-          ListTile(
-            leading: Icon(Icons.language,
-                color: Theme.of(context).colorScheme.secondary),
-            title: const Text('奇点重现官网'),
-            subtitle: Text(
-              kSigbornSite,
-              style: TextStyle(color: Theme.of(context).colorScheme.secondary),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: DecoratedBox(
+              decoration: cardDeco,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: Icon(Icons.language, color: scheme.secondary),
+                    title: const Text('奇点重现官网'),
+                    subtitle: Text(
+                      kSigbornSite,
+                      style: TextStyle(color: scheme.secondary),
+                    ),
+                    trailing: const Icon(Icons.open_in_new, size: 18),
+                    onTap: () => _openSite(context),
+                  ),
+                  // Live2D 示例模型署名（Haru 随包分发许可义务，v8）。
+                  ListTile(
+                    leading: Icon(
+                      Icons.pets_outlined,
+                      color: scheme.onSurface.withValues(alpha: 0.55),
+                    ),
+                    title: const Text('Powered by Live2D'),
+                    subtitle: const Text(
+                      '内置桌宠 Haru 为 Live2D 官方示例模型（Sample Model License）',
+                    ),
+                  ),
+                ],
+              ),
             ),
-            trailing: const Icon(Icons.open_in_new, size: 18),
-            onTap: () => _openSite(context),
           ),
           const Divider(height: 32),
           Center(
@@ -155,20 +198,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     'assets/branding/sigborn_logo.png',
                     width: 22,
                     height: 22,
-                    errorBuilder: (_, _, _) => Icon(Icons.bolt,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.onSurface
-                            .withValues(alpha: 0.55)),
+                    errorBuilder: (_, _, _) => Icon(
+                      Icons.bolt,
+                      size: 16,
+                      color: Theme.of(context).colorScheme.onSurface
+                          .withValues(alpha: 0.55),
+                    ),
                   ),
                   const SizedBox(width: 6),
                   Text(
                     '心语 · 由奇点重现工作室制作',
                     style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.55)),
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurface
+                          .withValues(alpha: 0.55),
+                    ),
                   ),
                 ],
               ),
@@ -189,8 +233,8 @@ class _VersionText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final muted =
-        Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55);
+    final muted = Theme.of(context).colorScheme.onSurface
+        .withValues(alpha: 0.55);
     return FutureBuilder<PackageInfo>(
       future: PackageInfo.fromPlatform(),
       builder: (context, snapshot) {
@@ -292,10 +336,8 @@ class _ThemeCard extends StatelessWidget {
               fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
               color: selected
                   ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.7),
+                  : Theme.of(context).colorScheme.onSurface
+                        .withValues(alpha: 0.7),
             ),
           ),
         ],
@@ -315,7 +357,8 @@ class _SectionHeader extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(
-          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55),
+          color: Theme.of(context).colorScheme.onSurface
+              .withValues(alpha: 0.55),
           fontSize: 12,
           letterSpacing: 2,
           fontWeight: FontWeight.w600,

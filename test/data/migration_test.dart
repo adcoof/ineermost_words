@@ -30,6 +30,18 @@ const _v3ToV5Tables = [
   '''CREATE TABLE IF NOT EXISTS "custom_voices" ("id" TEXT NOT NULL, "name" TEXT NOT NULL, "description" TEXT NOT NULL, "created_at" INTEGER NOT NULL, "updated_at" INTEGER NOT NULL, PRIMARY KEY ("id"))''',
 ];
 
+/// v6 时代的 conversations（v1 DDL + voice_enabled 列）。
+const _v6ConversationsTable =
+    '''CREATE TABLE IF NOT EXISTS "conversations" ("id" TEXT NOT NULL, "title" TEXT NOT NULL DEFAULT '新会话', "character_id" TEXT NULL, "pet_model_id" TEXT NULL, "api_profile_id" TEXT NOT NULL, "created_at" INTEGER NOT NULL, "updated_at" INTEGER NOT NULL, "archived" INTEGER NOT NULL DEFAULT 0 CHECK ("archived" IN (0, 1)), "voice_enabled" INTEGER NOT NULL DEFAULT 1 CHECK ("voice_enabled" IN (0, 1)), PRIMARY KEY ("id"))''';
+
+/// v6 时代的 characters（v2 DDL + 记忆列）。
+const _v6CharactersTable =
+    '''CREATE TABLE IF NOT EXISTS "characters" ("id" TEXT NOT NULL, "name" TEXT NOT NULL, "description" TEXT NOT NULL DEFAULT '', "personality" TEXT NOT NULL DEFAULT '', "scenario" TEXT NOT NULL DEFAULT '', "first_message" TEXT NOT NULL DEFAULT '', "example_dialogue" TEXT NOT NULL DEFAULT '', "avatar_path" TEXT NULL, "source" TEXT NOT NULL DEFAULT 'manual', "created_at" INTEGER NOT NULL, "updated_at" INTEGER NOT NULL, "memory_summary" TEXT NOT NULL DEFAULT '', "memory_updated_at" INTEGER NULL, PRIMARY KEY ("id"))''';
+
+/// v7 时代的 messages（v1 DDL + 附图列，无 kind）。
+const _v7MessagesTable =
+    '''CREATE TABLE IF NOT EXISTS "messages" ("id" TEXT NOT NULL, "conversation_id" TEXT NOT NULL, "role" TEXT NOT NULL, "content" TEXT NOT NULL DEFAULT '', "raw_content" TEXT NOT NULL DEFAULT '', "emotion_events" TEXT NOT NULL DEFAULT '[]', "status" TEXT NOT NULL DEFAULT 'done', "created_at" INTEGER NOT NULL, "image_paths" TEXT NOT NULL DEFAULT '[]', "image_summary" TEXT NOT NULL DEFAULT '', PRIMARY KEY ("id"))''';
+
 void main() {
   test('v1 → 当前版本：旧数据无损，v2/v3 新表创建', () async {
     final executor = NativeDatabase.memory(setup: (db) {
@@ -67,6 +79,17 @@ void main() {
     final messages = await db.select(db.messages).get();
     expect(messages, hasLength(1));
     expect(messages.single.content, '旧消息');
+    // v7 新列：存量消息拿到默认附图列。
+    expect(messages.single.imagePaths, '[]');
+    expect(messages.single.imageSummary, '');
+
+    // 新列写读回环。
+    await (db.update(db.messages)..where((t) => t.id.equals('m1'))).write(
+        const MessagesCompanion(
+            imagePaths: Value('["/a.jpg"]'), imageSummary: Value('一张图')));
+    final msg = await db.select(db.messages).getSingle();
+    expect(msg.imagePaths, '["/a.jpg"]');
+    expect(msg.imageSummary, '一张图');
 
     // v2/v3/v5 新表已创建且可用。
     expect(await db.select(db.characters).get(), isEmpty);
@@ -138,6 +161,9 @@ void main() {
       db.execute(
           "INSERT INTO conversations (id, title, character_id, api_profile_id, created_at, updated_at) "
           "VALUES ('c1', '旧会话', 'ch1', 'p1', 1700000000000, 1700000000000)");
+      db.execute(
+          "INSERT INTO messages (id, conversation_id, role, content, raw_content, status, created_at) "
+          "VALUES ('m1', 'c1', 'user', '旧消息', '旧消息', 'done', 1700000000000)");
     });
 
     final db = AppDatabase.forTesting(executor);
@@ -152,6 +178,11 @@ void main() {
     expect(ch.memorySummary, '');
     expect(ch.memoryUpdatedAt, isNull);
 
+    // v7 新列：存量消息拿到默认附图列。
+    final messages = await db.select(db.messages).get();
+    expect(messages.single.imagePaths, '[]');
+    expect(messages.single.imageSummary, '');
+
     // 新列可正常读写。
     await (db.update(db.conversations)..where((t) => t.id.equals('c1')))
         .write(const ConversationsCompanion(voiceEnabled: Value(false)));
@@ -164,9 +195,141 @@ void main() {
     final updated = await db.select(db.characters).getSingle();
     expect(updated.memorySummary, '喜欢草莓');
     expect(updated.memoryUpdatedAt, isNotNull);
+    await (db.update(db.messages)..where((t) => t.id.equals('m1'))).write(
+        const MessagesCompanion(
+            imagePaths: Value('["/a.jpg"]'), imageSummary: Value('一张图')));
+    final msg = await db.select(db.messages).getSingle();
+    expect(msg.imagePaths, '["/a.jpg"]');
+    expect(msg.imageSummary, '一张图');
 
     final version = await db.customSelect('PRAGMA user_version').getSingle();
     expect(version.data.values.single, db.schemaVersion);
+
+    await db.close();
+  });
+
+  test('v6 → 当前版本：补消息附图列，存量行拿到默认值', () async {
+    final executor = NativeDatabase.memory(setup: (db) {
+      for (final ddl in [
+        _v6ConversationsTable,
+        _v1Tables[1], // messages（v6 时代仍为 v1 DDL）
+        _v1Tables[2], // api_profiles
+        _v1Tables[3], // settings
+        _v6CharactersTable,
+        ..._v3ToV5Tables,
+      ]) {
+        db.execute(ddl);
+      }
+      db.execute('PRAGMA user_version = 6');
+      db.execute(
+          "INSERT INTO api_profiles (id, name, base_url, api_key, model, is_default) "
+          "VALUES ('p1', '测试供应商', 'https://api.example.com/v1', 'sk-test', 'm1', 1)");
+      db.execute(
+          "INSERT INTO characters (id, name, created_at, updated_at) "
+          "VALUES ('ch1', '星野雀', 1700000000000, 1700000000000)");
+      db.execute(
+          "INSERT INTO conversations (id, title, character_id, api_profile_id, created_at, updated_at) "
+          "VALUES ('c1', '旧会话', 'ch1', 'p1', 1700000000000, 1700000000000)");
+      db.execute(
+          "INSERT INTO messages (id, conversation_id, role, content, raw_content, status, created_at) "
+          "VALUES ('m1', 'c1', 'user', '旧消息', '旧消息', 'done', 1700000000000)");
+    });
+
+    final db = AppDatabase.forTesting(executor);
+
+    // 旧数据完好。
+    final messages = await db.select(db.messages).get();
+    expect(messages, hasLength(1));
+    expect(messages.single.content, '旧消息');
+    // v7 新列：存量消息拿到默认附图列。
+    expect(messages.single.imagePaths, '[]');
+    expect(messages.single.imageSummary, '');
+
+    // v6 列不受影响。
+    expect((await db.select(db.conversations).getSingle()).voiceEnabled, isTrue);
+    expect((await db.select(db.characters).getSingle()).memorySummary, '');
+
+    // 新列写读回环。
+    await (db.update(db.messages)..where((t) => t.id.equals('m1'))).write(
+        const MessagesCompanion(
+            imagePaths: Value('["/a.jpg","/b.jpg"]'),
+            imageSummary: Value('两张图')));
+    final msg = await db.select(db.messages).getSingle();
+    expect(msg.imagePaths, '["/a.jpg","/b.jpg"]');
+    expect(msg.imageSummary, '两张图');
+
+    final version = await db.customSelect('PRAGMA user_version').getSingle();
+    expect(version.data.values.single, db.schemaVersion); // 7
+
+    await db.close();
+  });
+
+  test('v7 → 当前版本：补消息 kind、角色用户画像、会话背景板，创建表情包表',
+      () async {
+    final executor = NativeDatabase.memory(setup: (db) {
+      for (final ddl in [
+        _v6ConversationsTable,
+        _v7MessagesTable,
+        _v1Tables[2], // api_profiles
+        _v1Tables[3], // settings
+        _v6CharactersTable,
+        ..._v3ToV5Tables,
+      ]) {
+        db.execute(ddl);
+      }
+      db.execute('PRAGMA user_version = 7');
+      db.execute(
+          "INSERT INTO api_profiles (id, name, base_url, api_key, model, is_default) "
+          "VALUES ('p1', '测试供应商', 'https://api.example.com/v1', 'sk-test', 'm1', 1)");
+      db.execute(
+          "INSERT INTO characters (id, name, memory_summary, created_at, updated_at) "
+          "VALUES ('ch1', '星野雀', '旧记忆', 1700000000000, 1700000000000)");
+      db.execute(
+          "INSERT INTO conversations (id, title, character_id, api_profile_id, created_at, updated_at) "
+          "VALUES ('c1', '旧会话', 'ch1', 'p1', 1700000000000, 1700000000000)");
+      db.execute(
+          "INSERT INTO messages (id, conversation_id, role, content, raw_content, status, created_at) "
+          "VALUES ('m1', 'c1', 'user', '旧消息', '旧消息', 'done', 1700000000000)");
+    });
+
+    final db = AppDatabase.forTesting(executor);
+
+    // v8 新列默认值：存量行无损。
+    final msg = await db.select(db.messages).getSingle();
+    expect(msg.content, '旧消息');
+    expect(msg.kind, 'text');
+    final ch = await db.select(db.characters).getSingle();
+    expect(ch.memorySummary, '旧记忆');
+    expect(ch.userSummary, '');
+    final conv = await db.select(db.conversations).getSingle();
+    expect(conv.voiceEnabled, isTrue);
+    expect(conv.backgroundPath, isNull);
+
+    // v8 新表存在且可用。
+    expect(await db.select(db.stickers).get(), isEmpty);
+    await db.into(db.stickers).insert(StickersCompanion.insert(
+          id: 's1',
+          characterId: 'ch1',
+          mood: 'happy',
+          filePath: '/tmp/s1.jpg',
+          createdAt: DateTime(2026),
+        ));
+    expect(await db.select(db.stickers).get(), hasLength(1));
+
+    // 新列写读回环。
+    await (db.update(db.messages)..where((t) => t.id.equals('m1')))
+        .write(const MessagesCompanion(kind: Value('sticker')));
+    await (db.update(db.characters)..where((t) => t.id.equals('ch1')))
+        .write(const CharactersCompanion(userSummary: Value('用户爱夜聊')));
+    await (db.update(db.conversations)..where((t) => t.id.equals('c1')))
+        .write(const ConversationsCompanion(backgroundPath: Value('/bg.jpg')));
+    expect((await db.select(db.messages).getSingle()).kind, 'sticker');
+    expect((await db.select(db.characters).getSingle()).userSummary, '用户爱夜聊');
+    expect(
+        (await db.select(db.conversations).getSingle()).backgroundPath, '/bg.jpg');
+
+    final version = await db.customSelect('PRAGMA user_version').getSingle();
+    expect(version.data.values.single, db.schemaVersion); // 8
 
     await db.close();
   });

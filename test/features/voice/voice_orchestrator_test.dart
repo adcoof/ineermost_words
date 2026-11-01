@@ -23,13 +23,18 @@ class _RecordingTtsProvider implements TtsProvider {
   Future<List<TtsVoice>> listVoices() async => const [];
 }
 
-/// 立即播放完成的假播放后端（本用例只关心合成文本）。
+/// 立即播放完成的假播放后端（本用例只关心合成文本与 stop 计数）。
 class _NoopPlayer implements AudioPlayerBackend {
+  /// [TtsQueueService.clear] 停播次数（detach 归零的 bargeIn 断言用）。
+  int stopCount = 0;
+
   @override
   Future<void> playAudio(Uint8List bytes, String mimeType) async {}
 
   @override
-  Future<void> stop() async {}
+  Future<void> stop() async {
+    stopCount++;
+  }
 
   @override
   void dispose() {}
@@ -83,6 +88,8 @@ void main() {
         speedGet: () async => 1.0,
         voiceGet: () async => '',
       );
+      // 门控默认 deny：存量剥标签用例视作聊天页在场。
+      orchestrator.attachChatPage();
     });
 
     tearDown(() async {
@@ -153,6 +160,112 @@ void main() {
       await orchestrator.onAssistantDone();
       await pumpEventQueue(times: 3);
       expect(provider.synthesized, isEmpty);
+    });
+  });
+
+  group('VoiceOrchestrator 聊天页在场门控', () {
+    late _RecordingTtsProvider provider;
+    late _NoopPlayer player;
+    late TtsQueueService queue;
+    late VoiceOrchestrator orchestrator;
+
+    setUp(() {
+      provider = _RecordingTtsProvider();
+      player = _NoopPlayer();
+      queue = TtsQueueService(provider: provider, player: player);
+      orchestrator = VoiceOrchestrator(
+        queue: queue,
+        enabledCheck: () async => true,
+        speedGet: () async => 1.0,
+        voiceGet: () async => '',
+      );
+    });
+
+    tearDown(() async {
+      await queue.dispose();
+    });
+
+    test('不在场（计数 0）：句子直接丢弃不进 TTS', () async {
+      await orchestrator.onAssistantDelta('你好呀。我走啦。');
+      await pumpEventQueue(times: 3);
+      expect(provider.synthesized, isEmpty);
+
+      await orchestrator.onAssistantDone();
+      await pumpEventQueue(times: 3);
+      expect(provider.synthesized, isEmpty);
+    });
+
+    test('attach 后恢复朗读', () async {
+      orchestrator.attachChatPage();
+      await orchestrator.onAssistantDelta('你好呀。');
+      await pumpEventQueue(times: 3);
+      expect(provider.synthesized, ['你好呀。']);
+    });
+
+    test('离开期间的句子丢弃不补播，返回后只播新句', () async {
+      orchestrator.attachChatPage();
+      await orchestrator.onAssistantDelta('第一句。');
+      await pumpEventQueue(times: 3);
+      expect(provider.synthesized, ['第一句。']);
+
+      orchestrator.detachChatPage(); // 归零 → bargeIn 停播清队列
+      await orchestrator.onAssistantDelta('离开时的句子。');
+      await pumpEventQueue(times: 3);
+      expect(provider.synthesized, ['第一句。']); // 不补播
+
+      orchestrator.attachChatPage();
+      await orchestrator.onAssistantDelta('回来后的句子。');
+      await pumpEventQueue(times: 3);
+      expect(provider.synthesized, ['第一句。', '回来后的句子。']);
+    });
+
+    test('计数 2 层叠：detach 一次仍播，二次归零停播', () async {
+      orchestrator.attachChatPage();
+      orchestrator.attachChatPage();
+      await orchestrator.onAssistantDelta('第一句。');
+      await pumpEventQueue(times: 3);
+      expect(provider.synthesized, ['第一句。']);
+
+      orchestrator.detachChatPage(); // 还剩一层在场
+      await orchestrator.onAssistantDelta('还在页面里的句子。');
+      await pumpEventQueue(times: 3);
+      expect(provider.synthesized, ['第一句。', '还在页面里的句子。']);
+      expect(player.stopCount, 0); // 未触发 bargeIn
+
+      orchestrator.detachChatPage(); // 归零
+      expect(player.stopCount, 1); // bargeIn → clear → player.stop
+      await orchestrator.onAssistantDelta('已经离开的句子。');
+      await pumpEventQueue(times: 3);
+      expect(provider.synthesized, ['第一句。', '还在页面里的句子。']);
+    });
+
+    test('丢句期间 _scrub 照常推进，返回后无标签残留', () async {
+      // 不在场：'<a\n' 被换行句读劈开，前半 '<a' 靠 _scrub 置 _inTag。
+      // 门控必须放在 _scrub 之后，丢句时状态机照常推进。
+      await orchestrator.onAssistantDelta('<a\n');
+      await pumpEventQueue(times: 3);
+      expect(provider.synthesized, isEmpty);
+
+      orchestrator.attachChatPage();
+      await orchestrator.onAssistantDelta('href="x">嗯。');
+      await pumpEventQueue(times: 3);
+      // 若丢句时 _scrub 停摆，'href="x">嗯。' 会原样漏进合成文本。
+      expect(provider.synthesized, ['嗯。']);
+      expect(provider.synthesized.any((t) => t.contains('<') || t.contains('>')), isFalse);
+    });
+
+    test('away 时 onAssistantDone 尾句丢弃', () async {
+      orchestrator.attachChatPage();
+      await orchestrator.onAssistantDelta('第一句。');
+      await pumpEventQueue(times: 3);
+      expect(provider.synthesized, ['第一句。']);
+
+      orchestrator.detachChatPage();
+      await orchestrator.onAssistantDelta('尾句没有句读');
+      await pumpEventQueue(times: 3);
+      await orchestrator.onAssistantDone();
+      await pumpEventQueue(times: 3);
+      expect(provider.synthesized, ['第一句。']); // 尾句不补播
     });
   });
 }

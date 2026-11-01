@@ -19,7 +19,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// 可控假客户端：记录调用与最后一次 messages，可切换失败/阻塞。
 class _FakeApi implements ChatApiClient {
-  static const String _output = '记得：喜欢草莓';
+  /// v8 双文档输出：记忆 + 独行分隔 + 用户画像。
+  static const String _output =
+      '# 近况\n记得：喜欢草莓\n【对用户的了解】\n# 印象\n用户很爱聊天';
 
   final bool throwOnCall;
 
@@ -28,6 +30,9 @@ class _FakeApi implements ChatApiClient {
 
   int calls = 0;
   List<ApiMessage>? lastMessages;
+
+  /// 覆盖输出（坏输出解析用）。
+  String? outputOverride;
 
   _FakeApi({this.throwOnCall = false});
 
@@ -42,12 +47,13 @@ class _FakeApi implements ChatApiClient {
     calls++;
     lastMessages = messages;
     if (throwOnCall) throw StateError('boom');
+    final out = outputOverride ?? _output;
     final g = gate;
     if (g != null) {
       return Stream.fromFuture(g.future)
-          .asyncExpand((_) => Stream.value(ChatDelta(content: _output)));
+          .asyncExpand((_) => Stream.value(ChatDelta(content: out)));
     }
-    return Stream.value(ChatDelta(content: _output));
+    return Stream.value(ChatDelta(content: out));
   }
 
   @override
@@ -141,12 +147,15 @@ void main() {
 
     expect(api.calls, 1);
     final memory = await characterRepo.getMemory('ch1');
-    expect(memory.summary, '记得：喜欢草莓');
+    expect(memory.summary, contains('记得：喜欢草莓'));
+    expect(memory.userSummary, contains('用户很爱聊天'));
     expect(memory.updatedAt!.isAfter(DateTime(2020)), isTrue);
-    // 提示词：system 是整理器指令，user 含旧记忆 + 新对话行。
+    // 提示词：system 是整理器指令，user 含旧记忆/画像 + 新对话行。
     final user = api.lastMessages!.last;
     expect(user.role, 'user');
+    expect(user.content, contains('现有角色记忆'));
     expect(user.content, contains('用户叫小明'));
+    expect(user.content, contains('现有对用户的了解'));
     expect(user.content, contains('第0句'));
     expect(user.content, contains('星野雀：第1句'));
   });
@@ -194,7 +203,27 @@ void main() {
 
     api.gate!.complete();
     await first;
-    expect((await characterRepo.getMemory('ch1')).summary, '记得：喜欢草莓');
+    expect(
+        (await characterRepo.getMemory('ch1')).summary, contains('喜欢草莓'));
+  });
+
+  test('坏输出（缺分隔行）：两份旧文档都保留、水位线不推进', () async {
+    await newCharacter();
+    final conv = await chatRepo.createConversation(
+        apiProfileId: 'p1', characterId: 'ch1');
+    await insertDone(conv.id, kMemoryUpdateThreshold);
+    final stale = DateTime(2020);
+    await characterRepo.setMemory('ch1',
+        summary: '旧记忆', userSummary: '旧画像', updatedAt: stale);
+    api.outputOverride = '只有记忆没有分隔';
+
+    await summarizer.maybeUpdateMemory(
+        conversationId: conv.id, characterId: 'ch1');
+
+    final memory = await characterRepo.getMemory('ch1');
+    expect(memory.summary, '旧记忆');
+    expect(memory.userSummary, '旧画像');
+    expect(memory.updatedAt, stale);
   });
 
   test('角色已删：直接返回，不调 API 不写库', () async {

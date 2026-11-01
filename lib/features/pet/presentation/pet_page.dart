@@ -22,6 +22,15 @@ class _PetPageState extends ConsumerState<PetPage> {
   bool _importing = false;
 
   @override
+  void initState() {
+    super.initState();
+    // 幂等复查：启动种子若失败（如首次安装时存储忙），进桌宠页补种。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(petModelRepositoryProvider).ensureDefaultModel();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final repo = ref.watch(petModelRepositoryProvider);
     return Scaffold(

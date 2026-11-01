@@ -27,12 +27,32 @@ class VoiceOrchestrator implements AssistantSpeechSink {
   /// 时会被句切分从中间劈开），下一句开头是标签残段，需先跳到第一个 '>' 再剥。
   bool _inTag = false;
 
+  /// 聊天页在场计数：ChatPage initState +1 / dispose -1（计数而非布尔，
+  /// 聊天页叠聊天页时内层 pop 不误停）。>0 才朗读助手流；归零立即
+  /// bargeIn（停播 + 清队列）。语音设置/音色工坊预览直调 queue.enqueue，
+  /// 不经此门控。
+  int _chatPages = 0;
+
   VoiceOrchestrator({
     required this.queue,
     required this.enabledCheck,
     required this.speedGet,
     required this.voiceGet,
   });
+
+  /// 聊天页进入（initState）。
+  void attachChatPage() => _chatPages++;
+
+  /// 聊天页离开（dispose）：归零即按手动打断语义停播清队列。
+  void detachChatPage() {
+    _chatPages--;
+    if (_chatPages <= 0) {
+      _chatPages = 0;
+      bargeIn();
+    }
+  }
+
+  bool get _chatSpeechAllowed => _chatPages > 0;
 
   /// 桌宠口型订阅源。
   Stream<double> get lipValues => queue.lipValues;
@@ -91,9 +111,12 @@ class VoiceOrchestrator implements AssistantSpeechSink {
     final voice = await voiceGet();
     for (final s in sentences) {
       // 句子级剥标签：裸情绪标签（<shake_head> 等）不进 TTS。
+      // splitter 与 _scrub 在丢句时也照常推进，保住句边界与跨句标签状态。
       final text = _scrub(s);
       // 剥后仅剩句读的残句（`<shake_head>。` → `。`）同样丢弃。
       if (!_hasReadable.hasMatch(text)) continue;
+      // 离开聊天页期间完成的句子直接丢弃（不续播）。
+      if (!_chatSpeechAllowed) continue;
       queue.enqueue(text, speed: speed, voiceId: voice);
     }
   }
@@ -109,6 +132,7 @@ class VoiceOrchestrator implements AssistantSpeechSink {
     _inTag = false;
     if (!_hasReadable.hasMatch(text)) return;
     if (!await enabledCheck()) return;
+    if (!_chatSpeechAllowed) return;
     _speakingThisMessage = true;
     queue.enqueue(text, speed: await speedGet(), voiceId: await voiceGet());
   }

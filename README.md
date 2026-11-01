@@ -19,18 +19,24 @@
 ### 💬 会话
 - 流式打字机回复（SSE），支持随时停止/打断
 - 全量历史本地保存（SQLite），重启不丢
+- **多段短回复**：一轮回复拆成最多 4 条短消息逐条上屏，更像真人在打字；模型偷懒写成一大段时客户端自动兜底分段
+- **时间感知**：消息带时间锚点（`今天 14:00` / `昨天 21:35` / `3天前 09:12`），角色不会把昨天的事说成"刚刚"
 - **对话收纳**：会话列表顶部角色头像条，点头像只看该角色的会话（最近在最上）
 - **微信式时间戳**：相邻消息间隔超 5 分钟自动插入时间分隔，连续对话不刷屏
 - **会话语音开关**：聊天页右上角一键静音/恢复本会话朗读（与全局语音开关独立）
-- 绑定角色的会话按固定顺序组装提示词：人设 → 场景 → **跨会话记忆** → 标签规范 → 对话示例（few-shot）→ 最近 40 条滑动窗口
+- **会话背景板**：每个会话独立设置背景图（选图 → 裁剪 → 铺满整屏），键盘弹出不缩放，可随时恢复默认
+- 绑定角色的会话按固定顺序组装提示词：人设 → 场景 → **跨会话记忆** → **TA对你的了解** → 标签规范 → 对话示例（few-shot）→ 最近 40 条滑动窗口
 
 ### 👤 角色
 - 手动创建，或 **导入 SillyTavern V2 角色卡**（PNG tEXt / JSON）
 - 人设、性格、场景、开场白、示例对话完整映射
-- 角色立绘本地展示
+- 角色立绘本地展示，上传时 1:1 可视化裁剪
 - **跨会话记忆**：同一角色在不同会话间共享记忆——近期对话片段直接注入提示词，更早的历史由 LLM 自动浓缩成第一人称记忆摘要；设置页可全局开关
+- **记忆文档 + TA眼中的你**：记忆自动整理成带小标题的分节文档，另附一份角色视角下的用户画像；聊天页点头像或角色编辑页即可查看，支持导出 PNG / Word 分享
+- **表情包库**：按 14 种心情（喜 / 怒 / 哀 / 乐 / 疑惑 / 害羞……）为角色上传贴纸，一心情可多张；角色回复带对应情绪时自动发一张，没有完全匹配的心情会借用相近心情（如「哭泣」借用「哀」）
 
 ### 🐾 桌宠（Live2D）
+- **内置 Haru 默认桌宠**：开箱即用，首次启动自动导入，新会话默认绑定；也可换用自己的模型
 - 导入 `.moc3` 模型包（zip），WebView + pixi-live2d-display 离线渲染
 - AI 回复中的 `<emotion:happy>` / `<action:wave>` 标签实时驱动表情与动作
 - 关键词情绪兜底（如文本出现"生气"也能触发对应表情）
@@ -58,12 +64,18 @@
 
 ### 🎨 界面
 - 二次元科技风，多套整机主题可切换（含一套浅色主题）
+- **液态玻璃质感**：底部导航、聊天顶栏、输入栏使用真实背景模糊 + 半透明渐变描边；消息气泡用半透明填充（滚动列表不逐条模糊，保证流畅）
 - 启动过渡页：图标 + 标语 + 工作室署名
 - 底部导航：会话 / 角色 / 桌宠 / 设置
 
+## 近期更新
+
+- **v1.3 系列**：新增表情包、多段短回复、液态玻璃界面、记忆文档与「TA眼中的你」导出、会话背景板与头像裁剪、内置 Haru 桌宠、时间感知
+- 修复：背景板只能裁 1:1 / 提示"裁剪失败"、键盘弹出时背景板同步缩小、模型不按规范分段导致回复仍是一大段、模型自造标签漏进气泡、竖图头像裁剪框跑到屏幕外
+
 ## 技术栈
 
-Flutter（Android，minSdk 24）· Riverpod 3 · Drift/SQLite · dio（SSE 自研解码）· just_audio · edge_tts / flutter_tts / speech_to_text / record · flutter_inappwebview + PixiJS + pixi-live2d-display
+Flutter（Android，minSdk 24）· Riverpod 3 · Drift/SQLite · dio（SSE 自研解码）· just_audio · edge_tts / flutter_tts / speech_to_text / record · flutter_inappwebview + PixiJS + pixi-live2d-display · crop_your_image（裁剪）· share_plus（导出分享）· image / archive（图片与 OOXML 处理）
 
 ## 快速开始
 
@@ -98,15 +110,17 @@ flutter build apk --release
 lib/
   app/          # MaterialApp、主题、启动页、全局 providers
   core/         # 统一异常、SSE 解码
+    utils/      # 时间锚点、图片压缩、Word(.docx) 生成、导出分享
+    widgets/    # 液态玻璃组件
   data/local/   # Drift 数据库与表定义
   features/
-    chat/       # 会话、消息流、输入栏（按住说话）、跨会话记忆摘要
-    characters/ # 角色卡、SillyTavern 导入、提示词组装、情绪标签解析
-    pet/        # Live2D 桌宠、WebView 桥、情绪→表情映射
+    chat/       # 会话、消息流、输入栏（按住说话）、分段器、跨会话记忆摘要、表情包、会话背景板
+    characters/ # 角色卡、SillyTavern 导入、提示词组装、情绪标签解析、记忆文档、表情包库、图片裁剪
+    pet/        # Live2D 桌宠、WebView 桥、情绪→表情映射、内置 Haru
     voice/      # TTS/ASR 各引擎实现、播放队列、音色工坊、语音设置
     settings/   # API 供应商、应用通用设置
 assets/
-  pet/          # 桌宠 WebView 宿主与离线 vendor 库
+  pet/          # 桌宠 WebView 宿主、离线 vendor 库、内置 Haru 模型包及其许可声明
   branding/     # 应用图标与工作室 logo
 ```
 
@@ -114,11 +128,12 @@ assets/
 
 ```bash
 flutter analyze   # 静态检查
-flutter test      # 190+ 用例：SSE/标签解析/提示词组装/语音队列/滚底/迁移/记忆摘要/音色定制等
+flutter test      # 304 项用例：SSE/标签解析/分段与兜底/提示词时间锚点/表情包映射/语音队列/滚底/数据库迁移/记忆摘要/裁剪几何等
 ```
 
 ## 致谢与版权
 
 - © 奇点重现工作室（sigborn.xyz）。应用名称「心语」及图标素材版权归工作室所有。
 - 桌宠渲染基于 [pixi-live2d-display](https://github.com/guansss/pixi-live2d-display)（MIT）与 Live2D Cubism Core；**Powered by Live2D**。Cubism Core 按 Live2D 许可协议使用（个人及年营收低于门槛免费，商用前请自行确认条款）。
+- 内置默认桌宠 Haru 为 Live2D 官方示例模型，按 Live2D Sample Model License Agreement 打包分发（许可声明见 `assets/pet/HARU_LICENSE.txt`，模型版权归 Live2D 所有）。
 - 用户导入的角色卡/模型素材由用户自行保证版权，应用仅在本地渲染展示。

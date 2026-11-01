@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 
@@ -21,14 +22,48 @@ class ChatDelta {
   const ChatDelta({this.content, this.finishReason});
 }
 
+/// 消息附图（仅当前用户消息携带；历史消息走文本摘要备注）。
+class ApiImage {
+  /// 固定 'image/jpeg'（发送前已降采样转 JPEG）。
+  final String mimeType;
+
+  final Uint8List bytes;
+
+  const ApiImage({this.mimeType = 'image/jpeg', required this.bytes});
+
+  String get dataUrl => 'data:$mimeType;base64,${base64Encode(bytes)}';
+}
+
 /// 发给 /chat/completions 的一条消息。
+///
+/// 无图时 content 为字符串（与旧 wire 形状一致）；带图时 content 为
+/// OpenAI 多模态 parts 数组。空文本+仅图只放 image_url parts
+///（空 text part 会被部分兼容端点拒绝）。
 class ApiMessage {
   final String role;
   final String content;
+  final List<ApiImage> images;
 
-  const ApiMessage({required this.role, required this.content});
+  const ApiMessage({
+    required this.role,
+    required this.content,
+    this.images = const [],
+  });
 
-  Map<String, dynamic> toJson() => {'role': role, 'content': content};
+  Map<String, dynamic> toJson() {
+    if (images.isEmpty) return {'role': role, 'content': content};
+    return {
+      'role': role,
+      'content': [
+        if (content.isNotEmpty) {'type': 'text', 'text': content},
+        for (final img in images)
+          {
+            'type': 'image_url',
+            'image_url': {'url': img.dataUrl},
+          },
+      ],
+    };
+  }
 }
 
 /// 对话 API 客户端。

@@ -20,16 +20,17 @@ class PetModelImporter {
   /// 解压并解析模型 zip，返回入库用的 [PetModel]（文件已落盘）。
   ///
   /// [baseDir] 仅供测试注入根目录；缺省用应用文档目录。
+  /// [idOverride] 指定固定 id（内置默认桌宠种子用 'haru'，幂等判定）。
   Future<PetModel> importZip(
     Uint8List zipBytes, {
     String? nameOverride,
     String? baseDir,
+    String? idOverride,
   }) async {
     final archive = ZipDecoder().decodeBytes(zipBytes);
 
-    final id = newId();
-    final base = baseDir ??
-        (await getApplicationDocumentsDirectory()).path;
+    final id = idOverride ?? newId();
+    final base = baseDir ?? (await getApplicationDocumentsDirectory()).path;
     final root = Directory(p.join(base, 'pets', id));
     await root.create(recursive: true);
 
@@ -37,8 +38,9 @@ class PetModelImporter {
     final rootPrefix = p.normalize(root.path) + p.separator;
     for (final entry in archive) {
       if (!entry.isFile) continue;
-      final destPath =
-          p.normalize(p.join(root.path, entry.name.replaceAll('\\', '/')));
+      final destPath = p.normalize(
+        p.join(root.path, entry.name.replaceAll('\\', '/')),
+      );
       if (!destPath.startsWith(rootPrefix)) {
         throw const ParseException('模型包内含非法路径，已拒绝导入');
       }
@@ -49,16 +51,21 @@ class PetModelImporter {
     }
 
     // 找 model3.json（最浅路径优先，跳过 __MACOSX 等）。
-    final modelFiles = archive
-        .where((e) =>
-            e.isFile &&
-            e.name.toLowerCase().endsWith('.model3.json') &&
-            !e.name.contains('__MACOSX'))
-        .toList()
-      ..sort((a, b) => a.name.split('/').length.compareTo(b.name.split('/').length));
+    final modelFiles =
+        archive
+            .where(
+              (e) =>
+                  e.isFile &&
+                  e.name.toLowerCase().endsWith('.model3.json') &&
+                  !e.name.contains('__MACOSX'),
+            )
+            .toList()
+          ..sort(
+            (a, b) =>
+                a.name.split('/').length.compareTo(b.name.split('/').length),
+          );
     if (modelFiles.isEmpty) {
-      throw const ParseException(
-          '未找到 model3.json（仅支持 Cubism 3/4 的 .moc3 模型包）');
+      throw const ParseException('未找到 model3.json（仅支持 Cubism 3/4 的 .moc3 模型包）');
     }
     final entryRel = modelFiles.first.name.replaceAll('\\', '/');
     final entryAbs = p.join(root.path, entryRel);
@@ -73,8 +80,7 @@ class PetModelImporter {
       id: id,
       name: (nameOverride?.trim().isNotEmpty ?? false)
           ? nameOverride!.trim()
-          : p.basenameWithoutExtension(
-              p.basenameWithoutExtension(entryRel)),
+          : p.basenameWithoutExtension(p.basenameWithoutExtension(entryRel)),
       dirPath: root.path,
       entryJsonPath: entryAbs,
       expressions: spec.expressions,
@@ -136,8 +142,8 @@ class PetModelImporter {
         final name = e['Name'] is String
             ? e['Name'] as String
             : e['File'] is String
-                ? p.basenameWithoutExtension(e['File'] as String)
-                : null;
+            ? p.basenameWithoutExtension(e['File'] as String)
+            : null;
         if (name != null && name.isNotEmpty && !expressions.contains(name)) {
           expressions.add(name);
         }
@@ -145,7 +151,9 @@ class PetModelImporter {
     }
 
     final motionGroups = <String, int>{};
-    final motions = (refs['Motions'] is Map) ? refs['Motions'] as Map : const {};
+    final motions = (refs['Motions'] is Map)
+        ? refs['Motions'] as Map
+        : const {};
     motions.forEach((key, value) {
       if (value is List) motionGroups[key.toString()] = value.length;
     });

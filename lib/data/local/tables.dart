@@ -28,6 +28,9 @@ class Conversations extends Table {
   /// 本会话是否自动朗读（v6）：与全局 voice_enabled 相与决定实际发声。
   BoolColumn get voiceEnabled => boolean().withDefault(const Constant(true))();
 
+  /// 自定义聊天背景板文件绝对路径（v8）；null=默认主题背景。
+  TextColumn get backgroundPath => text().nullable()();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }
@@ -49,8 +52,17 @@ class Messages extends Table {
   /// JSON 数组：情绪/动作事件（M2 起填充）。
   TextColumn get emotionEvents => text().withDefault(const Constant('[]'))();
 
+  /// JSON 数组：附图文件绝对路径（v7）。
+  TextColumn get imagePaths => text().withDefault(const Constant('[]'))();
+
+  /// 图片内容一句话概括（LLM 生成；失败留空走 [图片] 占位，v7）。
+  TextColumn get imageSummary => text().withDefault(const Constant(''))();
+
   /// streaming | done | error
   TextColumn get status => text().withDefault(const Constant('done'))();
+
+  /// text | sticker（v8）：sticker 为纯图表情包消息，不进提示词/记忆/标题。
+  TextColumn get kind => text().withDefault(const Constant('text'))();
 
   DateTimeColumn get createdAt => dateTime()();
 
@@ -117,6 +129,9 @@ class Characters extends Table {
   /// 注意：CharacterRepository.save 是整行 upsert，本列不进 Character
   /// 领域模型，只经 getMemory/setMemory 读写，防止编辑角色卡时覆盖。
   TextColumn get memorySummary => text().withDefault(const Constant(''))();
+
+  /// 角色眼中的用户画像（LLM 摘要，角色视角，v8）。同上不进域模型。
+  TextColumn get userSummary => text().withDefault(const Constant(''))();
 
   /// 记忆水位线：该时点（含）之前的 done 消息已纳入摘要；null=从未摘要。
   DateTimeColumn get memoryUpdatedAt => dateTime().nullable()();
@@ -233,6 +248,26 @@ class CustomVoices extends Table {
   DateTimeColumn get createdAt => dateTime()();
 
   DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// 表情包：每角色一个库，按固定心情键（happy/angry/… 英文情绪标签值）分组，
+/// 一心情可多张（发送时随机选取）。文件存 documents/stickers/{characterId}/{id}.jpg。
+@DataClassName('StickerRow')
+class Stickers extends Table {
+  TextColumn get id => text()();
+
+  TextColumn get characterId => text()();
+
+  /// 心情键：英文情绪标签值（happy/angry/sad/amused/confused/shy/…）。
+  TextColumn get mood => text()();
+
+  /// 图片文件绝对路径。
+  TextColumn get filePath => text()();
+
+  DateTimeColumn get createdAt => dateTime()();
 
   @override
   Set<Column<Object>> get primaryKey => {id};

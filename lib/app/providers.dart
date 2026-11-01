@@ -5,10 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/local/app_database.dart';
 import '../features/chat/application/chat_controller.dart';
+import '../features/chat/application/image_caption_service.dart';
 import '../features/chat/application/memory_summarizer.dart';
+import '../features/chat/application/title_generator.dart';
 import '../features/chat/application/speech_sink.dart';
 import '../features/chat/data/chat_api_client.dart';
 import '../features/chat/data/chat_repository.dart';
+import '../features/chat/data/sticker_repository.dart';
 import '../features/chat/domain/models.dart';
 import '../features/characters/data/character_repository.dart';
 import '../features/characters/domain/character.dart';
@@ -43,6 +46,11 @@ final chatRepositoryProvider = Provider<ChatRepository>(
 
 final characterRepositoryProvider = Provider<CharacterRepository>(
   (ref) => CharacterRepository(ref.watch(appDatabaseProvider)),
+);
+
+/// 表情包仓库（每角色按心情分组的贴纸库）。
+final stickerRepositoryProvider = Provider<StickerRepository>(
+  (ref) => StickerRepository(ref.watch(appDatabaseProvider)),
 );
 
 final appSettingsRepositoryProvider = Provider<AppSettingsRepository>(
@@ -142,6 +150,21 @@ final memorySummarizerProvider = Provider<MemorySummarizer>((ref) =>
       profileRepo: ref.watch(apiProfileRepositoryProvider),
       api: ref.watch(chatApiClientProvider),
     ));
+
+/// 会话标题优化器（首条回复完成后 fire-and-forget 触发）。
+final titleGeneratorProvider = Provider<TitleGenerator>((ref) => TitleGenerator(
+      chatRepo: ref.watch(chatRepositoryProvider),
+      profileRepo: ref.watch(apiProfileRepositoryProvider),
+      api: ref.watch(chatApiClientProvider),
+    ));
+
+/// 图片消息概括器（带图消息入库后 fire-and-forget 与回复并行触发）。
+final imageCaptionServiceProvider = Provider<ImageCaptionService>(
+    (ref) => ImageCaptionService(
+          chatRepo: ref.watch(chatRepositoryProvider),
+          profileRepo: ref.watch(apiProfileRepositoryProvider),
+          api: ref.watch(chatApiClientProvider),
+        ));
 
 /// 当前主题调色板（设置页切换后 invalidate 即全局生效）。
 final themePaletteProvider = FutureProvider<ThemePalette>((ref) async {
