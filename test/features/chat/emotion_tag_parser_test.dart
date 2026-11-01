@@ -67,25 +67,51 @@ void main() {
       expect(r.events, const [EmotionEvent('action', 'wave_hand-2')]);
     });
 
-    test('大小写不同的伪标签按普通文本处理', () {
+    test('大小写变体同样剥离并归一为小写事件（v8.1）', () {
       final p = EmotionTagParser();
-      final r = p.feed('<EMOTION:happy>和<Emotion:x>');
-      expect(r.flushed, '<EMOTION:happy>和<Emotion:x>');
-      expect(r.events, isEmpty);
+      final r = p.feed('<EMOTION:happy>和<Action:Wave>');
+      expect(r.flushed, '和');
+      expect(r.events, const [
+        EmotionEvent('emotion', 'happy'),
+        EmotionEvent('action', 'wave'),
+      ]);
     });
 
-    test('非法标签名按普通文本处理', () {
+    test('空白/全角冒号/中文名字的变体也剥离（v8.1 真机漏标签）', () {
+      final p = EmotionTagParser();
+      final r = p.feed(
+        'a< action : wave >b<emotion：开心>c<action 挥手>d<'
+        'emotion>e</ emotion>f',
+      );
+      expect(r.flushed, 'abcdef');
+      expect(r.events, const [
+        EmotionEvent('action', 'wave'),
+        EmotionEvent('emotion', '开心'),
+        EmotionEvent('action', '挥手'),
+      ]);
+    });
+
+    test('全角尖括号 ＜action：wave＞ 也剥离', () {
+      final p = EmotionTagParser();
+      final r = p.feed('嗯＜action：wave＞好');
+      expect(r.flushed, '嗯好');
+      expect(r.events, const [EmotionEvent('action', 'wave')]);
+    });
+
+    test('空名字的标签剥离但不产事件', () {
       final p = EmotionTagParser();
       final r = p.feed('<emotion:!!>a<action:>');
-      expect(r.flushed, '<emotion:!!>a<action:>');
-      expect(r.events, isEmpty);
+      expect(r.flushed, 'a');
+      expect(r.events, const [EmotionEvent('emotion', '!!')]);
     });
 
-    test('普通小于号不被永久滞留', () {
+    test('普通小于号遇到标点立刻放行（不滞留后续正文）', () {
       final p = EmotionTagParser();
       final r = p.feed('a < b，c < d');
-      expect(r.flushed, 'a < b，c < d');
-      expect(p.flush(), '');
+      // 第一个 '<' 后面紧跟标点，立刻判定为普通文本；
+      // 第二个 '<' 后面只有标签字符，观望到段落结束再吐出（不丢字）。
+      expect(r.flushed, 'a < b，c ');
+      expect(p.flush(), '< d');
     });
 
     test('连续两个小于号：先字面量后标签，尾部多余尖括号是字面量', () {
@@ -106,8 +132,10 @@ void main() {
     test('孤立小于号结尾先滞留，后续证实非标签后吐出', () {
       final p = EmotionTagParser();
       expect(p.feed('你好<').flushed, '你好');
-      final r = p.feed('x');
-      expect(r.flushed, '<x');
+      // '<x' 仍在标签字符集内，继续观望；出现标点即放行。
+      expect(p.feed('x').flushed, '');
+      final r = p.feed('，好');
+      expect(r.flushed, '<x，好');
     });
 
     test('模型输出的闭合/无名变体被剥离且不产事件', () {
@@ -140,12 +168,21 @@ void main() {
       }
     });
 
-    test('斜杠当冒号用的畸形形状不滞留（emotion/:x 永远不成标签）', () {
+    test('自造标签（whisper/glare 等舞台提示）一并剥离且不产事件（v8.2）', () {
       final p = EmotionTagParser();
-      // '>' 未到也不应滞留。
-      final r = p.feed('<emotion/:');
-      expect(r.flushed, '<emotion/:');
-      expect(p.flush(), '');
+      final r = p.feed(
+        '<whisper>……hi。<glare>……还不跟上来。'
+        '<run_away>不许笑！！<Shout>好',
+      );
+      expect(r.flushed, '……hi。……还不跟上来。不许笑！！好');
+      expect(r.events, isEmpty);
+    });
+
+    test('数学小于号与数字不被当标签剥离', () {
+      final p = EmotionTagParser();
+      final r = p.feed('3 < 4 且 2<3>1');
+      expect(r.flushed, '3 < 4 且 2<3>1');
+      expect(r.events, isEmpty);
     });
 
     test('事件 JSON 编解码往返', () {
@@ -156,6 +193,39 @@ void main() {
       final json = EmotionTagParser.encodeEvents(events);
       expect(EmotionTagParser.decodeEvents(json), events);
       expect(EmotionTagParser.decodeEvents('not json'), isEmpty);
+    });
+  });
+
+  group('stripTagMarkup', () {
+    test('一次性清洗各类标签变体', () {
+      expect(
+        stripTagMarkup('哼<emotion:shy>才没有< action : wave >呢</emotion>'),
+        '哼才没有呢',
+      );
+      expect(stripTagMarkup('＜emotion：开心＞好'), '好');
+    });
+
+    test('自造标签（whisper/glare/run_away）也清掉（v8.2 真机脏数据）', () {
+      expect(
+        stripTagMarkup('<whisper>……hi。<glare>还不跟上来。<run_away>不、不许笑！'),
+        '……hi。还不跟上来。不、不许笑！',
+      );
+    });
+
+    test('真机库里那批脏数据：shake_head/sigh/stare/facepalm/rage 都清掉', () {
+      // 摘自 MuMu 真机库的原文（模型自造下划线动作名，无 action: 前缀）。
+      expect(
+        stripTagMarkup(
+          '<angry>你、你再说一遍？<shake_head>hi hi hi 的。<sigh>算了，'
+          '<roll_eyes>没救了。<stare>hi。<facepalm>烦死了。<rage>滚。',
+        ),
+        '你、你再说一遍？hi hi hi 的。算了，没救了。hi。烦死了。滚。',
+      );
+    });
+
+    test('普通文本与数学小于号不受影响', () {
+      expect(stripTagMarkup('1 < 2 且 3 > 2'), '1 < 2 且 3 > 2');
+      expect(stripTagMarkup('没有标签'), '没有标签');
     });
   });
 }

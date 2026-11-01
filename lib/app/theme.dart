@@ -176,17 +176,18 @@ ThemePalette themePaletteOf(String key) {
 
 /// 按调色板装配完整 ThemeData。
 ThemeData buildTheme(ThemePalette p) {
-  final scheme = ColorScheme.fromSeed(
-    seedColor: p.accent,
-    brightness: p.brightness,
-  ).copyWith(
-    primary: p.accent,
-    secondary: p.secondary,
-    surface: p.surface,
-    surfaceContainerHighest: p.surfaceHigh,
-    onSurface: p.onSurface,
-    error: p.error,
-  );
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: p.accent,
+        brightness: p.brightness,
+      ).copyWith(
+        primary: p.accent,
+        secondary: p.secondary,
+        surface: p.surface,
+        surfaceContainerHighest: p.surfaceHigh,
+        onSurface: p.onSurface,
+        error: p.error,
+      );
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
@@ -211,17 +212,14 @@ ThemeData buildTheme(ThemePalette p) {
         (states) => TextStyle(
           fontSize: 12,
           letterSpacing: 0.5,
-          fontWeight:
-              states.contains(WidgetState.selected) ? FontWeight.w700 : FontWeight.w400,
+          fontWeight: states.contains(WidgetState.selected)
+              ? FontWeight.w700
+              : FontWeight.w400,
           color: states.contains(WidgetState.selected) ? p.accent : p.muted,
         ),
       ),
     ),
-    dividerTheme: DividerThemeData(
-      color: p.divider,
-      thickness: 1,
-      space: 1,
-    ),
+    dividerTheme: DividerThemeData(color: p.divider, thickness: 1, space: 1),
     inputDecorationTheme: InputDecorationTheme(
       border: const OutlineInputBorder(),
       isDense: true,
@@ -231,6 +229,14 @@ ThemeData buildTheme(ThemePalette p) {
       backgroundColor: p.surfaceHigh,
       contentTextStyle: TextStyle(color: p.onSurface),
       behavior: SnackBarBehavior.floating,
+    ),
+    // 弹层玻璃化（v8）：半透明底 + 大圆角，与玻璃栏视觉一致。
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: p.surface.withValues(alpha: 0.96),
+      surfaceTintColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
     ),
   );
 }

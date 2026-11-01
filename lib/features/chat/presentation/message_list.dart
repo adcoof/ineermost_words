@@ -1,11 +1,16 @@
 /// 消息列表：气泡流 + 微信式时间戳分隔（间隔>5分钟或首条时居中显示）。
 library;
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
+import '../../../core/widgets/glass.dart';
+import '../application/emotion_tag_parser.dart';
 import '../domain/models.dart';
+import 'image_viewer_page.dart';
 
 /// 相邻消息间隔超过该值才插入时间分隔（微信同款规则）。
 const Duration kTimeSeparatorGap = Duration(minutes: 5);
@@ -30,8 +35,8 @@ List<String?> timeSeparators(List<ChatMessage> messages, {DateTime? now}) {
   final labels = List<String?>.filled(messages.length, null);
   for (var i = 0; i < messages.length; i++) {
     final t = messages[i].createdAt;
-    final show = i == 0 ||
-        t.difference(messages[i - 1].createdAt) > kTimeSeparatorGap;
+    final show =
+        i == 0 || t.difference(messages[i - 1].createdAt) > kTimeSeparatorGap;
     if (show) labels[i] = formatMessageTime(t, now: now);
   }
   return labels;
@@ -204,9 +209,7 @@ class _MessageListState extends ConsumerState<MessageList> {
                       label,
                       style: TextStyle(
                         fontSize: 11,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
+                        color: Theme.of(context).colorScheme.onSurface
                             .withValues(alpha: 0.45),
                       ),
                     ),
@@ -232,8 +235,13 @@ class _MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final isUser = message.role == ChatRole.user;
     final scheme = Theme.of(context).colorScheme;
-    final bg = isUser ? scheme.primaryContainer : scheme.surfaceContainerHighest;
+    final bg = isUser
+        ? scheme.primaryContainer
+        : scheme.surfaceContainerHighest;
     final fg = isUser ? scheme.onPrimaryContainer : scheme.onSurface;
+    // 展示前再兜一层标签清洗（v8.1）：旧版本已落库的脏文本
+    // （漏网的 <action:x> 变体）不该继续出现在气泡里。
+    final text = stripTagMarkup(message.content);
 
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -243,25 +251,24 @@ class _MessageBubble extends StatelessWidget {
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.78,
         ),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(12),
-        ),
+        // 液态玻璃气泡（v8）：半透明 + 渐变描边，滚动列表绝不逐个模糊。
+        decoration: glassBubbleDecoration(base: bg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (message.content.isEmpty && isStreaming)
+            if (message.imageFilePaths.isNotEmpty) ...[
+              _ImageGrid(paths: message.imageFilePaths),
+              if (text.isNotEmpty || isStreaming) const SizedBox(height: 6),
+            ],
+            if (text.isEmpty && isStreaming)
               SizedBox(
                 width: 16,
                 height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: fg,
-                ),
+                child: CircularProgressIndicator(strokeWidth: 2, color: fg),
               )
-            else
+            else if (text.isNotEmpty)
               SelectableText(
-                message.content,
+                text,
                 style: TextStyle(color: fg, fontSize: 15, height: 1.4),
               ),
             if (message.status == MessageStatus.error)
@@ -270,22 +277,67 @@ class _MessageBubble extends StatelessWidget {
                 child: Text(
                   '生成失败',
                   style: TextStyle(
-                      color: scheme.error,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500),
+                    color: scheme.error,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
-            if (isStreaming && message.content.isNotEmpty)
+            if (isStreaming && text.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
                   '生成中…',
-                  style: TextStyle(color: fg.withValues(alpha: 0.6), fontSize: 11),
+                  style: TextStyle(
+                    color: fg.withValues(alpha: 0.6),
+                    fontSize: 11,
+                  ),
                 ),
               ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 消息附图缩略图网格；点开全屏查看器。
+class _ImageGrid extends StatelessWidget {
+  final List<String> paths;
+
+  const _ImageGrid({required this.paths});
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (var i = 0; i < paths.length; i++)
+          GestureDetector(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ImageViewerPage(paths: paths, initialIndex: i),
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              // 文件缺失/损坏不崩，显示占位。
+              child: Image.file(
+                File(paths[i]),
+                width: 84,
+                height: 84,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Container(
+                  width: 84,
+                  height: 84,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: const Icon(Icons.broken_image_outlined, size: 28),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

@@ -113,6 +113,17 @@ class $ConversationsTable extends Conversations
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _backgroundPathMeta = const VerificationMeta(
+    'backgroundPath',
+  );
+  @override
+  late final GeneratedColumn<String> backgroundPath = GeneratedColumn<String>(
+    'background_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -124,6 +135,7 @@ class $ConversationsTable extends Conversations
     updatedAt,
     archived,
     voiceEnabled,
+    backgroundPath,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -208,6 +220,15 @@ class $ConversationsTable extends Conversations
         ),
       );
     }
+    if (data.containsKey('background_path')) {
+      context.handle(
+        _backgroundPathMeta,
+        backgroundPath.isAcceptableOrUnknown(
+          data['background_path']!,
+          _backgroundPathMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -253,6 +274,10 @@ class $ConversationsTable extends Conversations
         DriftSqlType.bool,
         data['${effectivePrefix}voice_enabled'],
       )!,
+      backgroundPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}background_path'],
+      ),
     );
   }
 
@@ -280,6 +305,9 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
 
   /// 本会话是否自动朗读（v6）：与全局 voice_enabled 相与决定实际发声。
   final bool voiceEnabled;
+
+  /// 自定义聊天背景板文件绝对路径（v8）；null=默认主题背景。
+  final String? backgroundPath;
   const ConversationRow({
     required this.id,
     required this.title,
@@ -290,6 +318,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     required this.updatedAt,
     required this.archived,
     required this.voiceEnabled,
+    this.backgroundPath,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -307,6 +336,9 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['archived'] = Variable<bool>(archived);
     map['voice_enabled'] = Variable<bool>(voiceEnabled);
+    if (!nullToAbsent || backgroundPath != null) {
+      map['background_path'] = Variable<String>(backgroundPath);
+    }
     return map;
   }
 
@@ -325,6 +357,9 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
       updatedAt: Value(updatedAt),
       archived: Value(archived),
       voiceEnabled: Value(voiceEnabled),
+      backgroundPath: backgroundPath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(backgroundPath),
     );
   }
 
@@ -343,6 +378,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       archived: serializer.fromJson<bool>(json['archived']),
       voiceEnabled: serializer.fromJson<bool>(json['voiceEnabled']),
+      backgroundPath: serializer.fromJson<String?>(json['backgroundPath']),
     );
   }
   @override
@@ -358,6 +394,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'archived': serializer.toJson<bool>(archived),
       'voiceEnabled': serializer.toJson<bool>(voiceEnabled),
+      'backgroundPath': serializer.toJson<String?>(backgroundPath),
     };
   }
 
@@ -371,6 +408,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     DateTime? updatedAt,
     bool? archived,
     bool? voiceEnabled,
+    Value<String?> backgroundPath = const Value.absent(),
   }) => ConversationRow(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -381,6 +419,9 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     updatedAt: updatedAt ?? this.updatedAt,
     archived: archived ?? this.archived,
     voiceEnabled: voiceEnabled ?? this.voiceEnabled,
+    backgroundPath: backgroundPath.present
+        ? backgroundPath.value
+        : this.backgroundPath,
   );
   ConversationRow copyWithCompanion(ConversationsCompanion data) {
     return ConversationRow(
@@ -401,6 +442,9 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
       voiceEnabled: data.voiceEnabled.present
           ? data.voiceEnabled.value
           : this.voiceEnabled,
+      backgroundPath: data.backgroundPath.present
+          ? data.backgroundPath.value
+          : this.backgroundPath,
     );
   }
 
@@ -415,7 +459,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('archived: $archived, ')
-          ..write('voiceEnabled: $voiceEnabled')
+          ..write('voiceEnabled: $voiceEnabled, ')
+          ..write('backgroundPath: $backgroundPath')
           ..write(')'))
         .toString();
   }
@@ -431,6 +476,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     updatedAt,
     archived,
     voiceEnabled,
+    backgroundPath,
   );
   @override
   bool operator ==(Object other) =>
@@ -444,7 +490,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.archived == this.archived &&
-          other.voiceEnabled == this.voiceEnabled);
+          other.voiceEnabled == this.voiceEnabled &&
+          other.backgroundPath == this.backgroundPath);
 }
 
 class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
@@ -457,6 +504,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
   final Value<DateTime> updatedAt;
   final Value<bool> archived;
   final Value<bool> voiceEnabled;
+  final Value<String?> backgroundPath;
   final Value<int> rowid;
   const ConversationsCompanion({
     this.id = const Value.absent(),
@@ -468,6 +516,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     this.updatedAt = const Value.absent(),
     this.archived = const Value.absent(),
     this.voiceEnabled = const Value.absent(),
+    this.backgroundPath = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ConversationsCompanion.insert({
@@ -480,6 +529,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     required DateTime updatedAt,
     this.archived = const Value.absent(),
     this.voiceEnabled = const Value.absent(),
+    this.backgroundPath = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        apiProfileId = Value(apiProfileId),
@@ -495,6 +545,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     Expression<DateTime>? updatedAt,
     Expression<bool>? archived,
     Expression<bool>? voiceEnabled,
+    Expression<String>? backgroundPath,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -507,6 +558,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
       if (updatedAt != null) 'updated_at': updatedAt,
       if (archived != null) 'archived': archived,
       if (voiceEnabled != null) 'voice_enabled': voiceEnabled,
+      if (backgroundPath != null) 'background_path': backgroundPath,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -521,6 +573,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     Value<DateTime>? updatedAt,
     Value<bool>? archived,
     Value<bool>? voiceEnabled,
+    Value<String?>? backgroundPath,
     Value<int>? rowid,
   }) {
     return ConversationsCompanion(
@@ -533,6 +586,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
       updatedAt: updatedAt ?? this.updatedAt,
       archived: archived ?? this.archived,
       voiceEnabled: voiceEnabled ?? this.voiceEnabled,
+      backgroundPath: backgroundPath ?? this.backgroundPath,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -567,6 +621,9 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     if (voiceEnabled.present) {
       map['voice_enabled'] = Variable<bool>(voiceEnabled.value);
     }
+    if (backgroundPath.present) {
+      map['background_path'] = Variable<String>(backgroundPath.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -585,6 +642,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
           ..write('updatedAt: $updatedAt, ')
           ..write('archived: $archived, ')
           ..write('voiceEnabled: $voiceEnabled, ')
+          ..write('backgroundPath: $backgroundPath, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -662,6 +720,30 @@ class $MessagesTable extends Messages
     requiredDuringInsert: false,
     defaultValue: const Constant('[]'),
   );
+  static const VerificationMeta _imagePathsMeta = const VerificationMeta(
+    'imagePaths',
+  );
+  @override
+  late final GeneratedColumn<String> imagePaths = GeneratedColumn<String>(
+    'image_paths',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _imageSummaryMeta = const VerificationMeta(
+    'imageSummary',
+  );
+  @override
+  late final GeneratedColumn<String> imageSummary = GeneratedColumn<String>(
+    'image_summary',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _statusMeta = const VerificationMeta('status');
   @override
   late final GeneratedColumn<String> status = GeneratedColumn<String>(
@@ -671,6 +753,16 @@ class $MessagesTable extends Messages
     type: DriftSqlType.string,
     requiredDuringInsert: false,
     defaultValue: const Constant('done'),
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('text'),
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
@@ -691,7 +783,10 @@ class $MessagesTable extends Messages
     content,
     rawContent,
     emotionEvents,
+    imagePaths,
+    imageSummary,
     status,
+    kind,
     createdAt,
   ];
   @override
@@ -751,10 +846,31 @@ class $MessagesTable extends Messages
         ),
       );
     }
+    if (data.containsKey('image_paths')) {
+      context.handle(
+        _imagePathsMeta,
+        imagePaths.isAcceptableOrUnknown(data['image_paths']!, _imagePathsMeta),
+      );
+    }
+    if (data.containsKey('image_summary')) {
+      context.handle(
+        _imageSummaryMeta,
+        imageSummary.isAcceptableOrUnknown(
+          data['image_summary']!,
+          _imageSummaryMeta,
+        ),
+      );
+    }
     if (data.containsKey('status')) {
       context.handle(
         _statusMeta,
         status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
       );
     }
     if (data.containsKey('created_at')) {
@@ -798,9 +914,21 @@ class $MessagesTable extends Messages
         DriftSqlType.string,
         data['${effectivePrefix}emotion_events'],
       )!,
+      imagePaths: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}image_paths'],
+      )!,
+      imageSummary: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}image_summary'],
+      )!,
       status: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}status'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
       )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
@@ -827,8 +955,17 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
   /// JSON 数组：情绪/动作事件（M2 起填充）。
   final String emotionEvents;
 
+  /// JSON 数组：附图文件绝对路径（v7）。
+  final String imagePaths;
+
+  /// 图片内容一句话概括（LLM 生成；失败留空走 [图片] 占位，v7）。
+  final String imageSummary;
+
   /// streaming | done | error
   final String status;
+
+  /// text | sticker（v8）：sticker 为纯图表情包消息，不进提示词/记忆/标题。
+  final String kind;
   final DateTime createdAt;
   const MessageRow({
     required this.id,
@@ -837,7 +974,10 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     required this.content,
     required this.rawContent,
     required this.emotionEvents,
+    required this.imagePaths,
+    required this.imageSummary,
     required this.status,
+    required this.kind,
     required this.createdAt,
   });
   @override
@@ -849,7 +989,10 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     map['content'] = Variable<String>(content);
     map['raw_content'] = Variable<String>(rawContent);
     map['emotion_events'] = Variable<String>(emotionEvents);
+    map['image_paths'] = Variable<String>(imagePaths);
+    map['image_summary'] = Variable<String>(imageSummary);
     map['status'] = Variable<String>(status);
+    map['kind'] = Variable<String>(kind);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -862,7 +1005,10 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
       content: Value(content),
       rawContent: Value(rawContent),
       emotionEvents: Value(emotionEvents),
+      imagePaths: Value(imagePaths),
+      imageSummary: Value(imageSummary),
       status: Value(status),
+      kind: Value(kind),
       createdAt: Value(createdAt),
     );
   }
@@ -879,7 +1025,10 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
       content: serializer.fromJson<String>(json['content']),
       rawContent: serializer.fromJson<String>(json['rawContent']),
       emotionEvents: serializer.fromJson<String>(json['emotionEvents']),
+      imagePaths: serializer.fromJson<String>(json['imagePaths']),
+      imageSummary: serializer.fromJson<String>(json['imageSummary']),
       status: serializer.fromJson<String>(json['status']),
+      kind: serializer.fromJson<String>(json['kind']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -893,7 +1042,10 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
       'content': serializer.toJson<String>(content),
       'rawContent': serializer.toJson<String>(rawContent),
       'emotionEvents': serializer.toJson<String>(emotionEvents),
+      'imagePaths': serializer.toJson<String>(imagePaths),
+      'imageSummary': serializer.toJson<String>(imageSummary),
       'status': serializer.toJson<String>(status),
+      'kind': serializer.toJson<String>(kind),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -905,7 +1057,10 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     String? content,
     String? rawContent,
     String? emotionEvents,
+    String? imagePaths,
+    String? imageSummary,
     String? status,
+    String? kind,
     DateTime? createdAt,
   }) => MessageRow(
     id: id ?? this.id,
@@ -914,7 +1069,10 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     content: content ?? this.content,
     rawContent: rawContent ?? this.rawContent,
     emotionEvents: emotionEvents ?? this.emotionEvents,
+    imagePaths: imagePaths ?? this.imagePaths,
+    imageSummary: imageSummary ?? this.imageSummary,
     status: status ?? this.status,
+    kind: kind ?? this.kind,
     createdAt: createdAt ?? this.createdAt,
   );
   MessageRow copyWithCompanion(MessagesCompanion data) {
@@ -931,7 +1089,14 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
       emotionEvents: data.emotionEvents.present
           ? data.emotionEvents.value
           : this.emotionEvents,
+      imagePaths: data.imagePaths.present
+          ? data.imagePaths.value
+          : this.imagePaths,
+      imageSummary: data.imageSummary.present
+          ? data.imageSummary.value
+          : this.imageSummary,
       status: data.status.present ? data.status.value : this.status,
+      kind: data.kind.present ? data.kind.value : this.kind,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -945,7 +1110,10 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
           ..write('content: $content, ')
           ..write('rawContent: $rawContent, ')
           ..write('emotionEvents: $emotionEvents, ')
+          ..write('imagePaths: $imagePaths, ')
+          ..write('imageSummary: $imageSummary, ')
           ..write('status: $status, ')
+          ..write('kind: $kind, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -959,7 +1127,10 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     content,
     rawContent,
     emotionEvents,
+    imagePaths,
+    imageSummary,
     status,
+    kind,
     createdAt,
   );
   @override
@@ -972,7 +1143,10 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
           other.content == this.content &&
           other.rawContent == this.rawContent &&
           other.emotionEvents == this.emotionEvents &&
+          other.imagePaths == this.imagePaths &&
+          other.imageSummary == this.imageSummary &&
           other.status == this.status &&
+          other.kind == this.kind &&
           other.createdAt == this.createdAt);
 }
 
@@ -983,7 +1157,10 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
   final Value<String> content;
   final Value<String> rawContent;
   final Value<String> emotionEvents;
+  final Value<String> imagePaths;
+  final Value<String> imageSummary;
   final Value<String> status;
+  final Value<String> kind;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const MessagesCompanion({
@@ -993,7 +1170,10 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     this.content = const Value.absent(),
     this.rawContent = const Value.absent(),
     this.emotionEvents = const Value.absent(),
+    this.imagePaths = const Value.absent(),
+    this.imageSummary = const Value.absent(),
     this.status = const Value.absent(),
+    this.kind = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1004,7 +1184,10 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     this.content = const Value.absent(),
     this.rawContent = const Value.absent(),
     this.emotionEvents = const Value.absent(),
+    this.imagePaths = const Value.absent(),
+    this.imageSummary = const Value.absent(),
     this.status = const Value.absent(),
+    this.kind = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -1018,7 +1201,10 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     Expression<String>? content,
     Expression<String>? rawContent,
     Expression<String>? emotionEvents,
+    Expression<String>? imagePaths,
+    Expression<String>? imageSummary,
     Expression<String>? status,
+    Expression<String>? kind,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -1029,7 +1215,10 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
       if (content != null) 'content': content,
       if (rawContent != null) 'raw_content': rawContent,
       if (emotionEvents != null) 'emotion_events': emotionEvents,
+      if (imagePaths != null) 'image_paths': imagePaths,
+      if (imageSummary != null) 'image_summary': imageSummary,
       if (status != null) 'status': status,
+      if (kind != null) 'kind': kind,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -1042,7 +1231,10 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     Value<String>? content,
     Value<String>? rawContent,
     Value<String>? emotionEvents,
+    Value<String>? imagePaths,
+    Value<String>? imageSummary,
     Value<String>? status,
+    Value<String>? kind,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -1053,7 +1245,10 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
       content: content ?? this.content,
       rawContent: rawContent ?? this.rawContent,
       emotionEvents: emotionEvents ?? this.emotionEvents,
+      imagePaths: imagePaths ?? this.imagePaths,
+      imageSummary: imageSummary ?? this.imageSummary,
       status: status ?? this.status,
+      kind: kind ?? this.kind,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -1080,8 +1275,17 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     if (emotionEvents.present) {
       map['emotion_events'] = Variable<String>(emotionEvents.value);
     }
+    if (imagePaths.present) {
+      map['image_paths'] = Variable<String>(imagePaths.value);
+    }
+    if (imageSummary.present) {
+      map['image_summary'] = Variable<String>(imageSummary.value);
+    }
     if (status.present) {
       map['status'] = Variable<String>(status.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -1101,7 +1305,10 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
           ..write('content: $content, ')
           ..write('rawContent: $rawContent, ')
           ..write('emotionEvents: $emotionEvents, ')
+          ..write('imagePaths: $imagePaths, ')
+          ..write('imageSummary: $imageSummary, ')
           ..write('status: $status, ')
+          ..write('kind: $kind, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -1812,6 +2019,18 @@ class $CharactersTable extends Characters
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _userSummaryMeta = const VerificationMeta(
+    'userSummary',
+  );
+  @override
+  late final GeneratedColumn<String> userSummary = GeneratedColumn<String>(
+    'user_summary',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _memoryUpdatedAtMeta = const VerificationMeta(
     'memoryUpdatedAt',
   );
@@ -1838,6 +2057,7 @@ class $CharactersTable extends Characters
     createdAt,
     updatedAt,
     memorySummary,
+    userSummary,
     memoryUpdatedAt,
   ];
   @override
@@ -1944,6 +2164,15 @@ class $CharactersTable extends Characters
         ),
       );
     }
+    if (data.containsKey('user_summary')) {
+      context.handle(
+        _userSummaryMeta,
+        userSummary.isAcceptableOrUnknown(
+          data['user_summary']!,
+          _userSummaryMeta,
+        ),
+      );
+    }
     if (data.containsKey('memory_updated_at')) {
       context.handle(
         _memoryUpdatedAtMeta,
@@ -2010,6 +2239,10 @@ class $CharactersTable extends Characters
         DriftSqlType.string,
         data['${effectivePrefix}memory_summary'],
       )!,
+      userSummary: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_summary'],
+      )!,
       memoryUpdatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}memory_updated_at'],
@@ -2047,6 +2280,9 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
   /// 领域模型，只经 getMemory/setMemory 读写，防止编辑角色卡时覆盖。
   final String memorySummary;
 
+  /// 角色眼中的用户画像（LLM 摘要，角色视角，v8）。同上不进域模型。
+  final String userSummary;
+
   /// 记忆水位线：该时点（含）之前的 done 消息已纳入摘要；null=从未摘要。
   final DateTime? memoryUpdatedAt;
   const CharacterRow({
@@ -2062,6 +2298,7 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
     required this.createdAt,
     required this.updatedAt,
     required this.memorySummary,
+    required this.userSummary,
     this.memoryUpdatedAt,
   });
   @override
@@ -2081,6 +2318,7 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['memory_summary'] = Variable<String>(memorySummary);
+    map['user_summary'] = Variable<String>(userSummary);
     if (!nullToAbsent || memoryUpdatedAt != null) {
       map['memory_updated_at'] = Variable<DateTime>(memoryUpdatedAt);
     }
@@ -2103,6 +2341,7 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       memorySummary: Value(memorySummary),
+      userSummary: Value(userSummary),
       memoryUpdatedAt: memoryUpdatedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(memoryUpdatedAt),
@@ -2127,6 +2366,7 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       memorySummary: serializer.fromJson<String>(json['memorySummary']),
+      userSummary: serializer.fromJson<String>(json['userSummary']),
       memoryUpdatedAt: serializer.fromJson<DateTime?>(json['memoryUpdatedAt']),
     );
   }
@@ -2146,6 +2386,7 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'memorySummary': serializer.toJson<String>(memorySummary),
+      'userSummary': serializer.toJson<String>(userSummary),
       'memoryUpdatedAt': serializer.toJson<DateTime?>(memoryUpdatedAt),
     };
   }
@@ -2163,6 +2404,7 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
     DateTime? createdAt,
     DateTime? updatedAt,
     String? memorySummary,
+    String? userSummary,
     Value<DateTime?> memoryUpdatedAt = const Value.absent(),
   }) => CharacterRow(
     id: id ?? this.id,
@@ -2177,6 +2419,7 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     memorySummary: memorySummary ?? this.memorySummary,
+    userSummary: userSummary ?? this.userSummary,
     memoryUpdatedAt: memoryUpdatedAt.present
         ? memoryUpdatedAt.value
         : this.memoryUpdatedAt,
@@ -2207,6 +2450,9 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
       memorySummary: data.memorySummary.present
           ? data.memorySummary.value
           : this.memorySummary,
+      userSummary: data.userSummary.present
+          ? data.userSummary.value
+          : this.userSummary,
       memoryUpdatedAt: data.memoryUpdatedAt.present
           ? data.memoryUpdatedAt.value
           : this.memoryUpdatedAt,
@@ -2228,6 +2474,7 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('memorySummary: $memorySummary, ')
+          ..write('userSummary: $userSummary, ')
           ..write('memoryUpdatedAt: $memoryUpdatedAt')
           ..write(')'))
         .toString();
@@ -2247,6 +2494,7 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
     createdAt,
     updatedAt,
     memorySummary,
+    userSummary,
     memoryUpdatedAt,
   );
   @override
@@ -2265,6 +2513,7 @@ class CharacterRow extends DataClass implements Insertable<CharacterRow> {
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.memorySummary == this.memorySummary &&
+          other.userSummary == this.userSummary &&
           other.memoryUpdatedAt == this.memoryUpdatedAt);
 }
 
@@ -2281,6 +2530,7 @@ class CharactersCompanion extends UpdateCompanion<CharacterRow> {
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<String> memorySummary;
+  final Value<String> userSummary;
   final Value<DateTime?> memoryUpdatedAt;
   final Value<int> rowid;
   const CharactersCompanion({
@@ -2296,6 +2546,7 @@ class CharactersCompanion extends UpdateCompanion<CharacterRow> {
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.memorySummary = const Value.absent(),
+    this.userSummary = const Value.absent(),
     this.memoryUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -2312,6 +2563,7 @@ class CharactersCompanion extends UpdateCompanion<CharacterRow> {
     required DateTime createdAt,
     required DateTime updatedAt,
     this.memorySummary = const Value.absent(),
+    this.userSummary = const Value.absent(),
     this.memoryUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -2331,6 +2583,7 @@ class CharactersCompanion extends UpdateCompanion<CharacterRow> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<String>? memorySummary,
+    Expression<String>? userSummary,
     Expression<DateTime>? memoryUpdatedAt,
     Expression<int>? rowid,
   }) {
@@ -2347,6 +2600,7 @@ class CharactersCompanion extends UpdateCompanion<CharacterRow> {
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (memorySummary != null) 'memory_summary': memorySummary,
+      if (userSummary != null) 'user_summary': userSummary,
       if (memoryUpdatedAt != null) 'memory_updated_at': memoryUpdatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -2365,6 +2619,7 @@ class CharactersCompanion extends UpdateCompanion<CharacterRow> {
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<String>? memorySummary,
+    Value<String>? userSummary,
     Value<DateTime?>? memoryUpdatedAt,
     Value<int>? rowid,
   }) {
@@ -2381,6 +2636,7 @@ class CharactersCompanion extends UpdateCompanion<CharacterRow> {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       memorySummary: memorySummary ?? this.memorySummary,
+      userSummary: userSummary ?? this.userSummary,
       memoryUpdatedAt: memoryUpdatedAt ?? this.memoryUpdatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -2425,6 +2681,9 @@ class CharactersCompanion extends UpdateCompanion<CharacterRow> {
     if (memorySummary.present) {
       map['memory_summary'] = Variable<String>(memorySummary.value);
     }
+    if (userSummary.present) {
+      map['user_summary'] = Variable<String>(userSummary.value);
+    }
     if (memoryUpdatedAt.present) {
       map['memory_updated_at'] = Variable<DateTime>(memoryUpdatedAt.value);
     }
@@ -2449,6 +2708,7 @@ class CharactersCompanion extends UpdateCompanion<CharacterRow> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('memorySummary: $memorySummary, ')
+          ..write('userSummary: $userSummary, ')
           ..write('memoryUpdatedAt: $memoryUpdatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -4638,6 +4898,375 @@ class CustomVoicesCompanion extends UpdateCompanion<CustomVoiceRow> {
   }
 }
 
+class $StickersTable extends Stickers
+    with TableInfo<$StickersTable, StickerRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $StickersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _characterIdMeta = const VerificationMeta(
+    'characterId',
+  );
+  @override
+  late final GeneratedColumn<String> characterId = GeneratedColumn<String>(
+    'character_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _moodMeta = const VerificationMeta('mood');
+  @override
+  late final GeneratedColumn<String> mood = GeneratedColumn<String>(
+    'mood',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _filePathMeta = const VerificationMeta(
+    'filePath',
+  );
+  @override
+  late final GeneratedColumn<String> filePath = GeneratedColumn<String>(
+    'file_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    characterId,
+    mood,
+    filePath,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'stickers';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StickerRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('character_id')) {
+      context.handle(
+        _characterIdMeta,
+        characterId.isAcceptableOrUnknown(
+          data['character_id']!,
+          _characterIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_characterIdMeta);
+    }
+    if (data.containsKey('mood')) {
+      context.handle(
+        _moodMeta,
+        mood.isAcceptableOrUnknown(data['mood']!, _moodMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_moodMeta);
+    }
+    if (data.containsKey('file_path')) {
+      context.handle(
+        _filePathMeta,
+        filePath.isAcceptableOrUnknown(data['file_path']!, _filePathMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_filePathMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  StickerRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StickerRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      characterId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}character_id'],
+      )!,
+      mood: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mood'],
+      )!,
+      filePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}file_path'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $StickersTable createAlias(String alias) {
+    return $StickersTable(attachedDatabase, alias);
+  }
+}
+
+class StickerRow extends DataClass implements Insertable<StickerRow> {
+  final String id;
+  final String characterId;
+
+  /// 心情键：英文情绪标签值（happy/angry/sad/amused/confused/shy/…）。
+  final String mood;
+
+  /// 图片文件绝对路径。
+  final String filePath;
+  final DateTime createdAt;
+  const StickerRow({
+    required this.id,
+    required this.characterId,
+    required this.mood,
+    required this.filePath,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['character_id'] = Variable<String>(characterId);
+    map['mood'] = Variable<String>(mood);
+    map['file_path'] = Variable<String>(filePath);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  StickersCompanion toCompanion(bool nullToAbsent) {
+    return StickersCompanion(
+      id: Value(id),
+      characterId: Value(characterId),
+      mood: Value(mood),
+      filePath: Value(filePath),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory StickerRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StickerRow(
+      id: serializer.fromJson<String>(json['id']),
+      characterId: serializer.fromJson<String>(json['characterId']),
+      mood: serializer.fromJson<String>(json['mood']),
+      filePath: serializer.fromJson<String>(json['filePath']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'characterId': serializer.toJson<String>(characterId),
+      'mood': serializer.toJson<String>(mood),
+      'filePath': serializer.toJson<String>(filePath),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  StickerRow copyWith({
+    String? id,
+    String? characterId,
+    String? mood,
+    String? filePath,
+    DateTime? createdAt,
+  }) => StickerRow(
+    id: id ?? this.id,
+    characterId: characterId ?? this.characterId,
+    mood: mood ?? this.mood,
+    filePath: filePath ?? this.filePath,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  StickerRow copyWithCompanion(StickersCompanion data) {
+    return StickerRow(
+      id: data.id.present ? data.id.value : this.id,
+      characterId: data.characterId.present
+          ? data.characterId.value
+          : this.characterId,
+      mood: data.mood.present ? data.mood.value : this.mood,
+      filePath: data.filePath.present ? data.filePath.value : this.filePath,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StickerRow(')
+          ..write('id: $id, ')
+          ..write('characterId: $characterId, ')
+          ..write('mood: $mood, ')
+          ..write('filePath: $filePath, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, characterId, mood, filePath, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StickerRow &&
+          other.id == this.id &&
+          other.characterId == this.characterId &&
+          other.mood == this.mood &&
+          other.filePath == this.filePath &&
+          other.createdAt == this.createdAt);
+}
+
+class StickersCompanion extends UpdateCompanion<StickerRow> {
+  final Value<String> id;
+  final Value<String> characterId;
+  final Value<String> mood;
+  final Value<String> filePath;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const StickersCompanion({
+    this.id = const Value.absent(),
+    this.characterId = const Value.absent(),
+    this.mood = const Value.absent(),
+    this.filePath = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  StickersCompanion.insert({
+    required String id,
+    required String characterId,
+    required String mood,
+    required String filePath,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       characterId = Value(characterId),
+       mood = Value(mood),
+       filePath = Value(filePath),
+       createdAt = Value(createdAt);
+  static Insertable<StickerRow> custom({
+    Expression<String>? id,
+    Expression<String>? characterId,
+    Expression<String>? mood,
+    Expression<String>? filePath,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (characterId != null) 'character_id': characterId,
+      if (mood != null) 'mood': mood,
+      if (filePath != null) 'file_path': filePath,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  StickersCompanion copyWith({
+    Value<String>? id,
+    Value<String>? characterId,
+    Value<String>? mood,
+    Value<String>? filePath,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return StickersCompanion(
+      id: id ?? this.id,
+      characterId: characterId ?? this.characterId,
+      mood: mood ?? this.mood,
+      filePath: filePath ?? this.filePath,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (characterId.present) {
+      map['character_id'] = Variable<String>(characterId.value);
+    }
+    if (mood.present) {
+      map['mood'] = Variable<String>(mood.value);
+    }
+    if (filePath.present) {
+      map['file_path'] = Variable<String>(filePath.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StickersCompanion(')
+          ..write('id: $id, ')
+          ..write('characterId: $characterId, ')
+          ..write('mood: $mood, ')
+          ..write('filePath: $filePath, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -4652,6 +5281,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $TtsProfilesTable ttsProfiles = $TtsProfilesTable(this);
   late final $SettingsTable settings = $SettingsTable(this);
   late final $CustomVoicesTable customVoices = $CustomVoicesTable(this);
+  late final $StickersTable stickers = $StickersTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4666,6 +5296,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     ttsProfiles,
     settings,
     customVoices,
+    stickers,
   ];
 }
 
@@ -4680,6 +5311,7 @@ typedef $$ConversationsTableCreateCompanionBuilder =
       required DateTime updatedAt,
       Value<bool> archived,
       Value<bool> voiceEnabled,
+      Value<String?> backgroundPath,
       Value<int> rowid,
     });
 typedef $$ConversationsTableUpdateCompanionBuilder =
@@ -4693,6 +5325,7 @@ typedef $$ConversationsTableUpdateCompanionBuilder =
       Value<DateTime> updatedAt,
       Value<bool> archived,
       Value<bool> voiceEnabled,
+      Value<String?> backgroundPath,
       Value<int> rowid,
     });
 
@@ -4747,6 +5380,11 @@ class $$ConversationsTableFilterComposer
 
   ColumnFilters<bool> get voiceEnabled => $composableBuilder(
     column: $table.voiceEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get backgroundPath => $composableBuilder(
+    column: $table.backgroundPath,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -4804,6 +5442,11 @@ class $$ConversationsTableOrderingComposer
     column: $table.voiceEnabled,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get backgroundPath => $composableBuilder(
+    column: $table.backgroundPath,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ConversationsTableAnnotationComposer
@@ -4849,6 +5492,11 @@ class $$ConversationsTableAnnotationComposer
     column: $table.voiceEnabled,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get backgroundPath => $composableBuilder(
+    column: $table.backgroundPath,
+    builder: (column) => column,
+  );
 }
 
 class $$ConversationsTableTableManager
@@ -4891,6 +5539,7 @@ class $$ConversationsTableTableManager
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<bool> archived = const Value.absent(),
                 Value<bool> voiceEnabled = const Value.absent(),
+                Value<String?> backgroundPath = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ConversationsCompanion(
                 id: id,
@@ -4902,6 +5551,7 @@ class $$ConversationsTableTableManager
                 updatedAt: updatedAt,
                 archived: archived,
                 voiceEnabled: voiceEnabled,
+                backgroundPath: backgroundPath,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -4915,6 +5565,7 @@ class $$ConversationsTableTableManager
                 required DateTime updatedAt,
                 Value<bool> archived = const Value.absent(),
                 Value<bool> voiceEnabled = const Value.absent(),
+                Value<String?> backgroundPath = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ConversationsCompanion.insert(
                 id: id,
@@ -4926,6 +5577,7 @@ class $$ConversationsTableTableManager
                 updatedAt: updatedAt,
                 archived: archived,
                 voiceEnabled: voiceEnabled,
+                backgroundPath: backgroundPath,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -4969,7 +5621,10 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   Value<String> content,
   Value<String> rawContent,
   Value<String> emotionEvents,
+  Value<String> imagePaths,
+  Value<String> imageSummary,
   Value<String> status,
+  Value<String> kind,
   required DateTime createdAt,
   Value<int> rowid,
 });
@@ -4980,7 +5635,10 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<String> content,
   Value<String> rawContent,
   Value<String> emotionEvents,
+  Value<String> imagePaths,
+  Value<String> imageSummary,
   Value<String> status,
+  Value<String> kind,
   Value<DateTime> createdAt,
   Value<int> rowid,
 });
@@ -5024,8 +5682,23 @@ class $$MessagesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get imagePaths => $composableBuilder(
+    column: $table.imagePaths,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get imageSummary => $composableBuilder(
+    column: $table.imageSummary,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get status => $composableBuilder(
     column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5074,8 +5747,23 @@ class $$MessagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get imagePaths => $composableBuilder(
+    column: $table.imagePaths,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get imageSummary => $composableBuilder(
+    column: $table.imageSummary,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get status => $composableBuilder(
     column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -5118,8 +5806,21 @@ class $$MessagesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get imagePaths => $composableBuilder(
+    column: $table.imagePaths,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get imageSummary => $composableBuilder(
+    column: $table.imageSummary,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -5162,7 +5863,10 @@ class $$MessagesTableTableManager
                 Value<String> content = const Value.absent(),
                 Value<String> rawContent = const Value.absent(),
                 Value<String> emotionEvents = const Value.absent(),
+                Value<String> imagePaths = const Value.absent(),
+                Value<String> imageSummary = const Value.absent(),
                 Value<String> status = const Value.absent(),
+                Value<String> kind = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion(
@@ -5172,7 +5876,10 @@ class $$MessagesTableTableManager
                 content: content,
                 rawContent: rawContent,
                 emotionEvents: emotionEvents,
+                imagePaths: imagePaths,
+                imageSummary: imageSummary,
                 status: status,
+                kind: kind,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -5184,7 +5891,10 @@ class $$MessagesTableTableManager
                 Value<String> content = const Value.absent(),
                 Value<String> rawContent = const Value.absent(),
                 Value<String> emotionEvents = const Value.absent(),
+                Value<String> imagePaths = const Value.absent(),
+                Value<String> imageSummary = const Value.absent(),
                 Value<String> status = const Value.absent(),
+                Value<String> kind = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion.insert(
@@ -5194,7 +5904,10 @@ class $$MessagesTableTableManager
                 content: content,
                 rawContent: rawContent,
                 emotionEvents: emotionEvents,
+                imagePaths: imagePaths,
+                imageSummary: imageSummary,
                 status: status,
+                kind: kind,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -5531,6 +6244,7 @@ typedef $$CharactersTableCreateCompanionBuilder = CharactersCompanion Function({
   required DateTime createdAt,
   required DateTime updatedAt,
   Value<String> memorySummary,
+  Value<String> userSummary,
   Value<DateTime?> memoryUpdatedAt,
   Value<int> rowid,
 });
@@ -5547,6 +6261,7 @@ typedef $$CharactersTableUpdateCompanionBuilder = CharactersCompanion Function({
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<String> memorySummary,
+  Value<String> userSummary,
   Value<DateTime?> memoryUpdatedAt,
   Value<int> rowid,
 });
@@ -5617,6 +6332,11 @@ class $$CharactersTableFilterComposer
 
   ColumnFilters<String> get memorySummary => $composableBuilder(
     column: $table.memorySummary,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get userSummary => $composableBuilder(
+    column: $table.userSummary,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5695,6 +6415,11 @@ class $$CharactersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get userSummary => $composableBuilder(
+    column: $table.userSummary,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get memoryUpdatedAt => $composableBuilder(
     column: $table.memoryUpdatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -5758,6 +6483,11 @@ class $$CharactersTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get userSummary => $composableBuilder(
+    column: $table.userSummary,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get memoryUpdatedAt => $composableBuilder(
     column: $table.memoryUpdatedAt,
     builder: (column) => column,
@@ -5807,6 +6537,7 @@ class $$CharactersTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<String> memorySummary = const Value.absent(),
+                Value<String> userSummary = const Value.absent(),
                 Value<DateTime?> memoryUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CharactersCompanion(
@@ -5822,6 +6553,7 @@ class $$CharactersTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 memorySummary: memorySummary,
+                userSummary: userSummary,
                 memoryUpdatedAt: memoryUpdatedAt,
                 rowid: rowid,
               ),
@@ -5839,6 +6571,7 @@ class $$CharactersTableTableManager
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<String> memorySummary = const Value.absent(),
+                Value<String> userSummary = const Value.absent(),
                 Value<DateTime?> memoryUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CharactersCompanion.insert(
@@ -5854,6 +6587,7 @@ class $$CharactersTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 memorySummary: memorySummary,
+                userSummary: userSummary,
                 memoryUpdatedAt: memoryUpdatedAt,
                 rowid: rowid,
               ),
@@ -7072,6 +7806,212 @@ typedef $$CustomVoicesTableProcessedTableManager =
       CustomVoiceRow,
       PrefetchHooks Function()
     >;
+typedef $$StickersTableCreateCompanionBuilder = StickersCompanion Function({
+  required String id,
+  required String characterId,
+  required String mood,
+  required String filePath,
+  required DateTime createdAt,
+  Value<int> rowid,
+});
+typedef $$StickersTableUpdateCompanionBuilder = StickersCompanion Function({
+  Value<String> id,
+  Value<String> characterId,
+  Value<String> mood,
+  Value<String> filePath,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+
+class $$StickersTableFilterComposer
+    extends Composer<_$AppDatabase, $StickersTable> {
+  $$StickersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get mood => $composableBuilder(
+    column: $table.mood,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get filePath => $composableBuilder(
+    column: $table.filePath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$StickersTableOrderingComposer
+    extends Composer<_$AppDatabase, $StickersTable> {
+  $$StickersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get mood => $composableBuilder(
+    column: $table.mood,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get filePath => $composableBuilder(
+    column: $table.filePath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$StickersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $StickersTable> {
+  $$StickersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get mood =>
+      $composableBuilder(column: $table.mood, builder: (column) => column);
+
+  GeneratedColumn<String> get filePath =>
+      $composableBuilder(column: $table.filePath, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$StickersTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $StickersTable,
+          StickerRow,
+          $$StickersTableFilterComposer,
+          $$StickersTableOrderingComposer,
+          $$StickersTableAnnotationComposer,
+          $$StickersTableCreateCompanionBuilder,
+          $$StickersTableUpdateCompanionBuilder,
+          (
+            StickerRow,
+            BaseReferences<_$AppDatabase, $StickersTable, StickerRow>,
+          ),
+          StickerRow,
+          PrefetchHooks Function()
+        > {
+  $$StickersTableTableManager(_$AppDatabase db, $StickersTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$StickersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$StickersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$StickersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> characterId = const Value.absent(),
+                Value<String> mood = const Value.absent(),
+                Value<String> filePath = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StickersCompanion(
+                id: id,
+                characterId: characterId,
+                mood: mood,
+                filePath: filePath,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String characterId,
+                required String mood,
+                required String filePath,
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => StickersCompanion.insert(
+                id: id,
+                characterId: characterId,
+                mood: mood,
+                filePath: filePath,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$StickersTable, StickerRow>(table),
+                  BaseReferences<_$AppDatabase, $StickersTable, StickerRow>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$StickersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $StickersTable,
+      StickerRow,
+      $$StickersTableFilterComposer,
+      $$StickersTableOrderingComposer,
+      $$StickersTableAnnotationComposer,
+      $$StickersTableCreateCompanionBuilder,
+      $$StickersTableUpdateCompanionBuilder,
+      (StickerRow, BaseReferences<_$AppDatabase, $StickersTable, StickerRow>),
+      StickerRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -7094,4 +8034,6 @@ class $AppDatabaseManager {
       $$SettingsTableTableManager(_db, _db.settings);
   $$CustomVoicesTableTableManager get customVoices =>
       $$CustomVoicesTableTableManager(_db, _db.customVoices);
+  $$StickersTableTableManager get stickers =>
+      $$StickersTableTableManager(_db, _db.stickers);
 }

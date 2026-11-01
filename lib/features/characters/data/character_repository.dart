@@ -43,24 +43,33 @@ class CharacterRepository {
     return Character(id: newId(), name: '', createdAt: now, updatedAt: now);
   }
 
-  /// 读取角色跨会话记忆（摘要与水位线）。
+  /// 读取角色跨会话记忆（记忆摘要、用户画像与水位线）。
   ///
   /// 记忆列不进 Character 领域模型：save() 是整行 upsert，
   /// 若领域模型带记忆字段，编辑角色卡会用陈旧值覆盖 summarizer 刚写入的记忆。
-  Future<({String summary, DateTime? updatedAt})> getMemory(
+  Future<({String summary, String userSummary, DateTime? updatedAt})> getMemory(
       String characterId) async {
     final q = db.select(db.characters)..where((t) => t.id.equals(characterId));
     final row = await q.getSingleOrNull();
-    if (row == null) return (summary: '', updatedAt: null);
-    return (summary: row.memorySummary, updatedAt: row.memoryUpdatedAt);
+    if (row == null) return (summary: '', userSummary: '', updatedAt: null);
+    return (
+      summary: row.memorySummary,
+      userSummary: row.userSummary,
+      updatedAt: row.memoryUpdatedAt,
+    );
   }
 
-  /// 更新记忆与水位线（只写这两列）。角色已删时静默无操作。
-  Future<void> setMemory(String characterId,
-      {required String summary, required DateTime updatedAt}) async {
+  /// 更新记忆、用户画像与水位线（只写这三列）。角色已删时静默无操作。
+  Future<void> setMemory(
+    String characterId, {
+    required String summary,
+    String userSummary = '',
+    required DateTime updatedAt,
+  }) async {
     await (db.update(db.characters)..where((t) => t.id.equals(characterId)))
         .write(CharactersCompanion(
       memorySummary: Value(summary),
+      userSummary: Value(userSummary),
       memoryUpdatedAt: Value(updatedAt),
     ));
   }
@@ -68,6 +77,18 @@ class CharacterRepository {
   Future<void> delete(String id) async {
     final character = await getById(id);
     await (db.delete(db.characters)..where((t) => t.id.equals(id))).go();
+    // 级联清理表情包（v8）：库行 + 目录。
+    await (db.delete(db.stickers)..where((t) => t.characterId.equals(id)))
+        .go();
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      final stickerDir = Directory(p.join(docs.path, 'stickers', id));
+      if (await stickerDir.exists()) {
+        await stickerDir.delete(recursive: true);
+      }
+    } catch (_) {
+      // 目录删除失败不影响角色删除。
+    }
     final avatar = character?.avatarPath;
     if (avatar != null && avatar.isNotEmpty) {
       try {

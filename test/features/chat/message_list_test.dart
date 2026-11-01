@@ -266,4 +266,46 @@ void main() {
     expect(lastRect.top, lessThanOrEqualTo(listRect.bottom));
     await unmount(tester);
   });
+
+  testWidgets('消息附图渲染为 N 张缩略图（文件缺失走占位不崩）', (tester) async {
+    await repo.insertMessage(
+      conversationId: 'c1',
+      role: ChatRole.user,
+      content: '看这几张图',
+      imagePaths: const ['/no/such/a.jpg', '/no/such/b.jpg', '/no/such/c.jpg'],
+    );
+    await pumpList(tester, 'c1');
+    expect(find.byType(Image), findsNWidgets(3));
+    await unmount(tester);
+  });
+
+  testWidgets('纯图空文消息不崩，只渲染缩略图不渲染空文本', (tester) async {
+    await repo.insertMessage(
+      conversationId: 'c1',
+      role: ChatRole.user,
+      content: '',
+      imagePaths: const ['/no/such/a.jpg'],
+    );
+    await pumpList(tester, 'c1');
+    expect(find.byType(Image), findsNWidgets(1));
+    expect(find.byType(SelectableText), findsNothing);
+    await unmount(tester);
+  });
+
+  testWidgets('表情包消息（kind=sticker）渲染为纯图气泡', (tester) async {
+    await insert('c1', '回复文本');
+    await repo.insertMessage(
+      conversationId: 'c1',
+      role: ChatRole.assistant,
+      content: '',
+      imagePaths: const ['/no/such/sticker.jpg'],
+      imageSummary: '表情包',
+      kind: MessageKind.sticker,
+    );
+    await pumpList(tester, 'c1');
+    expect(find.text('回复文本'), findsOneWidget);
+    expect(find.byType(Image), findsNWidgets(1)); // 贴纸图
+    expect(find.byType(SelectableText), findsNWidgets(1)); // 仅正文那条
+    await unmount(tester);
+  });
 }

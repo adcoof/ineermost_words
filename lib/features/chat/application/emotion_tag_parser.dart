@@ -3,6 +3,12 @@
 /// 语法：`<emotion:happy>` / `<action:wave>`（名字为 [A-Za-z0-9_-]+）。
 /// 输出：剥离标签后的干净文本 + 事件序列。标签可能被 SSE chunk 任意切断，
 /// 解析器把"可能仍是标签前缀"的部分滞留在 pending，等后续 feed 补全。
+///
+/// 容错（v8.1 真机反馈）：模型常输出变体——
+/// `<action>`/`</action>`、`<Action:Wave>`、`< action : wave >`、
+/// `<action wave>`、`<emotion：开心>`（全角冒号/中文名）、
+/// `＜action：wave＞`（全角尖括号）。这些也必须剥离，否则标签会漏到
+/// 气泡文本里（用户可见）。
 library;
 
 import 'dart:convert';
@@ -19,9 +25,10 @@ class EmotionEvent {
 
   Map<String, dynamic> toJson() => {'kind': kind, 'value': value};
 
-  static EmotionEvent fromJson(Map<String, dynamic> json) =>
-      EmotionEvent(json['kind']?.toString() ?? 'emotion',
-          json['value']?.toString() ?? '');
+  static EmotionEvent fromJson(Map<String, dynamic> json) => EmotionEvent(
+    json['kind']?.toString() ?? 'emotion',
+    json['value']?.toString() ?? '',
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -49,15 +56,45 @@ class EmotionTagParser {
   /// 尚未判定的滞留文本（可能是被切断的标签前缀）。
   String _pending = '';
 
-  /// 合法标签内层（< 与 > 之间）：
-  /// - `<emotion:happy>` / `<action:wave/>`（名字 + 可选自闭合斜杠）
+  /// 情绪/动作标签内层（< 与 > 之间），大小写不敏感：
+  /// - `<emotion:happy>` / `<action:wave/>`（关键字 + 可选分隔 + 名字 + 可选自闭合斜杠）
+  /// - `<action wave>` / `<emotion：开心>`（空白分隔、全角冒号、非英文名字）
   /// - `<emotion>` / `</emotion>`（模型常输出的无名/闭合变体，剥离但不产事件）
-  static final RegExp _tagRe =
-      RegExp(r'^\/?(emotion|action)(:([A-Za-z0-9_\-]+))?\/?$');
+  static final RegExp _tagRe = RegExp(
+    r'^\/?\s*(emotion|action)\s*(?:(?:[:：]\s*|\s+)([^<>]*?))?\s*\/?$',
+    caseSensitive: false,
+  );
+
+  /// 任意"形如标签"的标记内层（v8.2）：模型还会自造 `<whisper>`、`<shout>`、
+  /// `<run_away>`、`<glare>` 之类的舞台提示，漏一个就会显示在气泡里。
+  /// 首个字符必须是字母（排除 `<3`、`< 4`），内容限 30 字符且不含标点，
+  /// 因此普通文本里的数学小于号不会被误伤。
+  static final RegExp _anyTagRe = RegExp(
+    r'^\/?\s*\p{L}[\p{L}\p{N}_:\-./ ]{0,29}\/?$',
+    unicode: true,
+  );
+
+  /// 标签字符集（用于流式中判断"这个 '<' 还可能是标签前缀"）。
+  static final RegExp _tagCharsRe = RegExp(
+    r'^[\s\p{L}\p{N}_:\-./]*$',
+    unicode: true,
+  );
+
+  /// 整段文本一次性剥离用的全局版本（[stripTagMarkup]），先剥情绪/动作
+  /// 标签（名字不限字符），再剥任意形似标签的标记。
+  static final RegExp _tagMarkupRe = RegExp(
+    r'<\s*\/?\s*(?:emotion|action)\s*(?:(?:[:：]\s*|\s+)[^<>]*?)?\s*\/?[>＞]',
+    caseSensitive: false,
+  );
+
+  static final RegExp _anyTagMarkupRe = RegExp(
+    r'<\s*\/?\s*\p{L}[\p{L}\p{N}_:\-./ ]{0,29}\/?\s*>',
+    unicode: true,
+  );
 
   /// 喂入一段增量，返回可立即展示的干净文本与新事件。
   TagFeedResult feed(String chunk) {
-    final buffer = _pending + chunk;
+    final buffer = _normalize(_pending + chunk);
     final out = StringBuffer();
     final events = <EmotionEvent>[];
 
@@ -80,12 +117,17 @@ class EmotionTagParser {
         i++; // '<' 是普通字符，继续扫描。
         continue;
       }
-      final m = _tagRe.firstMatch(buffer.substring(i + 1, gt));
-      if (m != null) {
+      final inner = buffer.substring(i + 1, gt);
+      final m = _tagRe.firstMatch(inner);
+      // 情绪/动作标签产事件；其余形似标签的标记（<whisper> 等）只剥离。
+      if (m != null || _anyTagRe.hasMatch(inner)) {
         out.write(buffer.substring(safeStart, i));
-        final name = m.group(3);
-        if (name != null) {
-          events.add(EmotionEvent(m.group(1)!, name));
+        if (m != null) {
+          final kind = m.group(1)!.toLowerCase();
+          final name = (m.group(2) ?? '').trim();
+          if (name.isNotEmpty) {
+            events.add(EmotionEvent(kind, name.toLowerCase()));
+          }
         }
         i = gt + 1;
         safeStart = i;
@@ -111,29 +153,23 @@ class EmotionTagParser {
     return rest;
   }
 
-  /// 从 `s` 起（紧跟 '<' 之后）是否仍可能补全为一个合法标签。
+  /// 全角尖括号归一：模型偶尔输出 `＜action：wave＞`。
+  static String _normalize(String s) {
+    if (!s.contains('＜') && !s.contains('＞')) return s;
+    return s.replaceAll('＜', '<').replaceAll('＞', '>');
+  }
+
+  /// 从 `s` 起（紧跟 '<' 之后）是否仍可能补全为一个标签（含自造标签）。
+  ///
+  /// 只要已收到的片段仍落在"标签字符集"内就继续观望；一旦出现标点等
+  /// 非标签字符（如 `a < b，c`），立刻判定为普通文本里的 '<'，不滞留——
+  /// 否则流式输出会卡住后面的正文直到段落结束。
   static bool _couldBeTagPrefix(String s) {
     if (s.isEmpty) return true; // 只来了一个 '<'，先观望。
-    var t = s.startsWith('/') ? s.substring(1) : s;
-    if ('emotion'.startsWith(t) || 'action'.startsWith(t)) return true;
-    for (final kw in const ['emotion', 'action']) {
-      if (!t.startsWith(kw)) continue;
-      var rest = t.substring(kw.length);
-      if (rest.startsWith('/')) {
-        rest = rest.substring(1);
-        // 自闭合结尾后不应再有名字；'emotion/:x' 形状永远不会匹配 _tagRe，
-        // 继续滞留只会让 pending 无界增长。
-        if (rest.startsWith(':')) return false;
-      }
-      if (rest.isEmpty || rest == ':') return true;
-      if (rest.startsWith(':')) {
-        var name = rest.substring(1);
-        if (name.endsWith('/')) name = name.substring(0, name.length - 1);
-        return RegExp(r'^[A-Za-z0-9_\-]*$').hasMatch(name);
-      }
-      return false;
-    }
-    return false;
+    if (s.length > 32) return false;
+    if (s.contains('<')) return false;
+    if (s.trim().isEmpty) return true;
+    return _tagCharsRe.hasMatch(s);
   }
 
   /// 事件列表 → 存库用 JSON 数组。
@@ -147,10 +183,24 @@ class EmotionTagParser {
       if (decoded is! List) return const [];
       return [
         for (final e in decoded)
-          if (e is Map) EmotionEvent.fromJson(Map<String, dynamic>.from(e))
+          if (e is Map) EmotionEvent.fromJson(Map<String, dynamic>.from(e)),
       ];
     } catch (_) {
       return const [];
     }
   }
+}
+
+/// 非流式一次性剥离标签标记（气泡展示 / 历史脏数据清洗用）。
+///
+/// 与 [EmotionTagParser] 判定口径一致；`<` 后必须是字母，且内容是纯
+/// 标签字符，所以 'a < b'、'2<3>4'、'3 < 4' 不会被误伤。
+String stripTagMarkup(String text) {
+  if (!text.contains('<') && !text.contains('＜') && !text.contains('＞')) {
+    return text;
+  }
+  final normalized = text.replaceAll('＜', '<').replaceAll('＞', '>');
+  return normalized
+      .replaceAll(EmotionTagParser._tagMarkupRe, '')
+      .replaceAll(EmotionTagParser._anyTagMarkupRe, '');
 }

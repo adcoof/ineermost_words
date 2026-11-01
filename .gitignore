@@ -37,3 +37,6 @@ android/app/release/
 # 系统
 .DS_Store
 Thumbs.db
+
+# 本地验证产物（真机截图 / 探针脚本 / 音频样本，不入库）
+tool/api_probes/

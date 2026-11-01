@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/widgets/glass.dart';
 import '../features/chat/presentation/conversation_list_page.dart';
 import '../features/characters/presentation/character_list_page.dart';
 import '../features/pet/presentation/pet_page.dart';
@@ -32,15 +33,24 @@ class AiRoleplayApp extends ConsumerWidget {
 }
 
 /// 主界面壳：四页切换 + 底部导航。
-class _MainShell extends StatefulWidget {
+class _MainShell extends ConsumerStatefulWidget {
   const _MainShell();
 
   @override
-  State<_MainShell> createState() => _MainShellState();
+  ConsumerState<_MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<_MainShell> {
+class _MainShellState extends ConsumerState<_MainShell> {
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // 内置默认桌宠种子（v8）：首次启动解压 APK 内 Haru 入库（幂等）。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(petModelRepositoryProvider).ensureDefaultModel();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,19 +66,33 @@ class _MainShellState extends State<_MainShell> {
           ],
         ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: const [
-          NavigationDestination(
-              icon: Icon(Icons.chat_bubble_outline), label: '会话'),
-          NavigationDestination(
-              icon: Icon(Icons.person_outline), label: '角色'),
-          NavigationDestination(
-              icon: Icon(Icons.pets_outlined), label: '桌宠'),
-          NavigationDestination(
-              icon: Icon(Icons.settings_outlined), label: '设置'),
-        ],
+      // 液态玻璃底栏（v8）：导航本体透明，模糊由外层 GlassPanel 承担。
+      bottomNavigationBar: GlassPanel(
+        radius: BorderRadius.zero,
+        blur: 22,
+        fillOpacity: 0.07,
+        boxShadow: null,
+        child: NavigationBar(
+          backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          selectedIndex: _index,
+          onDestinationSelected: (i) => setState(() => _index = i),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.chat_bubble_outline),
+              label: '会话',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              label: '角色',
+            ),
+            NavigationDestination(icon: Icon(Icons.pets_outlined), label: '桌宠'),
+            NavigationDestination(
+              icon: Icon(Icons.settings_outlined),
+              label: '设置',
+            ),
+          ],
+        ),
       ),
     );
   }

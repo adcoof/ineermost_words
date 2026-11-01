@@ -5,12 +5,15 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/services.dart' show rootBundle;
 
 import '../../../core/utils/id.dart';
 import '../../../data/local/app_database.dart';
 import '../../chat/application/emotion_tag_parser.dart';
 import '../domain/pet_command.dart';
 import '../domain/pet_model.dart';
+import 'pet_model_importer.dart';
 
 /// 一条标签 → 桌宠指令的映射。
 class EmotionMapping {
@@ -44,16 +47,15 @@ class EmotionMapping {
     String? targetId,
     int? priority,
     bool? enabled,
-  }) =>
-      EmotionMapping(
-        id: id,
-        petModelId: petModelId,
-        tag: tag ?? this.tag,
-        actionType: actionType ?? this.actionType,
-        targetId: targetId ?? this.targetId,
-        priority: priority ?? this.priority,
-        enabled: enabled ?? this.enabled,
-      );
+  }) => EmotionMapping(
+    id: id,
+    petModelId: petModelId,
+    tag: tag ?? this.tag,
+    actionType: actionType ?? this.actionType,
+    targetId: targetId ?? this.targetId,
+    priority: priority ?? this.priority,
+    enabled: enabled ?? this.enabled,
+  );
 
   /// 转成桌宠指令；motion 的 targetId 形如 `TapBody` 或 `TapBody:2`。
   PetCommand? toCommand() {
@@ -93,6 +95,26 @@ class PetModelRepository {
     await db.into(db.petModels).insertOnConflictUpdate(_modelToRow(model));
   }
 
+  /// 内置默认桌宠（v8）：首次启动把打包进 APK 的 Haru 模型解压落盘并入库
+  /// （固定 id 'haru'，幂等）；失败不致命，下次启动重试。
+  Future<void> ensureDefaultModel() async {
+    final existing = await (db.select(
+      db.petModels,
+    )..where((t) => t.id.equals('haru'))).getSingleOrNull();
+    if (existing != null) return;
+    try {
+      final data = await rootBundle.load('assets/pet/haru_default.zip');
+      final model = await PetModelImporter().importZip(
+        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+        idOverride: 'haru',
+        nameOverride: 'Haru',
+      );
+      await saveModel(model);
+    } catch (e) {
+      debugPrint('pet seed haru: $e');
+    }
+  }
+
   Future<void> deleteModel(String id) async {
     final model = await getModel(id);
     await (db.delete(db.petModels)..where((t) => t.id.equals(id))).go();
@@ -112,8 +134,7 @@ class PetModelRepository {
   /// 某模型可见的映射：全局（petModelId=null）+ 模型级，按优先级倒序。
   Stream<List<EmotionMapping>> watchMappings(String petModelId) {
     final q = db.select(db.emotionMappings)
-      ..where((t) =>
-          t.petModelId.equals(petModelId) | t.petModelId.isNull())
+      ..where((t) => t.petModelId.equals(petModelId) | t.petModelId.isNull())
       ..orderBy([
         (t) => OrderingTerm.desc(t.priority),
         (t) => OrderingTerm.asc(t.tag),
@@ -132,9 +153,11 @@ class PetModelRepository {
     final model = await getModel(petModelId);
     // 不在 SQL 里过滤 enabled：需要区分「用户从未配置」与「显式禁用」。
     final q = db.select(db.emotionMappings)
-      ..where((t) =>
-          t.tag.equals(event.value) &
-          (t.petModelId.equals(petModelId) | t.petModelId.isNull()));
+      ..where(
+        (t) =>
+            t.tag.equals(event.value) &
+            (t.petModelId.equals(petModelId) | t.petModelId.isNull()),
+      );
     final rows = await q.get();
     final all = rows.map(_mappingFromRow).toList();
 
@@ -179,7 +202,10 @@ class PetModelRepository {
 
   /// expression 目标适配：精确 → 大小写容错 → tag 哈希兜底。
   PetCommand? _adaptExpression(
-      PetCommand command, String tag, PetModel? model) {
+    PetCommand command,
+    String tag,
+    PetModel? model,
+  ) {
     final expressions = model?.expressions ?? const [];
     if (expressions.isEmpty) return command; // 模型未知时不拦截。
     if (expressions.contains(command.expressionId)) return command;
@@ -195,7 +221,9 @@ class PetModelRepository {
 
   /// 供「试触发」使用：把单条映射按与事件相同的适配逻辑转成指令。
   Future<PetCommand?> resolveForMapping(
-      EmotionMapping mapping, String petModelId) async {
+    EmotionMapping mapping,
+    String petModelId,
+  ) async {
     if (!mapping.enabled) return null;
     final command = mapping.toCommand();
     if (command == null) return null;
@@ -232,8 +260,11 @@ class PetModelRepository {
     if (command.motionIndex >= count || command.motionIndex < 0) {
       return PetCommand.motion(group, index: 0, priority: command.priority);
     }
-    return PetCommand.motion(group,
-        index: command.motionIndex, priority: command.priority);
+    return PetCommand.motion(
+      group,
+      index: command.motionIndex,
+      priority: command.priority,
+    );
   }
 
   /// tag → 表情列表的稳定哈希下标（djb2，跨进程一致）。
@@ -271,52 +302,55 @@ class PetModelRepository {
       ('shake_head', 'motion', 'TapBody:1', 1),
     ];
     for (final (tag, type, target, priority) in defaults) {
-      await saveMapping(EmotionMapping(
-        id: newId(),
-        tag: tag,
-        actionType: type,
-        targetId: target,
-        priority: priority,
-      ));
+      await saveMapping(
+        EmotionMapping(
+          id: newId(),
+          tag: tag,
+          actionType: type,
+          targetId: target,
+          priority: priority,
+        ),
+      );
     }
   }
 
   PetModel _modelFromRow(PetModelRow row) => PetModel(
-        id: row.id,
-        name: row.name,
-        dirPath: row.dirPath,
-        entryJsonPath: row.entryJsonPath,
-        thumbnailPath: row.thumbnailPath,
-        expressions: (jsonDecode(row.expressions) as List)
-            .map((e) => e.toString())
-            .toList(),
-        motionGroups: (jsonDecode(row.motionGroups) as Map)
-            .map((k, v) => MapEntry(k.toString(), v as int)),
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-      );
+    id: row.id,
+    name: row.name,
+    dirPath: row.dirPath,
+    entryJsonPath: row.entryJsonPath,
+    thumbnailPath: row.thumbnailPath,
+    expressions: (jsonDecode(row.expressions) as List)
+        .map((e) => e.toString())
+        .toList(),
+    motionGroups: (jsonDecode(row.motionGroups) as Map).map(
+      (k, v) => MapEntry(k.toString(), v as int),
+    ),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  );
 
   PetModelsCompanion _modelToRow(PetModel m) => PetModelsCompanion(
-        id: Value(m.id),
-        name: Value(m.name),
-        dirPath: Value(m.dirPath),
-        entryJsonPath: Value(m.entryJsonPath),
-        thumbnailPath: Value(m.thumbnailPath),
-        expressions: Value(jsonEncode(m.expressions)),
-        motionGroups: Value(jsonEncode(m.motionGroups)),
-        createdAt: Value(m.createdAt),
-        updatedAt: Value(m.updatedAt),
-      );
+    id: Value(m.id),
+    name: Value(m.name),
+    dirPath: Value(m.dirPath),
+    entryJsonPath: Value(m.entryJsonPath),
+    thumbnailPath: Value(m.thumbnailPath),
+    expressions: Value(jsonEncode(m.expressions)),
+    motionGroups: Value(jsonEncode(m.motionGroups)),
+    createdAt: Value(m.createdAt),
+    updatedAt: Value(m.updatedAt),
+  );
 
   EmotionMapping _mappingFromRow(EmotionMappingRow row) => EmotionMapping(
-        id: row.id,
-        petModelId: row.petModelId,
-        tag: row.tag,
-        actionType: row.actionType,
-        targetId: row.targetId,
-        priority: row.priority,
-        enabled: row.enabled,
-      );
+    id: row.id,
+    petModelId: row.petModelId,
+    tag: row.tag,
+    actionType: row.actionType,
+    targetId: row.targetId,
+    priority: row.priority,
+    enabled: row.enabled,
+  );
 
   EmotionMappingsCompanion _mappingToRow(EmotionMapping m) =>
       EmotionMappingsCompanion(
