@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="violet">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>心语 · Innermost Words — 让每一次对话，都怦然心动</title>
+<meta name="description" content="心语（Innermost Words）是一款开源的安卓 AI 角色扮演聊天应用：导入 SillyTavern 角色卡，跨会话记忆、Live2D 桌宠、双向语音、五套深空主题。自备 API，数据留在本地。">
+<meta name="theme-color" content="#07060F">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="心语 · Innermost Words">
+<meta property="og:title" content="心语 · Innermost Words — 让每一次对话，都怦然心动">
+<meta property="og:description" content="开源安卓 AI 角色扮演聊天应用：角色卡、跨会话记忆、Live2D 桌宠、双向语音。自备 API，数据全在本地。">
+<meta property="og:image" content="https://adcoof.github.io/ineermost_words/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="https://adcoof.github.io/ineermost_words/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://adcoof.github.io/ineermost_words/">
+<link rel="icon" type="image/png" sizes="64x64" href="assets/img/icon-64.png">
+<link rel="apple-touch-icon" href="assets/img/icon-180.png">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-android" viewBox="0 0 24 24"><path d="M17.6 9.48l1.84-3.18a.4.4 0 0 0-.7-.4l-1.87 3.24a11.4 11.4 0 0 0-9.74 0L5.26 5.9a.4.4 0 1 0-.7.4L6.4 9.48A10.8 10.8 0 0 0 1 18h22a10.8 10.8 0 0 0-5.4-8.52ZM7 15.25a1 1 0 1 1 1-1 1 1 0 0 1-1 1Zm10 0a1 1 0 1 1 1-1 1 1 0 0 1-1 1Z"/></symbol>
+  <symbol id="i-github" viewBox="0 0 24 24"><path d="M12 .3a12 12 0 0 0-3.79 23.4c.6.1.82-.26.82-.58v-2.23c-3.34.73-4.04-1.42-4.04-1.42-.55-1.4-1.34-1.77-1.34-1.77-1.08-.74.09-.73.09-.73 1.2.08 1.83 1.24 1.83 1.24 1.07 1.84 2.81 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.66-.3-5.47-1.34-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.11-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.28-1.55 3.29-1.23 3.29-1.23.65 1.66.24 2.88.12 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.61-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.21.7.82.58A12 12 0 0 0 12 .3Z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 2.75a1 1 0 0 1 1 1v9.9l3.3-3.3a1 1 0 0 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3v-9.9a1 1 0 0 1 1-1ZM4 17a1 1 0 0 1 1 1v1.25h14V18a1 1 0 1 1 2 0v1.75A1.5 1.5 0 0 1 19.5 21h-15A1.5 1.5 0 0 1 3 19.75V18a1 1 0 0 1 1-1Z"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M13.3 4.3a1 1 0 0 1 1.4 0l6 6a1 1 0 0 1 0 1.4l-6 6a1 1 0 0 1-1.4-1.4L17.6 12H4a1 1 0 1 1 0-2h13.6l-4.3-4.3a1 1 0 0 1 0-1.4Z"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M12 2.9c5.3 0 9.6 3.9 9.6 8.7 0 4.8-4.3 8.7-9.6 8.7a11 11 0 0 1-2.7-.33l-3.5 1.86a.8.8 0 0 1-1.16-.87l.66-3.1A8.3 8.3 0 0 1 2.4 11.6C2.4 6.8 6.7 2.9 12 2.9Zm-3.5 7a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6Zm3.5 0a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6Zm3.5 0a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6Z"/></symbol>
+  <symbol id="i-brain" viewBox="0 0 24 24"><path d="M9.2 3.2A3.4 3.4 0 0 0 5.8 6.6c-1.6.5-2.8 2-2.8 3.8 0 1 .4 1.9 1 2.6a3.9 3.9 0 0 0 1.5 5.7 3.5 3.5 0 0 0 6.2 1.7V5.1a3.4 3.4 0 0 0-2.5-1.9Zm5.6 0a3.4 3.4 0 0 1 3.4 3.4c1.6.5 2.8 2 2.8 3.8 0 1-.4 1.9-1 2.6a3.9 3.9 0 0 1-1.5 5.7 3.5 3.5 0 0 1-6.2 1.7V5.1a3.4 3.4 0 0 1 2.5-1.9Z"/></symbol>
+  <symbol id="i-paw" viewBox="0 0 24 24"><path d="M7.2 4.6a2.1 2.1 0 0 1 3 .5c.5.7.7 1.6.5 2.4-.2.9-.8 1.6-1.6 1.9a2.1 2.1 0 0 1-2.6-1.3c-.4-1.3.1-2.6.7-3.5Zm9.6 0c.6.9 1.1 2.2.7 3.5a2.1 2.1 0 0 1-2.6 1.3 2.5 2.5 0 0 1-1.6-1.9c-.2-.8 0-1.7.5-2.4a2.1 2.1 0 0 1 3-.5ZM3.9 9.9A2 2 0 0 1 6.5 11c.5 1.3-.2 2.6-1.4 3a2 2 0 0 1-2.5-1.5c-.3-1.2.3-2.2 1.3-2.6Zm16.2 0c1 .4 1.6 1.4 1.3 2.6a2 2 0 0 1-2.5 1.5c-1.2-.4-1.9-1.7-1.4-3a2 2 0 0 1 2.6-1.1ZM12 12.4c2.7 0 5.3 2.4 5.3 4.9 0 1.8-1.3 3-3.2 3-1 0-1.5-.4-2.1-.4s-1.1.4-2.1.4c-1.9 0-3.2-1.2-3.2-3 0-2.5 2.6-4.9 5.3-4.9Z"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 2.5a3.6 3.6 0 0 1 3.6 3.6v5.2a3.6 3.6 0 1 1-7.2 0V6.1A3.6 3.6 0 0 1 12 2.5Zm7 8.7a1 1 0 0 1 1 1 8 8 0 0 1-7 7.94V21.5h2.5a1 1 0 1 1 0 2h-7a1 1 0 1 1 0-2H11v-1.36a8 8 0 0 1-7-7.94 1 1 0 1 1 2 0 6 6 0 0 0 12 0 1 1 0 0 1 1-1Z"/></symbol>
+  <symbol id="i-sticker" viewBox="0 0 24 24"><path d="M13.4 2.1a10 10 0 1 0 8.5 8.5h-5.8a3 3 0 0 1-3-3V2.4c.1-.1.2-.2.3-.3ZM15.4 2v5.6a1 1 0 0 0 1 1h5.6a10 10 0 0 0-6.6-6.6Z"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 1.8 14 9l7.2 2-7.2 2-2 7.2L10 13 2.8 11 10 9l2-7.2Z"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2.2 4.6 5a1.4 1.4 0 0 0-.9 1.3v5.5c0 5 3.3 8.5 7.8 10.1.3.1.7.1 1 0 4.5-1.6 7.8-5.1 7.8-10.1V6.3a1.4 1.4 0 0 0-.9-1.3L12 2.2Zm4 6.9-5 5a1 1 0 0 1-1.4 0l-2.2-2.2a1 1 0 1 1 1.4-1.4l1.5 1.5 4.3-4.3a1 1 0 1 1 1.4 1.4Z"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M5 2.5h11a3 3 0 0 1 3 3v13a3 3 0 0 0-3-3H5V2.5Zm0 15.3h11a1 1 0 0 1 0 2H5a1 1 0 0 1 0-2Z"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="M8.7 6.3a1 1 0 0 1 0 1.4L4.4 12l4.3 4.3a1 1 0 1 1-1.4 1.4l-5-5a1 1 0 0 1 0-1.4l5-5a1 1 0 0 1 1.4 0Zm6.6 0a1 1 0 0 1 1.4 0l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4L19.6 12l-4.3-4.3a1 1 0 0 1 0-1.4Z"/></symbol>
+</svg>
+
+<div class="bg" aria-hidden="true">
+  <span class="bg-orb bg-orb--1"></span>
+  <span class="bg-orb bg-orb--2"></span>
+  <span class="bg-orb bg-orb--3"></span>
+  <span class="bg-grid"></span>
+  <span class="bg-noise"></span>
+</div>
+
+<header class="nav" id="nav">
+  <div class="wrap nav__inner">
+    <a class="brand" href="#top" aria-label="心语 首页">
+      <img src="assets/img/icon-192.png" alt="" width="34" height="34">
+      <span class="brand__name">心语</span>
+      <span class="brand__sub">Innermost Words</span>
+    </a>
+    <nav class="nav__links" id="navLinks" aria-label="主导航">
+      <a href="#features">特性</a>
+      <a href="#themes">主题</a>
+      <a href="#start">上手</a>
+      <a href="#changelog">更新</a>
+      <a href="#faq">问答</a>
+      <a class="btn btn--sm btn--primary" href="#download">
+        <svg class="ico" aria-hidden="true"><use href="#i-download"/></svg>下载
+      </a>
+    </nav>
+    <button class="nav__toggle" id="navToggle" aria-label="打开菜单" aria-expanded="false" aria-controls="navLinks">
+      <span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="hero">
+    <div class="wrap hero__inner">
+      <div class="hero__copy">
+        <p class="eyebrow"><span class="dot"></span>奇点重现工作室 · 开源安卓应用</p>
+        <h1 class="hero__title">心语</h1>
+        <p class="hero__en">Innermost Words</p>
+        <p class="hero__tagline">让每一次对话，都怦然心动。</p>
+        <p class="hero__lead">
+          自带 API 的 AI 角色扮演应用：导入你的角色卡，让 TA 记住你们聊过的每一次心跳。桌宠会随情绪动起来，也会开口说话。
+        </p>
+        <div class="hero__cta">
+          <a class="btn btn--primary btn--lg" href="https://github.com/adcoof/ineermost_words/releases/download/v1.3.5/app-release.apk" rel="noopener">
+            <svg class="ico" aria-hidden="true"><use href="#i-android"/></svg>
+            <span>下载 APK · v1.3.5</span>
+            <small>GitHub</small>
+          </a>
+          <a class="btn btn--ghost btn--lg" href="https://gitee.com/phantexdream/ineermost_words/releases/download/v1.3.5/app-release.apk" rel="noopener">
+            <svg class="ico" aria-hidden="true"><use href="#i-download"/></svg>
+            <span>Gitee 国内下载</span>
+            <small>镜像</small>
+          </a>
+        </div>
+        <ul class="hero__meta">
+          <li>约 75 MB</li>
+          <li>Android 7.0+</li>
+          <li>木兰宽松许可证 v2</li>
+          <li>数据只在本机</li>
+        </ul>
+      </div>
+
+      <div class="hero__visual" aria-hidden="true">
+        <span class="ring ring--1"></span>
+        <span class="ring ring--2"></span>
+        <span class="ring ring--3"></span>
+        <div class="badge">
+          <img src="assets/img/icon-512.png" alt="" width="512" height="512">
+          <span class="badge__gloss"></span>
+        </div>
+        <span class="chip chip--a"><svg class="ico" aria-hidden="true"><use href="#i-brain"/></svg>跨会话记忆</span>
+        <span class="chip chip--b"><svg class="ico" aria-hidden="true"><use href="#i-paw"/></svg>Live2D 桌宠</span>
+        <span class="chip chip--c"><svg class="ico" aria-hidden="true"><use href="#i-mic"/></svg>双向语音</span>
+        <div class="bubble bubble--ai">
+          <span class="bubble__name">星野雀</span>
+          你回来啦。……才、才不是特意等你，只是刚好在窗边站了一会儿。
+        </div>
+        <div class="bubble bubble--me">今天风很大，早点回去。</div>
+      </div>
+    </div>
+    <a class="hero__scroll" href="#features" aria-label="向下浏览"><span></span></a>
+  </section>
+
+  <section class="section" id="features">
+    <div class="wrap">
+      <header class="sec-head reveal">
+        <p class="eyebrow"><span class="dot"></span>为什么是心语</p>
+        <h2>不是聊天框，是一段<span class="grad">能记住你的关系</span></h2>
+        <p class="sec-head__sub">每个细节都在把「模型回复」变成「TA 在说话」。</p>
+      </header>
+
+      <div class="bento">
+        <article class="card card--wide reveal">
+          <span class="card__ico"><svg class="ico" aria-hidden="true"><use href="#i-brain"/></svg></span>
+          <h3>跨会话记忆</h3>
+          <p>同一角色的不同会话共享记忆：近期对话直接注入提示词，更早的历史由模型浓缩成第一人称记忆摘要。换一个会话，关系不会重置。</p>
+          <ul class="ticks">
+            <li>记忆文档：分节整理，随时翻阅</li>
+            <li>「TA 眼中的你」人物画像</li>
+            <li>导出 PNG / Word 分享</li>
+          </ul>
+        </article>
+
+        <article class="card reveal">
+          <span class="card__ico"><svg class="ico" aria-hidden="true"><use href="#i-paw"/></svg></span>
+          <h3>Live2D 桌宠</h3>
+          <p>回复里的情绪与动作标签实时驱动表情、动作和句级口型；关键词兜底，没有标签也能读懂气氛。</p>
+          <p class="card__note">内置 Haru 开箱即用，也可导入自己的 <code>.moc3</code> 模型包。</p>
+        </article>
+
+        <article class="card reveal">
+          <span class="card__ico"><svg class="ico" aria-hidden="true"><use href="#i-mic"/></svg></span>
+          <h3>双向语音</h3>
+          <p>按住说话直接发送，回复逐句朗读，播报中按麦克风即刻打断。引擎四级降级：MiMo 云端 → Edge → OpenAI 兼容 → 系统。</p>
+          <p class="card__note">9 位发音人，语速 0.5–2.0x；一句话描述就能定制专属音色。</p>
+        </article>
+
+        <article class="card reveal">
+          <span class="card__ico"><svg class="ico" aria-hidden="true"><use href="#i-chat"/></svg></span>
+          <h3>像真人一样打字</h3>
+          <p>一轮回复拆成最多 4 条短消息逐条上屏；模型偷懒写成一大段时，客户端自动按空行与句子兜底分段。</p>
+          <p class="card__note">时间感知：昨天的事不会被说成「刚刚」。</p>
+        </article>
+
+        <article class="card reveal">
+          <span class="card__ico"><svg class="ico" aria-hidden="true"><use href="#i-sticker"/></svg></span>
+          <h3>表情包</h3>
+          <p>按 14 种心情为角色准备贴纸，一种心情可放多张。回复情绪到位时自动发一张；没有完全匹配的心情，会借一张相近的。</p>
+          <p class="card__note">喜 / 怒 / 哀 / 乐 / 疑惑 / 害羞 / 惊讶 / 得意 / 无语 / 害怕 / 哭泣 / 爱心 / 思考 / 困倦</p>
+        </article>
+
+        <article class="card card--wide reveal">
+          <span class="card__ico"><svg class="ico" aria-hidden="true"><use href="#i-book"/></svg></span>
+          <h3>角色卡与立绘</h3>
+          <p>手动创建，或直接导入 SillyTavern V2 角色卡（PNG / JSON）：人设、性格、场景、开场白、示例对话完整映射。立绘支持 1:1 可视化裁剪，双指缩放取局部。</p>
+          <ul class="ticks">
+            <li>按固定顺序组装提示词，人设不跑偏</li>
+            <li>最近 40 条滑动窗口 + 记忆 + Few-shot</li>
+            <li>会话独立背景板，键盘弹出不缩放</li>
+          </ul>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--themes" id="themes">
+    <div class="wrap">
+      <header class="sec-head reveal">
+        <p class="eyebrow"><span class="dot"></span>五套完整主题</p>
+        <h2>换一套颜色，<span class="grad">换一种心情</span></h2>
+        <p class="sec-head__sub">点下面的色板，这一页也会跟着变——就像应用里一样即时生效。</p>
+      </header>
+
+      <div class="themes reveal">
+        <div class="themes__picker" role="group" aria-label="选择主题">
+          <button class="swatch is-active" data-theme-set="violet" aria-pressed="true">
+            <span class="swatch__dot" style="--s1:#8E7CFF;--s2:#4DC9FF"></span>
+            <span class="swatch__txt"><strong>深空紫</strong><small>Deep Space</small></span>
+          </button>
+          <button class="swatch" data-theme-set="sakura" aria-pressed="false">
+            <span class="swatch__dot" style="--s1:#FF7BAC;--s2:#FFB3D1"></span>
+            <span class="swatch__txt"><strong>樱夜粉</strong><small>Sakura Night</small></span>
+          </button>
+          <button class="swatch" data-theme-set="azure" aria-pressed="false">
+            <span class="swatch__dot" style="--s1:#4DC9FF;--s2:#7BE0FF"></span>
+            <span class="swatch__txt"><strong>青岚蓝</strong><small>Azure Mist</small></span>
+          </button>
+          <button class="swatch" data-theme-set="mint" aria-pressed="false">
+            <span class="swatch__dot" style="--s1:#5CE0B0;--s2:#9AEED0"></span>
+            <span class="swatch__txt"><strong>薄荷绿</strong><small>Mint Breeze</small></span>
+          </button>
+          <button class="swatch" data-theme-set="daylight" aria-pressed="false">
+            <span class="swatch__dot" style="--s1:#6C5CE7;--s2:#0091B5"></span>
+            <span class="swatch__txt"><strong>晨光白</strong><small>Daylight</small></span>
+          </button>
+          <p class="themes__hint">选中的颜色记在 <b>本地</b>，下次打开还是它；手机端在「设置 → 外观」里切换。</p>
+        </div>
+
+        <div class="preview" aria-hidden="true">
+          <div class="preview__bar">
+            <span class="preview__avatar" data-avatar>雀</span>
+            <span class="preview__name">星野雀</span>
+            <span class="preview__icons">♪ ·••</span>
+          </div>
+          <div class="preview__body">
+            <div class="msg msg--in">哼，你倒是来得挺早。<br>……站那儿做什么，过来坐啊。</div>
+            <div class="msg msg--out">怕你等着急。</div>
+            <div class="msg msg--in is-typing"><i></i><i></i><i></i></div>
+          </div>
+          <div class="preview__nav">
+            <span class="is-on">会话</span><span>角色</span><span>桌宠</span><span>设置</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="start">
+    <div class="wrap">
+      <header class="sec-head reveal">
+        <p class="eyebrow"><span class="dot"></span>三步开始</p>
+        <h2>下载、填 Key、<span class="grad">开始对话</span></h2>
+        <p class="sec-head__sub">没有注册、没有订阅、没有云端账号。接入你自己的模型即可。</p>
+      </header>
+
+      <ol class="steps">
+        <li class="step reveal">
+          <span class="step__num">01</span>
+          <h3>安装 APK</h3>
+          <p>从 GitHub 或 Gitee 下载 <code>app-release.apk</code> 安装。升级时直接覆盖安装，会话、角色、记忆全部保留。</p>
+        </li>
+        <li class="step reveal">
+          <span class="step__num">02</span>
+          <h3>填入 API</h3>
+          <p>设置 → API 供应商，填写接口地址（形如 <code>https://api.xxx.com/v1</code>）与密钥，点一下测试连接。</p>
+        </li>
+        <li class="step reveal">
+          <span class="step__num">03</span>
+          <h3>创建角色</h3>
+          <p>新建角色或导入 SillyTavern 角色卡，选一位桌宠，然后——去和 TA 说第一句话。</p>
+        </li>
+      </ol>
+
+      <div class="providers reveal">
+        <span class="providers__label">任意 OpenAI 兼容接口</span>
+        <span class="pill">DeepSeek</span>
+        <span class="pill">Kimi</span>
+        <span class="pill">Qwen</span>
+        <span class="pill">小米 MiMo</span>
+        <span class="pill">Ollama 本地</span>
+        <span class="pill">中转站</span>
+        <span class="pill">自建服务</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--download" id="download">
+    <div class="wrap">
+      <header class="sec-head reveal">
+        <p class="eyebrow"><span class="dot"></span>下载</p>
+        <h2>选一个离你更近的源</h2>
+        <p class="sec-head__sub">同一份 v1.3.5 安装包，两个仓库同步发布。</p>
+      </header>
+
+      <div class="dl">
+        <article class="dl__card reveal">
+          <div class="dl__head">
+            <span class="dl__logo dl__logo--gh"><svg class="ico" aria-hidden="true"><use href="#i-github"/></svg></span>
+            <div>
+              <h3>GitHub</h3>
+              <p>主仓库 · 完整更新日志</p>
+            </div>
+            <span class="dl__badge">v1.3.5</span>
+          </div>
+          <dl class="dl__spec">
+            <div><dt>安装包</dt><dd>app-release.apk</dd></div>
+            <div><dt>大小</dt><dd>约 75 MB</dd></div>
+            <div><dt>要求</dt><dd>Android 7.0+</dd></div>
+          </dl>
+          <div class="dl__actions">
+            <a class="btn btn--primary btn--block" href="https://github.com/adcoof/ineermost_words/releases/download/v1.3.5/app-release.apk" rel="noopener">
+              <svg class="ico" aria-hidden="true"><use href="#i-download"/></svg>下载 APK
+            </a>
+            <div class="dl__links">
+              <a href="https://github.com/adcoof/ineermost_words/releases/tag/v1.3.5" rel="noopener">发行版说明<svg class="ico" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+              <a href="https://github.com/adcoof/ineermost_words" rel="noopener">查看源码<svg class="ico" aria-hidden="true"><use href="#i-code"/></svg></a>
+            </div>
+          </div>
+        </article>
+
+        <article class="dl__card reveal">
+          <div class="dl__head">
+            <span class="dl__logo dl__logo--gitee">G</span>
+            <div>
+              <h3>Gitee</h3>
+              <p>国内镜像 · 访问更快</p>
+            </div>
+            <span class="dl__badge">v1.3.5</span>
+          </div>
+          <dl class="dl__spec">
+            <div><dt>安装包</dt><dd>app-release.apk</dd></div>
+            <div><dt>大小</dt><dd>约 75 MB</dd></div>
+            <div><dt>要求</dt><dd>Android 7.0+</dd></div>
+          </dl>
+          <div class="dl__actions">
+            <a class="btn btn--primary btn--block" href="https://gitee.com/phantexdream/ineermost_words/releases/download/v1.3.5/app-release.apk" rel="noopener">
+              <svg class="ico" aria-hidden="true"><use href="#i-download"/></svg>下载 APK
+            </a>
+            <div class="dl__links">
+              <a href="https://gitee.com/phantexdream/ineermost_words/releases" rel="noopener">发行版说明<svg class="ico" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+              <a href="https://gitee.com/phantexdream/ineermost_words" rel="noopener">查看源码<svg class="ico" aria-hidden="true"><use href="#i-code"/></svg></a>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div class="notes reveal">
+        <p class="notes__item"><svg class="ico" aria-hidden="true"><use href="#i-shield"/></svg>
+          <span><strong>Gitee 直链偶尔要求验证码</strong>，若直接下载没有反应，请进「发行版说明」页面点附件下载。</span>
+        </p>
+        <p class="notes__item"><svg class="ico" aria-hidden="true"><use href="#i-spark"/></svg>
+          <span><strong>首次安装需允许「安装未知应用」</strong>；本应用未上架应用商店，安装包由仓库直接发布。</span>
+        </p>
+        <p class="notes__item"><svg class="ico" aria-hidden="true"><use href="#i-code"/></svg>
+          <span><strong>想自己编译？</strong> <code>flutter pub get</code> → <code>flutter build apk --release</code>，产物在 <code>build/app/outputs/flutter-apk/</code>。</span>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="changelog">
+    <div class="wrap">
+      <header class="sec-head reveal">
+        <p class="eyebrow"><span class="dot"></span>更新日志</p>
+        <h2>v1.3.5 <span class="grad">表情包与液态玻璃</span></h2>
+        <p class="sec-head__sub">2026-11-01 发布 · 数据库自动升级至 schema 8，旧数据完整保留。</p>
+      </header>
+
+      <div class="log">
+        <article class="log__card reveal">
+          <ul class="log__list">
+            <li><strong>表情包</strong>：14 种心情分组，回复情绪到位时自动发贴纸，相近心情自动借用。</li>
+            <li><strong>多段短回复</strong>：一轮最多 4 条短消息逐条上屏，模型不配合时客户端兜底分段。</li>
+            <li><strong>液态玻璃界面</strong>：导航、顶栏、输入栏真实背景模糊 + 渐变描边。</li>
+            <li><strong>记忆文档与「TA 眼中的你」</strong>：分节文档 + 用户画像，可导出 PNG / Word。</li>
+            <li><strong>内置 Haru 桌宠</strong>：首次启动自动导入，新会话默认绑定。</li>
+            <li><strong>时间感知</strong>：注入当前日期时间，跨天消息自动带时间锚点。</li>
+            <li class="log__fix"><strong>修复</strong>：背景板只能裁 1:1、竖图头像裁剪框跑到屏幕外、键盘弹出背景缩小、回复不分段、自造标签漏进气泡。</li>
+          </ul>
+          <div class="log__foot">
+            <span>测试用例增至 304 项，<code>flutter analyze</code> 无告警。</span>
+            <a class="link" href="https://github.com/adcoof/ineermost_words/releases" rel="noopener">全部版本<svg class="ico" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq">
+    <div class="wrap">
+      <header class="sec-head reveal">
+        <p class="eyebrow"><span class="dot"></span>常见问题</p>
+        <h2>你可能想先知道的事</h2>
+      </header>
+
+      <div class="faq">
+        <details class="reveal" open>
+          <summary>要花钱吗？</summary>
+          <p>应用本身免费且开源（木兰宽松许可证 v2）。对话与语音需要模型服务，费用由你选择的供应商收取；本地 Ollama 则可以完全离线。</p>
+        </details>
+        <details class="reveal">
+          <summary>支持哪些模型？</summary>
+          <p>任何 OpenAI 兼容的 <code>/chat/completions</code> 接口：DeepSeek、Kimi、Qwen、小米 MiMo、Ollama、各类中转站或自建服务。语音默认走 MiMo 云端并复用聊天配置，也可切到 Edge、OpenAI 兼容或系统引擎。</p>
+        </details>
+        <details class="reveal">
+          <summary>我的聊天数据会被上传吗？</summary>
+          <p>角色、会话、记忆、表情包、桌宠模型全部保存在本机 SQLite 与本地文件里。只有你主动发起的模型请求会发往你自己配置的接口地址，应用不经过任何中转服务器。</p>
+        </details>
+        <details class="reveal">
+          <summary>为什么语音会失败或没声音？</summary>
+          <p>Edge 免费语音在部分网络环境会被拒绝（403），此时会自动降级到下一个引擎；全部失效会弹提示而不是静默失败。若使用云端 TTS，请确认 API Key 在对应的接口地址上有效。</p>
+        </details>
+        <details class="reveal">
+          <summary>桌宠模型的版权怎么算？</summary>
+          <p>内置的 Haru 是 Live2D 官方示例模型，按 Live2D Sample Model License Agreement 随应用分发；桌宠渲染基于 pixi-live2d-display（MIT）与 Live2D Cubism Core（Powered by Live2D）。导入的模型与角色卡素材请自行确认授权。</p>
+        </details>
+        <details class="reveal">
+          <summary>我的手机能用吗？</summary>
+          <p>需要 Android 7.0（API 24）及以上，安装包约 75 MB。iOS 暂无计划。</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta">
+    <div class="wrap cta__inner reveal">
+      <img class="cta__icon" src="assets/img/icon-192.png" alt="" width="88" height="88" loading="lazy" decoding="async">
+      <div class="cta__copy">
+        <h2>今晚，就和一个会记得你的人说说话。</h2>
+        <p>v1.3.5 · 约 75 MB · Android 7.0+</p>
+      </div>
+      <div class="cta__actions">
+        <a class="btn btn--primary btn--lg" href="https://github.com/adcoof/ineermost_words/releases/download/v1.3.5/app-release.apk" rel="noopener">
+          <svg class="ico" aria-hidden="true"><use href="#i-android"/></svg>下载 APK
+        </a>
+        <a class="btn btn--ghost" href="https://gitee.com/phantexdream/ineermost_words/releases/download/v1.3.5/app-release.apk" rel="noopener">Gitee 镜像</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot__inner">
+    <div class="foot__brand">
+      <img loading="lazy" decoding="async" src="assets/img/studio-logo.png" alt="奇点重现工作室" width="52" height="52">
+      <div>
+        <p class="foot__studio">奇点重现工作室</p>
+        <p class="foot__slogan">让每一次对话，都怦然心动。</p>
+      </div>
+    </div>
+    <nav class="foot__links" aria-label="页脚导航">
+      <a href="https://www.sigborn.xyz" rel="noopener">官网</a>
+      <a href="https://github.com/adcoof/ineermost_words" rel="noopener">GitHub</a>
+      <a href="https://gitee.com/phantexdream/ineermost_words" rel="noopener">Gitee</a>
+      <a href="#changelog">更新日志</a>
+      <a href="#faq">常见问题</a>
+    </nav>
+    <p class="foot__legal">
+      © <span id="year">2026</span> 奇点重现工作室 · 应用名称「心语」及图标素材版权归工作室所有 ·
+      代码以木兰宽松许可证 v2 开源 · Powered by Live2D
+    </p>
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite">
+  <svg class="ico" aria-hidden="true"><use href="#i-android"/></svg>
+  <span>检测到你在用安卓设备，可以直接下载安装</span>
+  <a href="https://github.com/adcoof/ineermost_words/releases/download/v1.3.5/app-release.apk" rel="noopener">下载</a>
+  <button type="button" aria-label="关闭提示" data-toast-close>×</button>
+</div>
+
+<script src="assets/js/main.js" defer></script>
+</body>
+</html>

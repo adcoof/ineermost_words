@@ -1,0 +1,40 @@
+name: 发布宣传页
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - "website/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: 检出
+        uses: actions/checkout@v4
+
+      - name: 配置 Pages
+        uses: actions/configure-pages@v5
+
+      - name: 打包 website/
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website
+
+      - name: 部署
+        id: deploy
+        uses: actions/deploy-pages@v4

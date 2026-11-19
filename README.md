@@ -12,6 +12,12 @@
   English：<a href="README.en.md">README.en.md</a>
 </p>
 
+<p align="center">
+  <a href="https://adcoof.github.io/ineermost_words/">宣传页</a> ·
+  <a href="https://github.com/adcoof/ineermost_words/releases/latest">GitHub 下载 APK</a> ·
+  <a href="https://gitee.com/phantexdream/ineermost_words/releases">Gitee 镜像</a>
+</p>
+
 ---
 
 ## 功能特性
@@ -122,6 +128,7 @@ lib/
 assets/
   pet/          # 桌宠 WebView 宿主、离线 vendor 库、内置 Haru 模型包及其许可声明
   branding/     # 应用图标与工作室 logo
+website/        # 宣传页（纯静态，GitHub Pages 自动发布；说明见 website/README.md）
 ```
 
 ## 测试
