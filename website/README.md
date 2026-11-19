@@ -42,6 +42,14 @@ python -m http.server 8000
 
 > `index.html` 里的 `canonical`、`og:url` 目前按上面的地址写死，换域名或换部署位置时记得一起改。
 
+#### 排错：workflow 报 `Get Pages site failed`
+
+说明仓库还没启用 Pages。到 **Settings → Pages → Source** 选 **GitHub Actions** 保存，然后二选一重跑：
+
+- **Actions → 发布宣传页 → Run workflow**（右上角按钮）；
+- 或者再推一次 `website/` 的改动，workflow 会重新触发。
+
+
 ### Gitee Pages（国内镜像）
 
 Gitee Pages 只部署仓库某个分支的**根目录**，所以要先把 `website/` 推成一个分支：
