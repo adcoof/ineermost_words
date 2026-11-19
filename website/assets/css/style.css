@@ -288,7 +288,7 @@ code {
 .brand img {
   width: 34px;
   height: 34px;
-  border-radius: 10px;
+  border-radius: 50%;
   box-shadow: 0 6px 18px -6px var(--glow);
 }
 .brand__name {
@@ -595,7 +595,7 @@ html[data-theme="daylight"] .btn--primary { color: #fff; }
   inset: 50% auto auto 50%;
   transform: translate(-50%, -50%);
   width: 56%;
-  border-radius: 27%;
+  border-radius: 50%;
   padding: 0;
   box-shadow:
     0 40px 90px -30px var(--glow),
@@ -604,11 +604,11 @@ html[data-theme="daylight"] .btn--primary { color: #fff; }
   animation: float 7s ease-in-out infinite;
   overflow: hidden;
 }
-.badge img { width: 100%; height: auto; border-radius: 27%; }
+.badge img { width: 100%; height: auto; border-radius: 50%; }
 .badge__gloss {
   position: absolute;
   inset: 0;
-  border-radius: 27%;
+  border-radius: 50%;
   background: linear-gradient(150deg, rgba(255, 255, 255, 0.22), transparent 42%, transparent 70%, rgba(255, 255, 255, 0.07));
   pointer-events: none;
 }
@@ -1241,7 +1241,7 @@ html[data-theme="daylight"] .btn--primary { color: #fff; }
   transform: rotate(18deg);
   pointer-events: none;
 }
-.cta__icon { width: 88px; height: 88px; border-radius: 24px; box-shadow: 0 20px 50px -22px var(--glow); }
+.cta__icon { width: 88px; height: 88px; border-radius: 50%; box-shadow: 0 20px 50px -22px var(--glow); }
 .cta__copy { flex: 1 1 320px; }
 .cta__copy h2 { font-size: clamp(23px, 3vw, 32px); margin-bottom: 8px; }
 .cta__copy p { color: var(--muted); font-size: 14px; letter-spacing: 0.02em; }

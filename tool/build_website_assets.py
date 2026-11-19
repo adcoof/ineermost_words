@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "website" / "assets" / "img"
 OUT.mkdir(parents=True, exist_ok=True)
 
-ICON = ROOT / "assets" / "branding" / "app_icon.png"
+ICON = ROOT / "assets" / "branding" / "app_icon_web.png"
 LOGO = ROOT / "assets" / "branding" / "sigborn_logo.png"
 
 FONT_DIR = Path("C:/Windows/Fonts")
@@ -36,11 +36,28 @@ def save(img: Image.Image, name: str) -> None:
     print(f"{name}: {img.size[0]}x{img.size[1]} {path.stat().st_size / 1024:.0f} KB")
 
 
-icon = Image.open(ICON).convert("RGBA")
+def circle_alpha(img: Image.Image, inset: int = 6) -> Image.Image:
+    """图标本体是圆形；只把四周纯白画布裁掉，按圆形边界加透明通道，不碰画好的边缘。"""
+    img = img.convert("RGBA")
+    size = img.size[0]
+    mask = Image.new("L", (size, size), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.ellipse((inset, inset, size - 1 - inset, size - 1 - inset), fill=255)
+    img.putalpha(mask)
+    return img
+
+
+def save(img: Image.Image, name: str) -> None:
+    path = OUT / name
+    img.save(path, optimize=True)
+    print(f"{name}: {img.size[0]}x{img.size[1]} {path.stat().st_size / 1024:.0f} KB")
+
+
+# 原图 1254²，圆形 logo 居中、四周留白约 68px；裁掉白边后按 512/192/180/64 等比缩放。
+icon = Image.open(ICON).convert("RGB").crop((68, 68, 1184, 1184))
+icon = circle_alpha(icon)
 for size in (512, 192, 180, 64):
     target = icon.resize((size, size), Image.LANCZOS)
-    if size >= 192:
-        target = rounded(target, 0.22)
     save(target, "icon-512.png" if size == 512 else f"icon-{size}.png")
 
 # Studio logo for the footer (页面只显示 52px，按 3x 存 156²).
@@ -75,15 +92,14 @@ for x in range(0, W, 48):
 for y in range(0, H, 48):
     draw.line((0, y, W, y), fill=(255, 255, 255, 7))
 
-badge_icon = rounded(icon.resize((252, 252), Image.LANCZOS), 0.22)
+badge_icon = icon.resize((252, 252), Image.LANCZOS)
 halo = Image.new("RGBA", (W, H), (0, 0, 0, 0))
 halo_draw = ImageDraw.Draw(halo)
-halo_draw.rounded_rectangle((78, 178, 350, 450), 62, fill=(142, 124, 255, 90))
+halo_draw.ellipse((92, 192, 372, 472), fill=(142, 124, 255, 90))
 halo = halo.filter(ImageFilter.GaussianBlur(46))
 card = Image.alpha_composite(card.convert("RGBA"), halo)
 card.paste(badge_icon, (106, 206), badge_icon)
 draw = ImageDraw.Draw(card, "RGBA")
-draw.rounded_rectangle((106, 206, 358, 458), 56, outline=(255, 255, 255, 40), width=2)
 
 title_font = font("msyhbd.ttc", 104)
 sub_font = font("msyh.ttc", 34)

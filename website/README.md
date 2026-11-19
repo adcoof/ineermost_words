@@ -11,7 +11,7 @@ website/
 │  ├─ css/style.css         # 设计系统 + 五套主题 + 响应式
 │  ├─ js/main.js            # 主题切换、移动菜单、滚动入场、安卓下载提示
 │  └─ img/
-│     ├─ icon-512.png       # 图标（也用作 og:image 的主视觉来源）
+│     ├─ icon-512.png       # 圆形图标（裁掉原图白边，不重画边缘）
 │     ├─ icon-192/180/64.png
 │     ├─ studio-logo.png    # 奇点重现工作室 logo（页脚，156²）
 │     └─ og.png             # 社交分享封面 1200×630
@@ -126,6 +126,8 @@ https://gitee.com/phantexdream/ineermost_words/releases/download/vX.Y.Z/app-rele
 ```bash
 python tool/build_website_assets.py   # 读 assets/branding/，写 website/assets/img/
 ```
+
+图标源图是 `assets/branding/app_icon_web.png`（1254²，圆形 logo 居中、四周约 68px 白边）。脚本只做「裁掉白边 + 按等比缩放」，不重新画圆角、不做二次蒙版，避免边缘出现锯齿。换图标时替换这张源图即可。
 
 ## 设计备注
 
