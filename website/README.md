@@ -30,6 +30,11 @@ python -m http.server 8000
 
 ## 上线
 
+正式地址：**https://ineermostwords.sigborn.xyz/**（自建服务器，HTTPS）
+镜像地址：**https://adcoof.github.io/ineermost_words/**（GitHub Pages，每次推 `website/` 自动更新）
+
+`index.html` 里的 `canonical`、`og:url`、`og:image` 都写死为正式域名；换域名或换部署位置时记得一起改。
+
 ### GitHub Pages（已配好工作流）
 
 `.github/workflows/pages.yml` 会在 `website/` 有改动并推到 `master` 后自动发布。
@@ -39,8 +44,6 @@ python -m http.server 8000
 1. 仓库 **Settings → Pages → Build and deployment → Source** 选 **GitHub Actions**；
 2. 推一次 `website/` 的改动，或到 **Actions** 手动跑「发布宣传页」；
 3. 站点地址：`https://adcoof.github.io/ineermost_words/`。
-
-> `index.html` 里的 `canonical`、`og:url` 目前按上面的地址写死，换域名或换部署位置时记得一起改。
 
 #### 排错：workflow 报 `Get Pages site failed`
 
@@ -66,9 +69,37 @@ git push origin $(git subtree split --prefix website):refs/heads/pages --force
 
 > Gitee 免费版 Pages 每次都要手动点更新，且首次启动会要求实名认证。
 
-### 自建服务器 / 其它托管
+### 自建服务器（当前正式站点）
 
-把 `website/` 里的文件整个丢到任意静态托管（Nginx、Cloudflare Pages、Vercel、OSS/COS）即可，`index.html` 在根目录。
+腾讯云 OpenCloudOS + 宝塔面板，nginx 1.30.4，Let's Encrypt 证书。
+
+| 项目 | 位置 |
+| --- | --- |
+| 站点目录 | `/var/www/ineermostwords`（即 `website/` 的内容） |
+| nginx 配置 | `/www/server/panel/vhost/nginx/ineermostwords.conf`（仓库内副本：`tool/deploy/ineermostwords.conf`） |
+| 证书 | `/etc/letsencrypt/live/ineermostwords.sigborn.xyz/`，同步到 `/www/server/panel/vhost/ssl/ineermostwords.sigborn.xyz/` |
+| 续期同步脚本 | `/etc/letsencrypt/renewal-hooks/deploy/ineermostwords-sync.sh` |
+
+更新内容：
+
+```bash
+tar -C website -czf /tmp/site.tgz .
+scp /tmp/site.tgz root@111.231.7.158:/tmp/site.tgz
+ssh root@111.231.7.158 'rm -rf /var/www/ineermostwords/* && tar -xzf /tmp/site.tgz -C /var/www/ineermostwords && chown -R www:www /var/www/ineermostwords'
+```
+
+替换 `index.html` 或 CSS 后浏览器刷新即可（静态文件 30 天缓存，`index.html` 不缓存）。
+
+首次给新域名签证书：
+
+```bash
+certbot certonly --webroot -w /var/www/ineermostwords -d ineermostwords.sigborn.xyz \
+  --non-interactive --agree-tos --keep-until-expiring
+```
+
+然后把 `fullchain.pem` / `privkey.pem` 复制到 `/www/server/panel/vhost/ssl/<domain>/`，`nginx -t && systemctl reload nginx`。
+
+> 坑：Windows 的 `ssh` 会把 heredoc 里的双引号剥掉，`$uri` 之类的变量也会被本地丢掉。改服务器配置请把文件先写成本地文件再 `scp`，别用 `ssh ... <<EOF`。
 
 ## 版本号与下载链接
 

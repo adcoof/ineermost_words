@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/branding/app_icon.png" width="160" alt="Innermost Words app icon">
+  <img src="assets/branding/app_icon.png" width="160" alt="ineermost_words app icon">
 </p>
 
-<h1 align="center">Innermost Words（心语）</h1>
+<h1 align="center">ineermost_words（心语）</h1>
 
 <p align="center">Make every conversation a flutter of the heart.</p>
 
@@ -10,6 +10,13 @@
   An Android AI roleplay chat app: bring your own API, import character cards, interact with a Live2D desktop pet, and talk both ways with voice.<br>
   By Sigborn Studio · <a href="https://www.sigborn.xyz">www.sigborn.xyz</a><br>
   中文文档：<a href="README.md">README.md</a>
+</p>
+
+<p align="center">
+  <a href="https://ineermostwords.sigborn.xyz/">Promo page</a> ·
+  <a href="https://adcoof.github.io/ineermost_words/">GitHub Pages mirror</a> ·
+  <a href="https://github.com/adcoof/ineermost_words/releases/latest">GitHub APK</a> ·
+  <a href="https://gitee.com/phantexdream/ineermost_words/releases">Gitee mirror</a>
 </p>
 
 ---
@@ -134,7 +141,7 @@ flutter test      # 304 cases: SSE/tag parsing, splitting and fallback, prompt t
 
 ## Acknowledgments & Copyright
 
-- © Sigborn Studio (sigborn.xyz). The app name "Innermost Words / 心语" and icon assets are property of the studio.
+- © Sigborn Studio (sigborn.xyz). The app name "ineermost_words / 心语" and icon assets are property of the studio.
 - Pet rendering is based on [pixi-live2d-display](https://github.com/guansss/pixi-live2d-display) (MIT) and Live2D Cubism Core; **Powered by Live2D**. Cubism Core is used under the Live2D license (free for individuals and small revenue; please verify the terms before commercial use).
 - The bundled default pet, Haru, is an official Live2D sample model distributed under the Live2D Sample Model License Agreement (see `assets/pet/HARU_LICENSE.txt`; the model is © Live2D).
 - Character cards and model assets imported by users are the user's own responsibility; the app renders them locally only.

@@ -43,9 +43,9 @@ for size in (512, 192, 180, 64):
         target = rounded(target, 0.22)
     save(target, "icon-512.png" if size == 512 else f"icon-{size}.png")
 
-# Studio logo for the footer.
+# Studio logo for the footer (页面只显示 52px，按 3x 存 156²).
 logo = Image.open(LOGO).convert("RGBA")
-logo.thumbnail((520, 520), Image.LANCZOS)
+logo.thumbnail((156, 156), Image.LANCZOS)
 save(logo, "studio-logo.png")
 
 # Open Graph / social card.
@@ -92,7 +92,7 @@ chip_font = font("msyh.ttc", 25)
 
 draw.text((410, 170), "心语", font=title_font, fill=(244, 242, 255))
 draw.text((412, 300), "让每一次对话，都怦然心动", font=sub_font, fill=(180, 172, 220))
-draw.text((412, 356), "Innermost Words", font=en_font, fill=(142, 124, 255))
+draw.text((412, 356), "ineermost_words", font=en_font, fill=(142, 124, 255))
 
 chips = ["AI 角色扮演", "Live2D 桌宠", "双向语音", "开源免费"]
 x = 412

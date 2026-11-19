@@ -13,7 +13,8 @@
 </p>
 
 <p align="center">
-  <a href="https://adcoof.github.io/ineermost_words/">宣传页</a> ·
+  <a href="https://ineermostwords.sigborn.xyz/">宣传页</a> ·
+  <a href="https://adcoof.github.io/ineermost_words/">GitHub Pages 镜像</a> ·
   <a href="https://github.com/adcoof/ineermost_words/releases/latest">GitHub 下载 APK</a> ·
   <a href="https://gitee.com/phantexdream/ineermost_words/releases">Gitee 镜像</a>
 </p>

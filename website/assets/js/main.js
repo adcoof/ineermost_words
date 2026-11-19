@@ -1,4 +1,4 @@
-/* 心语 · Innermost Words — 交互脚本（无依赖） */
+/* 心语 · ineermost_words — 交互脚本（无依赖） */
 (() => {
   "use strict";
 
