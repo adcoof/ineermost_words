@@ -2,18 +2,20 @@
 library;
 
 import 'dart:async';
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
 import '../../../core/errors/app_exception.dart';
 import '../../../core/utils/id.dart';
 import '../../../core/utils/text.dart';
-import '../../../core/utils/time_anchor.dart';
+import '../../../core/utils/token_estimate.dart';
 import '../../characters/application/prompt_assembler.dart';
 import '../../characters/domain/character.dart';
+import '../../characters/domain/memory_fact.dart';
 import '../data/chat_api_client.dart';
 import '../domain/models.dart';
 import 'emotion_tag_parser.dart';
@@ -35,11 +37,15 @@ class ChatUiState {
   /// 最近一次错误（面向用户）。
   final String? errorText;
 
+  /// 最近一次组装提示词的分类用量（聊天页 chip/sheet）。
+  final PromptUsage? contextUsage;
+
   const ChatUiState({
     this.conversationId,
     this.isStreaming = false,
     this.streamingMessageId,
     this.errorText,
+    this.contextUsage,
   });
 
   ChatUiState copyWith({
@@ -47,8 +53,10 @@ class ChatUiState {
     bool? isStreaming,
     String? streamingMessageId,
     String? errorText,
+    PromptUsage? contextUsage,
     bool clearError = false,
     bool clearStreaming = false,
+    bool clearContextUsage = false,
   }) => ChatUiState(
     conversationId: conversationId ?? this.conversationId,
     isStreaming: isStreaming ?? this.isStreaming,
@@ -56,6 +64,9 @@ class ChatUiState {
         ? null
         : (streamingMessageId ?? this.streamingMessageId),
     errorText: clearError ? null : (errorText ?? this.errorText),
+    contextUsage: clearContextUsage
+        ? null
+        : (contextUsage ?? this.contextUsage),
   );
 }
 
@@ -85,6 +96,38 @@ class ChatController extends Notifier<ChatUiState> {
     if (state.isStreaming) _cancelToken?.cancel('切换会话');
     _sendSeq++;
     state = ChatUiState(conversationId: conversationId);
+  }
+
+  /// 重试上一条失败的用户消息：删除该轮用户消息与其后的错误/空回复，再重新发送。
+  ///
+  /// 仅在最后一条是未完成的 assistant 消息时执行，避免对已成功回复重复发送。
+  Future<void> retryLastTurn() async {
+    if (state.isStreaming) return;
+    final conversationId = state.conversationId;
+    if (conversationId == null) return;
+    final chatRepo = ref.read(chatRepositoryProvider);
+    final messages = await chatRepo.watchMessages(conversationId).first;
+    final userIndex = messages.lastIndexWhere((m) => m.role == ChatRole.user);
+    if (userIndex < 0) return;
+    final tail = messages.sublist(userIndex);
+    final lastAssistant = tail.lastWhere(
+      (m) => m.role == ChatRole.assistant,
+      orElse: () => tail.first,
+    );
+    if (lastAssistant.role == ChatRole.assistant &&
+        lastAssistant.status == MessageStatus.done) {
+      return;
+    }
+    final user = messages[userIndex];
+    for (var i = messages.length - 1; i >= userIndex; i--) {
+      await chatRepo.deleteMessage(messages[i].id);
+    }
+    final images = <Uint8List>[];
+    for (final path in user.imageFilePaths) {
+      final file = File(path);
+      if (await file.exists()) images.add(await file.readAsBytes());
+    }
+    await send(user.content, images: images);
   }
 
   /// 发送用户消息（可附图）并流式生成回复。
@@ -172,10 +215,11 @@ class ChatController extends Notifier<ChatUiState> {
       status: MessageStatus.streaming,
     );
 
-    // 4. 组装请求消息：绑定角色走 PromptAssembler（人设 system + 40 条窗口），
-    //    否则保持 M1 的裸历史。角色会话注入跨会话记忆（近期原文+长期摘要，
-    //    设置可关）；无角色会话不注入。历史消息只带图片概括文本备注，
-    //    当前用户消息在最后显式追加（带图走多模态 parts）。
+    // 4. 组装请求消息：预算来自设置里的上下文窗口（token 估算）；
+    //    当前用户消息永远保留，历史从最新往前按预算取。角色会话注入
+    //    跨会话记忆（近期原文+长期摘要，设置可关）；无角色会话只注入
+    //    当前时间。历史消息只带图片概括文本备注，当前用户消息在最后
+    //    显式追加（带图走多模态 parts）。
     final history = await chatRepo.watchMessages(activeConvId).first;
     final Character? character = conv?.characterId == null
         ? null
@@ -185,54 +229,61 @@ class ChatController extends Notifier<ChatUiState> {
     final historyExceptCurrent = history
         .where((m) => m.id != userMsg.id)
         .toList();
+    final settings = ref.read(appSettingsRepositoryProvider);
+    final windowTokens = await settings.contextWindowTokens();
+    final otherTokens = await settings.contextWindowOtherTokens();
+    final reservedTokens = 4 + estimateTokens(trimmed);
     final List<ApiMessage> apiMessages;
+    final PromptUsage usage;
     if (character == null) {
-      // 裸历史也带时间感知（v8）：当前时间 system + 跨日锚点前缀。
-      final msgs = <ApiMessage>[
-        ApiMessage(
-          role: 'system',
-          content: '现在时间：${formatCurrentTime(DateTime.now())}',
-        ),
-      ];
-      DateTime? prevTs;
-      for (final m in historyExceptCurrent) {
-        if (m.id == assistant.id ||
-            m.status != MessageStatus.done ||
-            m.kind != MessageKind.text) {
-          continue;
-        }
-        var content = stripTagMarkup(m.contentWithImageNote);
-        if (content.trim().isEmpty) continue;
-        if (prevTs != null &&
-            m.createdAt.difference(prevTs) >= kTimeAnchorGap) {
-          content = '【${timeAnchorLabel(DateTime.now(), m.createdAt)}】$content';
-        }
-        prevTs = m.createdAt;
-        msgs.add(ApiMessage(role: m.role.wire, content: content));
-      }
-      apiMessages = msgs;
+      final assembled = PromptAssembler().assembleBare(
+        history: historyExceptCurrent,
+        tokenBudget: windowTokens,
+        reservedTokens: reservedTokens,
+      );
+      apiMessages = assembled.messages;
+      usage = assembled.usage;
     } else {
       var memorySummary = '';
       var userSummary = '';
-      var pastTranscript = const <ChatMessage>[];
-      if (await ref.read(appSettingsRepositoryProvider).memoryEnabled()) {
-        final memory = await ref
-            .read(characterRepositoryProvider)
-            .getMemory(character.id);
+      final pastSessions = <PastSession>[];
+      var facts = const <MemoryFact>[];
+      if (await settings.memoryEnabled()) {
+        final characterRepo = ref.read(characterRepositoryProvider);
+        final memory = await characterRepo.getMemory(character.id);
         memorySummary = memory.summary;
         userSummary = memory.userSummary;
-        pastTranscript = await chatRepo.getRecentOtherMessages(
+        facts = await characterRepo.getMemoryFacts(character.id);
+        // 跨会话片段按会话分组、每会话独立配额，纯图 + 图片摘要也纳入。
+        final groups = await chatRepo.getCrossSessionDigest(
           characterId: character.id,
           excludeConversationId: activeConvId,
         );
+        for (final g in groups) {
+          pastSessions.add(
+            PastSession(
+              title: g.conversation.title,
+              messages: g.messages,
+            ),
+          );
+        }
       }
-      apiMessages = PromptAssembler().assemble(
+      final assembled = PromptAssembler().assembleDetailed(
         character: character,
         history: historyExceptCurrent,
         memorySummary: memorySummary,
-        pastTranscript: pastTranscript,
+        pastSessions: pastSessions,
+        facts: facts,
         userSummary: userSummary,
+        tokenBudget: windowTokens,
+        otherTokenBudget: otherTokens,
+        reservedTokens: reservedTokens,
       );
+      apiMessages = assembled.messages;
+      usage = assembled.usage;
+    }
+    if (_sendSeq == seq) {
+      state = state.copyWith(contextUsage: usage);
     }
     apiMessages.add(
       ApiMessage(
@@ -242,11 +293,19 @@ class ChatController extends Notifier<ChatUiState> {
       ),
     );
 
-    // 5. 解析 profile。
-    final profile =
-        await profileRepo.getById(conv?.apiProfileId ?? '') ??
-        await profileRepo.getDefault();
-    if (profile == null) {
+    // 5. 解析 profile。旧会话可能 pin 了已删除/未填 Key 的供应商，回退默认。
+    final pinnedId = conv?.apiProfileId ?? '';
+    var profile = pinnedId.isEmpty ? null : await profileRepo.getById(pinnedId);
+    if (profile == null || profile.apiKey.trim().isEmpty) {
+      final fallback = await profileRepo.getDefault();
+      if (fallback != null) {
+        if (pinnedId.isNotEmpty && fallback.id != pinnedId) {
+          debugPrint('会话 $activeConvId 的供应商 $pinnedId 不可用，改用默认 ${fallback.id}');
+        }
+        profile = fallback;
+      }
+    }
+    if (profile == null || profile.apiKey.trim().isEmpty) {
       await chatRepo.updateMessage(
         assistant.id,
         content: '（未配置 API 供应商）',
@@ -260,17 +319,18 @@ class ChatController extends Notifier<ChatUiState> {
       }
       return;
     }
+    final activeProfile = profile;
 
     // 6. 流式消费（多段，v8）：`[P]` 独行分隔符把一轮回复切成最多
     //    SegmentSplitter.maxSegments 段，每段独立落一行消息。缓冲区
     //    随段整体换新；过期落盘定时器用 identical 快照检查丢弃。
     //    绑定角色时增量剥离情绪/动作标签。
-    final splitter = SegmentSplitter();
+    var splitter = SegmentSplitter();
     var contentBuf = StringBuffer();
     var rawBuf = StringBuffer();
     // 标签剥离对所有会话生效（v8.1）：无角色会话同样可能吐出
     // <action:x> 之类的标记，漏到气泡里就是可见脏文本。
-    final parser = EmotionTagParser();
+    var parser = EmotionTagParser();
     final keywordDetector = character == null
         ? null
         : const KeywordEmotionDetector();
@@ -398,24 +458,61 @@ class ChatController extends Notifier<ChatUiState> {
       }
     }
 
+    // 取消令牌先于 consumeOnce 声明，闭包才能捕获到它。
     final cancelToken = CancelToken();
-    _cancelToken = cancelToken;
-    if (_sendSeq == seq) {
-      state = state.copyWith(isStreaming: true, streamingMessageId: segId);
+
+    /// 每次尝试（首次或空回复重试）都从干净的解析状态开始。
+    void resetAttempt() {
+      flushTimer?.cancel();
+      splitter = SegmentSplitter();
+      contentBuf = StringBuffer();
+      rawBuf = StringBuffer();
+      parser = EmotionTagParser();
+      segEvents = <EmotionEvent>[];
+      segId = assistant.id;
+      segmentCount = 1;
+      keywordTail = '';
+      lastKeywordFired.clear();
     }
 
-    try {
+    /// 错误/取消时把分段器未完成的尾行、标签解析器滞留的文本吐进缓冲，
+    /// 避免「已生成半句但还在行缓冲里」被误判为空、连占位一起删掉。
+    void flushPendingIntoBuffers() {
+      final tail = splitter.flush();
+      if (tail.isNotEmpty) {
+        rawBuf.write(tail);
+        contentBuf.write(parser.feed(tail).flushed);
+      }
+      final pending = parser.flush();
+      if (pending.isNotEmpty) contentBuf.write(pending);
+    }
+
+    /// 消费一轮流，返回正文/原始标签/推理/结束原因，供空回复兜底判断。
+    Future<
+        ({
+          bool gotContent,
+          bool gotRaw,
+          bool gotReasoning,
+          String? finishReason,
+        })> consumeOnce({int? maxTokens}) async {
+      resetAttempt();
+      String? finishReason;
+      var gotReasoning = false;
       final stream = api.streamChat(
-        profile: profile,
+        profile: activeProfile,
         messages: apiMessages,
+        maxTokens: maxTokens,
         cancelToken: cancelToken,
       );
       await for (final delta in stream) {
-        if (delta.content == null) {
-          continue;
+        if (delta.finishReason != null) finishReason = delta.finishReason;
+        if (delta.reasoning != null && delta.reasoning!.isNotEmpty) {
+          gotReasoning = true;
         }
+        final text = delta.content;
+        if (text == null || text.isEmpty) continue;
         // 分段检测先行（行制），文本片段再进情绪标签解析。
-        for (final ev in splitter.feed(delta.content!)) {
+        for (final ev in splitter.feed(text)) {
           if (ev.isBoundary) {
             await endSegmentAtBoundary();
           } else {
@@ -426,8 +523,96 @@ class ChatController extends Notifier<ChatUiState> {
       // 尾行：孤悬 [P] 已被丢弃，其余按普通文本进当前段。
       final tail = splitter.flush();
       if (tail.isNotEmpty) await ingest(tail);
-      await finalizeSegment(MessageStatus.done);
-      await sink.onAssistantDone();
+      // 把滞留的半个标签按普通文本吐出，保证内容不丢。
+      final pending = parser.flush();
+      if (pending.isNotEmpty) contentBuf.write(pending);
+      final gotContent = contentBuf.toString().trim().isNotEmpty;
+      final gotRaw = rawBuf.toString().trim().isNotEmpty;
+      if (gotContent) {
+        await finalizeSegment(MessageStatus.done);
+        await sink.onAssistantDone();
+      }
+      return (
+        gotContent: gotContent,
+        gotRaw: gotRaw,
+        gotReasoning: gotReasoning,
+        finishReason: finishReason,
+      );
+    }
+
+    _cancelToken = cancelToken;
+    if (_sendSeq == seq) {
+      state = state.copyWith(isStreaming: true, streamingMessageId: segId);
+    }
+
+    try {
+      var attempt = 0;
+      late ({
+        bool gotContent,
+        bool gotRaw,
+        bool gotReasoning,
+        String? finishReason,
+      }) outcome;
+
+      while (true) {
+        outcome = await consumeOnce(
+          // 只有 length 截断时才需要加大预算；其余情况同参重试。
+          maxTokens: attempt == 0
+              ? null
+              : (activeProfile.maxTokens == null
+                    ? null
+                    : (activeProfile.maxTokens! * 2 < 1024
+                          ? 1024
+                          : activeProfile.maxTokens! * 2)),
+        );
+
+        var canRetry =
+            attempt == 0 &&
+            !outcome.gotContent &&
+            !outcome.gotRaw &&
+            segmentCount == 1 &&
+            _isRetryableFinish(outcome.finishReason) &&
+            _sendSeq == seq &&
+            !cancelToken.isCancelled;
+        if (canRetry) {
+          canRetry =
+              await ref.read(appSettingsRepositoryProvider).autoRetryEnabled();
+        }
+        if (!canRetry) break;
+
+        attempt++;
+        // 重试前把占位清空；不重复入库用户消息、不重复触发图片概括。
+        await chatRepo.updateMessage(
+          assistant.id,
+          content: '',
+          rawContent: '',
+          status: MessageStatus.streaming,
+        );
+        if (_sendSeq == seq) {
+          state = state.copyWith(streamingMessageId: assistant.id);
+        }
+      }
+
+      final hadText = outcome.gotContent || segmentCount > 1;
+      if (!hadText) {
+        // 整轮空回复：不写库（历史里不留空泡）。
+        flushTimer?.cancel();
+        await chatRepo.deleteMessage(segId);
+        if (cancelToken.isCancelled) {
+          await sink.onAssistantInterrupted();
+        } else {
+          await sink.onAssistantDone();
+          if (_sendSeq == seq) {
+            state = state.copyWith(errorText: _emptyReplyText(outcome));
+          }
+        }
+        return;
+      }
+      if (!outcome.gotContent) {
+        // 最后停在 `[P]` 边界上：删掉空的尾段，前面完成的段保留。
+        flushTimer?.cancel();
+        await chatRepo.deleteMessage(segId);
+      }
 
       // 兜底分段（v8.3 真机）：提示词已要求 `[P]` 分段，但模型经常无视，
       // 整轮仍是一大段。本轮只落了一条文本消息时，按空行/句子补切成
@@ -496,6 +681,7 @@ class ChatController extends Notifier<ChatUiState> {
         );
       }
     } on CancelledException {
+      flushPendingIntoBuffers();
       if (contentBuf.toString().trim().isEmpty &&
           rawBuf.toString().trim().isEmpty) {
         // 当前段无任何内容：删占位（首轮即整轮空 = 不留消息行）。
@@ -507,11 +693,26 @@ class ChatController extends Notifier<ChatUiState> {
       }
       await sink.onAssistantInterrupted();
     } on AppException catch (e) {
-      await finalizeSegment(MessageStatus.error);
+      flushPendingIntoBuffers();
+      if (contentBuf.toString().trim().isEmpty &&
+          rawBuf.toString().trim().isEmpty) {
+        // 没有任何正文/标签：删占位，不在历史里留错误空泡。
+        flushTimer?.cancel();
+        await chatRepo.deleteMessage(segId);
+      } else {
+        await finalizeSegment(MessageStatus.error);
+      }
       await sink.onAssistantInterrupted();
       if (_sendSeq == seq) state = state.copyWith(errorText: e.message);
     } catch (e) {
-      await finalizeSegment(MessageStatus.error);
+      flushPendingIntoBuffers();
+      if (contentBuf.toString().trim().isEmpty &&
+          rawBuf.toString().trim().isEmpty) {
+        flushTimer?.cancel();
+        await chatRepo.deleteMessage(segId);
+      } else {
+        await finalizeSegment(MessageStatus.error);
+      }
       await sink.onAssistantInterrupted();
       if (_sendSeq == seq) state = state.copyWith(errorText: '生成失败：$e');
     } finally {
@@ -530,4 +731,30 @@ class ChatController extends Notifier<ChatUiState> {
   void clearError() {
     state = state.copyWith(clearError: true);
   }
+}
+
+/// 只有正常结束/长度截断/未知（null）才值得同参或加预算重试。
+bool _isRetryableFinish(String? finish) =>
+    finish == null || finish == 'stop' || finish == 'length';
+
+/// 空回复的面向用户提示。
+String _emptyReplyText(
+  ({
+    bool gotContent,
+    bool gotRaw,
+    bool gotReasoning,
+    String? finishReason,
+  })
+  outcome,
+) {
+  if (outcome.finishReason == 'content_filter') {
+    return '内容被模型安全策略拦截，请调整后重试';
+  }
+  if (outcome.gotReasoning) {
+    return '模型只返回了推理内容，没有正文；请调大最大输出 token 或关闭思考模式';
+  }
+  if (outcome.gotRaw) {
+    return '模型只返回了格式标记，没有正文，请重试';
+  }
+  return '模型这次没有返回内容，请重试或检查最大输出设置';
 }

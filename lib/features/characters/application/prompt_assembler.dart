@@ -8,18 +8,89 @@
 /// 5. system 角色对用户的了解（可选，v8）
 /// 6. system 对话示例（few-shot，只进 system 不进历史）
 /// 7. system 回复风格/分段/情绪标签规范（放最后，离对话最近）
-/// 8. 滑动窗口：最近 40 条完成状态的文本消息（含角色开场白，它以
-///    assistant 消息入库）；跨日/长间隔处带时间锚点前缀。
+/// 8. 滑动窗口：按 token 预算从最新消息往前取完成状态的文本消息
+///    （含角色开场白，它以 assistant 消息入库）；跨日/长间隔处带时间锚点前缀。
 library;
 
+import 'dart:math' as math;
+
 import '../../../core/utils/time_anchor.dart';
+import '../../../core/utils/token_estimate.dart';
 import '../../chat/application/emotion_tag_parser.dart' show stripTagMarkup;
 import '../../chat/data/chat_api_client.dart';
 import '../../chat/domain/models.dart';
 import '../domain/character.dart';
+import '../domain/memory_fact.dart';
+
+/// 跨会话原文片段（按会话分组），供提示词渲染「【会话：标题】」。
+class PastSession {
+  final String title;
+  final List<ChatMessage> messages;
+
+  const PastSession({required this.title, required this.messages});
+}
+
+/// 一次组装后各分类的估算 token（用于聊天页用量 chip / sheet）。
+class PromptUsage {
+  /// 系统提示词：人设、时间、场景、示例对话、标签规范。
+  final int systemTokens;
+
+  /// 记忆：长期摘要 + 对用户的了解（事实记忆在 M3 计入 [factTokens]）。
+  final int memoryTokens;
+
+  /// 事实记忆（v1.4 M3 启用；当前为 0）。
+  final int factTokens;
+
+  /// 跨会话原文片段。
+  final int otherSessionTokens;
+
+  /// 本会话历史（含时间锚点）。
+  final int historyTokens;
+
+  /// 当前用户输入（预留，含图片摘要）。
+  final int currentInputTokens;
+
+  /// 用户设置的窗口大小（token）。
+  final int windowTokens;
+
+  const PromptUsage({
+    this.systemTokens = 0,
+    this.memoryTokens = 0,
+    this.factTokens = 0,
+    this.otherSessionTokens = 0,
+    this.historyTokens = 0,
+    this.currentInputTokens = 0,
+    this.windowTokens = 4096,
+  });
+
+  static const empty = PromptUsage();
+
+  int get usedTokens =>
+      systemTokens +
+      memoryTokens +
+      factTokens +
+      otherSessionTokens +
+      historyTokens +
+      currentInputTokens;
+
+  /// 实际可用于历史的预算（窗口的 90%，预留当前输入后）。
+  int get budgetTokens => (windowTokens * 0.9).floor();
+
+  int get remainingTokens => math.max(0, budgetTokens - usedTokens);
+
+  /// 已用 / 窗口；用于 chip 百分比（系统部分也展示，可能超过 100%）。
+  double get ratio => windowTokens <= 0 ? 0 : usedTokens / windowTokens;
+}
+
+class AssembledPrompt {
+  final List<ApiMessage> messages;
+  final PromptUsage usage;
+
+  const AssembledPrompt({required this.messages, required this.usage});
+}
 
 class PromptAssembler {
-  /// 滑动窗口大小。
+  /// 兼容旧调用方的滑动窗口常量；实际窗口由 token 预算决定。
   static const int windowSize = 40;
 
   /// 回复风格 + 多段分隔符 + 情绪/动作标签输出规范。
@@ -51,21 +122,52 @@ class PromptAssembler {
       '[P]\n'
       '<emotion:shy>……哼，才、才没有很开心呢';
 
-  /// 组装完整请求消息列表。
-  ///
-  /// [memorySummary] 长期记忆摘要、[pastTranscript] 同角色其他会话的
-  /// 近期完成消息（时序）、[userSummary] 角色对用户的了解（v8）；
-  /// 各段任一为空则跳过。[now] 注入当前时间便于测试。
+  /// 兼容旧签名；默认预算下等价于 [assembleDetailed] 的 messages。
   List<ApiMessage> assemble({
     required Character character,
     required List<ChatMessage> history,
     String memorySummary = '',
     List<ChatMessage> pastTranscript = const [],
+    List<PastSession> pastSessions = const [],
+    List<MemoryFact> facts = const [],
     String userSummary = '',
     DateTime? now,
+    int tokenBudget = 4096,
+    int otherTokenBudget = 1024,
+    int reservedTokens = 0,
+  }) => assembleDetailed(
+    character: character,
+    history: history,
+    memorySummary: memorySummary,
+    pastTranscript: pastTranscript,
+    pastSessions: pastSessions,
+    facts: facts,
+    userSummary: userSummary,
+    now: now,
+    tokenBudget: tokenBudget,
+    otherTokenBudget: otherTokenBudget,
+    reservedTokens: reservedTokens,
+  ).messages;
+
+  /// 组装并返回分类用量，供聊天页展示。
+  AssembledPrompt assembleDetailed({
+    required Character character,
+    required List<ChatMessage> history,
+    String memorySummary = '',
+    List<ChatMessage> pastTranscript = const [],
+    List<PastSession> pastSessions = const [],
+    List<MemoryFact> facts = const [],
+    String userSummary = '',
+    DateTime? now,
+    int tokenBudget = 4096,
+    int otherTokenBudget = 1024,
+    int reservedTokens = 0,
   }) {
     final currentTime = now ?? DateTime.now();
     final system = <ApiMessage>[];
+    var systemTokens = 0;
+    var memoryTokens = 0;
+    var factTokens = 0;
 
     final persona = StringBuffer('你将扮演以下角色，全程保持角色设定，绝不出戏。\n')
       ..write('名字：${character.name}\n');
@@ -75,92 +177,216 @@ class PromptAssembler {
     if (character.personality.trim().isNotEmpty) {
       persona.write('性格：${character.personality.trim()}');
     }
-    system.add(
-      ApiMessage(role: 'system', content: persona.toString().trimRight()),
+    final personaMsg = ApiMessage(
+      role: 'system',
+      content: persona.toString().trimRight(),
     );
+    system.add(personaMsg);
+    systemTokens += _cost(personaMsg.content);
 
     // 当前时间（时间感知，v8）：配合历史消息的时间锚点，
     // 角色能推断「那是昨天/3天前的事」而不是顺着"刚刚"。
-    system.add(
-      ApiMessage(
-        role: 'system',
-        content: '现在时间：${formatCurrentTime(currentTime)}',
-      ),
+    final timeMsg = ApiMessage(
+      role: 'system',
+      content: '现在时间：${formatCurrentTime(currentTime)}',
     );
+    system.add(timeMsg);
+    systemTokens += _cost(timeMsg.content);
 
     if (character.scenario.trim().isNotEmpty) {
-      system.add(
-        ApiMessage(role: 'system', content: '场景：${character.scenario.trim()}'),
+      final sceneMsg = ApiMessage(
+        role: 'system',
+        content: '场景：${character.scenario.trim()}',
       );
+      system.add(sceneMsg);
+      systemTokens += _cost(sceneMsg.content);
+    }
+
+    // 长期事实（记忆压缩）：只给「日期 + 事实」，明确要求被问细节时
+    // 承认记不清而不是编造；放在近期摘要之前，先给骨架再给近期细节。
+    if (facts.isNotEmpty) {
+      final lines = <String>[];
+      var chars = 0;
+      for (final f in facts) {
+        if (lines.length >= 60) break;
+        final line = '[${_formatDate(f.occurredAt)}] ${f.fact.trim()}';
+        if (chars + line.length > 1200) break;
+        lines.add(line);
+        chars += line.length + 1;
+      }
+      if (lines.isNotEmpty) {
+        final msg = ApiMessage(
+          role: 'system',
+          content:
+              '以下是你记得的长期事实（按时间倒序，方括号内是发生日期）。\n'
+              '你只记得这些事实和发生时间，不记得具体过程；被问到细节时不要编造，'
+              '可以自然地说「记不太清了」。不要生硬罗列这些事实：\n'
+              '${lines.join('\n')}',
+        );
+        system.add(msg);
+        factTokens += _cost(msg.content);
+      }
     }
 
     if (memorySummary.trim().isNotEmpty) {
-      system.add(
-        ApiMessage(
-          role: 'system',
-          content:
-              '以下是该角色对过往对话的记忆摘要（第一人称，由历次对话自动整理，'
-              '可能不完整），请自然延续这些记忆与关系进展，不要生硬复述：\n'
-              '${memorySummary.trim()}',
-        ),
+      final msg = ApiMessage(
+        role: 'system',
+        content:
+            '以下是该角色对过往对话的记忆摘要（第一人称，由历次对话自动整理，'
+            '可能不完整），请自然延续这些记忆与关系进展，不要生硬复述：\n'
+            '${memorySummary.trim()}',
       );
+      system.add(msg);
+      memoryTokens += _cost(msg.content);
     }
 
-    if (pastTranscript.isNotEmpty) {
-      DateTime? prevTs;
-      final lines = <String>[];
-      for (final m in pastTranscript) {
-        // 旧版本落库的脏文本可能残留标签，喂给模型前先清掉。
-        var text = stripTagMarkup(m.contentWithImageNote);
-        if (prevTs != null &&
-            m.createdAt.difference(prevTs) >= kTimeAnchorGap) {
-          text = '【${timeAnchorLabel(currentTime, m.createdAt)}】$text';
+    // 跨会话原文：按会话分组，每组独立配额，组内从最新往前取后正序渲染。
+    final groups = pastSessions.isNotEmpty
+        ? pastSessions
+        : (pastTranscript.isEmpty
+              ? const <PastSession>[]
+              : [PastSession(title: '', messages: pastTranscript)]);
+    if (groups.isNotEmpty && otherTokenBudget > 0) {
+      final otherBudget = (otherTokenBudget * 0.9).floor();
+      final blocks = <String>[];
+      var used = 0;
+      for (final group in groups) {
+        if (group.messages.isEmpty) continue;
+        final perGroup = groups.length <= 1
+            ? otherBudget
+            : math.max(1, otherBudget ~/ groups.length);
+        final chosen = <ChatMessage>[];
+        var groupUsed = 0;
+        for (final m in group.messages.reversed) {
+          final text = stripTagMarkup(m.contentWithImageNote);
+          final cost = _cost(text);
+          if (chosen.isNotEmpty && groupUsed + cost > perGroup) break;
+          if (used + cost > otherBudget) break;
+          chosen.add(m);
+          groupUsed += cost;
+          used += cost;
         }
-        prevTs = m.createdAt;
-        lines.add('【${m.role == ChatRole.user ? '用户' : character.name}】$text');
+        if (chosen.isEmpty) continue;
+        final lines = _renderLines(
+          chosen.reversed.toList(),
+          character: character,
+          currentTime: currentTime,
+        );
+        final title = group.title.trim();
+        blocks.add(
+          title.isEmpty ? lines.join('\n') : '【会话：$title】\n${lines.join('\n')}',
+        );
       }
-      system.add(
-        ApiMessage(
+      if (blocks.isNotEmpty) {
+        final msg = ApiMessage(
           role: 'system',
           content:
-              '以下是该角色与用户在【其他对话】中的近期片段，仅作背景参考，'
-              '不是当前对话正在发生的内容，不要逐条复述：\n'
-              '${lines.join('\n')}',
-        ),
-      );
+              '以下是该角色与用户在【其他对话】中的近期片段（按会话分组），'
+              '仅作背景参考，不是当前对话正在发生的内容，不要逐条复述：\n'
+              '${blocks.join('\n\n')}',
+        );
+        system.add(msg);
+      }
     }
 
     if (userSummary.trim().isNotEmpty) {
-      system.add(
-        ApiMessage(
-          role: 'system',
-          content:
-              '以下是该角色对这位用户的了解（角色视角，由历次对话自动整理），'
-              '请据此自然地对待用户、体现你对TA的熟悉，不要生硬复述：\n'
-              '${userSummary.trim()}',
-        ),
+      final msg = ApiMessage(
+        role: 'system',
+        content:
+            '以下是该角色对这位用户的了解（角色视角，由历次对话自动整理），'
+            '请据此自然地对待用户、体现你对TA的熟悉，不要生硬复述：\n'
+            '${userSummary.trim()}',
       );
+      system.add(msg);
+      memoryTokens += _cost(msg.content);
     }
 
     if (character.exampleDialogue.trim().isNotEmpty) {
-      system.add(
-        ApiMessage(
-          role: 'system',
-          content:
-              '以下是该角色的对话示例，仅用于示范说话风格，不要当作真实对话内容：\n'
-              '${character.exampleDialogue.trim()}',
-        ),
+      final msg = ApiMessage(
+        role: 'system',
+        content:
+            '以下是该角色的对话示例，仅用于示范说话风格，不要当作真实对话内容：\n'
+            '${character.exampleDialogue.trim()}',
       );
+      system.add(msg);
+      systemTokens += _cost(msg.content);
     }
 
     // 回复风格规范放在最后一条 system（v8.1）：离当前对话最近，
     // 最不容易被前面的长文本淹没——短回复/分段指令的命中率最高。
-    system.add(const ApiMessage(role: 'system', content: tagSpecInstruction));
+    const tagMsg = ApiMessage(role: 'system', content: tagSpecInstruction);
+    system.add(tagMsg);
+    systemTokens += _cost(tagMsg.content);
 
-    // 滑动窗口：仅取完成、文本类（排除贴纸）、非空（含纯图消息的
-    // [图片] 备注）的 user/assistant 消息，保留原始顺序（空消息可能是
-    // 历史版本取消时留下的占位，部分端点会拒绝空 assistant）。
-    // 历史只带图片概括文本。
+    final budget = (tokenBudget * 0.9).floor();
+    final chosen = _selectHistory(
+      history: history,
+      budget: budget,
+      reservedTokens: reservedTokens,
+    );
+    final wire = _wire(chosen, currentTime);
+    var historyTokens = 0;
+    for (final m in wire) {
+      historyTokens += _cost(m.content);
+    }
+
+    final otherTokens = system
+        .where((m) => m.content.contains('【其他对话】'))
+        .fold<int>(0, (sum, m) => sum + _cost(m.content));
+
+    return AssembledPrompt(
+      messages: [...system, ...wire],
+      usage: PromptUsage(
+        systemTokens: systemTokens,
+        memoryTokens: memoryTokens,
+        factTokens: factTokens,
+        otherSessionTokens: otherTokens,
+        historyTokens: historyTokens,
+        currentInputTokens: reservedTokens,
+        windowTokens: tokenBudget,
+      ),
+    );
+  }
+
+  /// 无角色会话：只有当前时间 + 按预算裁剪的裸历史。
+  AssembledPrompt assembleBare({
+    required List<ChatMessage> history,
+    DateTime? now,
+    int tokenBudget = 4096,
+    int reservedTokens = 0,
+  }) {
+    final currentTime = now ?? DateTime.now();
+    final timeMsg = ApiMessage(
+      role: 'system',
+      content: '现在时间：${formatCurrentTime(currentTime)}',
+    );
+    final budget = (tokenBudget * 0.9).floor();
+    final chosen = _selectHistory(
+      history: history,
+      budget: budget,
+      reservedTokens: reservedTokens,
+    );
+    final wire = _wire(chosen, currentTime, anchors: true);
+    var historyTokens = 0;
+    for (final m in wire) {
+      historyTokens += _cost(m.content);
+    }
+    return AssembledPrompt(
+      messages: [timeMsg, ...wire],
+      usage: PromptUsage(
+        systemTokens: _cost(timeMsg.content),
+        historyTokens: historyTokens,
+        currentInputTokens: reservedTokens,
+        windowTokens: tokenBudget,
+      ),
+    );
+  }
+
+  List<({ChatMessage message, String text})> _selectHistory({
+    required List<ChatMessage> history,
+    required int budget,
+    required int reservedTokens,
+  }) {
     final done = [
       for (final m in history)
         if (m.status == MessageStatus.done &&
@@ -169,23 +395,76 @@ class PromptAssembler {
             m.contentWithImageNote.trim().isNotEmpty)
           m,
     ];
-    final window = done.length > windowSize
-        ? done.sublist(done.length - windowSize)
-        : done;
+    if (done.isEmpty) return const [];
+    final available = math.max(0, budget - reservedTokens);
+    final singleCap = math.max(8, (budget * 0.3).floor());
+    final chosen = <({ChatMessage message, String text})>[];
+    var used = 0;
+    for (var i = done.length - 1; i >= 0; i--) {
+      final m = done[i];
+      final text = stripTagMarkup(m.contentWithImageNote);
+      var cost = _cost(text);
+      final mustKeep = chosen.length < 2;
+      if (!mustKeep && used + cost > available) break;
+      if (cost > singleCap) {
+        // 单条超预算 30%：截断后仍保留在窗口里，避免一条长文挤掉全部上下文。
+        // 只改提示词里的副本，不改库里的消息。
+        final clipped = truncateToTokens(text, singleCap - 4);
+        chosen.add((message: m, text: clipped));
+        cost = _cost(clipped);
+      } else {
+        chosen.add((message: m, text: text));
+      }
+      used += cost;
+      if (used >= available && chosen.length >= 2) break;
+    }
+    return chosen.reversed.toList();
+  }
 
-    // 时间锚点（v8）：跨自然日或长间隔（>6h）处给下一条消息加前缀，
-    // 同一天连续对话零开销。
+  List<ApiMessage> _wire(
+    List<({ChatMessage message, String text})> chosen,
+    DateTime currentTime, {
+    bool anchors = true,
+  }) {
     DateTime? prevTs;
     final wire = <ApiMessage>[];
-    for (final m in window) {
-      var content = stripTagMarkup(m.contentWithImageNote);
+    for (final item in chosen) {
+      var content = item.text;
+      if (anchors &&
+          prevTs != null &&
+          item.message.createdAt.difference(prevTs) >= kTimeAnchorGap) {
+        content = '【${timeAnchorLabel(currentTime, item.message.createdAt)}】$content';
+      }
+      prevTs = item.message.createdAt;
+      wire.add(ApiMessage(role: item.message.role.wire, content: content));
+    }
+    return wire;
+  }
+
+  List<String> _renderLines(
+    List<ChatMessage> messages, {
+    required Character character,
+    required DateTime currentTime,
+  }) {
+    DateTime? prevTs;
+    final lines = <String>[];
+    for (final m in messages) {
+      var text = stripTagMarkup(m.contentWithImageNote);
       if (prevTs != null && m.createdAt.difference(prevTs) >= kTimeAnchorGap) {
-        content = '【${timeAnchorLabel(currentTime, m.createdAt)}】$content';
+        text = '【${timeAnchorLabel(currentTime, m.createdAt)}】$text';
       }
       prevTs = m.createdAt;
-      wire.add(ApiMessage(role: m.role.wire, content: content));
+      lines.add('【${m.role == ChatRole.user ? '用户' : character.name}】$text');
     }
-
-    return [...system, ...wire];
+    return lines;
   }
+
+  String _formatDate(DateTime value) {
+    final d = value.toLocal();
+    return '${d.year.toString().padLeft(4, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-'
+        '${d.day.toString().padLeft(2, '0')}';
+  }
+
+  int _cost(String text) => 4 + estimateTokens(text);
 }

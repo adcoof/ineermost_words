@@ -4,11 +4,13 @@ library;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
 import '../../../core/widgets/glass.dart';
 import '../application/emotion_tag_parser.dart';
+import '../data/chat_repository.dart';
 import '../domain/models.dart';
 import 'image_viewer_page.dart';
 
@@ -174,6 +176,68 @@ class _MessageListState extends ConsumerState<MessageList> {
         .then((_) => _followUpAfterAnimate(next));
   }
 
+  Future<void> _showMessageActions(
+    BuildContext context,
+    ChatRepository repo,
+    ChatMessage message,
+  ) async {
+    final text = stripTagMarkup(message.content);
+    final hasText = text.trim().isNotEmpty;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (hasText)
+              ListTile(
+                leading: const Icon(Icons.copy_outlined),
+                title: const Text('复制文本'),
+                onTap: () async {
+                  await Clipboard.setData(ClipboardData(text: text));
+                  if (sheetContext.mounted) Navigator.pop(sheetContext);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('已复制到剪贴板')),
+                    );
+                  }
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('删除这条消息'),
+              textColor: Theme.of(context).colorScheme.error,
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (dialogContext) => AlertDialog(
+                    title: const Text('删除这条消息？'),
+                    content: const Text('删除后不可恢复；若删除用户消息，不会自动重发。'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialogContext, false),
+                        child: const Text('取消'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(dialogContext, true),
+                        child: const Text('删除'),
+                      ),
+                    ],
+                  ),
+                );
+                if (ok == true) {
+                  await repo.deleteMessage(message.id);
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final repo = ref.watch(chatRepositoryProvider);
@@ -197,6 +261,9 @@ class _MessageListState extends ConsumerState<MessageList> {
             final bubble = _MessageBubble(
               message: m,
               isStreaming: m.status == MessageStatus.streaming,
+              onLongPress: m.status == MessageStatus.streaming
+                  ? null
+                  : () => _showMessageActions(context, repo, m),
             );
             final label = separators[index];
             if (label == null) return bubble;
@@ -228,8 +295,13 @@ class _MessageListState extends ConsumerState<MessageList> {
 class _MessageBubble extends StatelessWidget {
   final ChatMessage message;
   final bool isStreaming;
+  final VoidCallback? onLongPress;
 
-  const _MessageBubble({required this.message, required this.isStreaming});
+  const _MessageBubble({
+    required this.message,
+    required this.isStreaming,
+    this.onLongPress,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -243,7 +315,14 @@ class _MessageBubble extends StatelessWidget {
     // （漏网的 <action:x> 变体）不该继续出现在气泡里。
     final text = stripTagMarkup(message.content);
 
-    return Align(
+    // 历史遗留的空泡防御：无正文、无图、又不在流式中，整条不渲染。
+    if (text.isEmpty && message.imageFilePaths.isEmpty && !isStreaming) {
+      return const SizedBox.shrink();
+    }
+
+    return GestureDetector(
+      onLongPress: onLongPress,
+      child: Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
@@ -267,7 +346,7 @@ class _MessageBubble extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2, color: fg),
               )
             else if (text.isNotEmpty)
-              SelectableText(
+              Text(
                 text,
                 style: TextStyle(color: fg, fontSize: 15, height: 1.4),
               ),
@@ -296,6 +375,7 @@ class _MessageBubble extends StatelessWidget {
               ),
           ],
         ),
+      ),
       ),
     );
   }

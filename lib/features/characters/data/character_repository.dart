@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../../core/utils/id.dart';
 import '../../../data/local/app_database.dart';
 import '../domain/character.dart';
+import '../domain/memory_fact.dart';
 import 'silly_tavern_importer.dart';
 
 class CharacterRepository {
@@ -72,6 +73,95 @@ class CharacterRepository {
       userSummary: Value(userSummary),
       memoryUpdatedAt: Value(updatedAt),
     ));
+  }
+
+  /// 该角色各会话已摘要到的时间点（v9）。
+  Future<Map<String, DateTime>> getMemoryCursors(String characterId) async {
+    final rows =
+        await (db.select(db.memoryCursors)
+              ..where((t) => t.characterId.equals(characterId)))
+            .get();
+    return {for (final r in rows) r.conversationId: r.summarizedAt};
+  }
+
+  /// 推进单个会话的记忆游标（只写摘要成功后的水位线）。
+  Future<void> setMemoryCursor(
+    String characterId,
+    String conversationId,
+    DateTime summarizedAt,
+  ) async {
+    await db.into(db.memoryCursors).insertOnConflictUpdate(
+      MemoryCursorsCompanion.insert(
+        characterId: characterId,
+        conversationId: conversationId,
+        summarizedAt: summarizedAt,
+      ),
+    );
+  }
+
+  /// 该角色的长期事实，按发生日期倒序（同一天按入库时间倒序）。
+  Future<List<MemoryFact>> getMemoryFacts(
+    String characterId, {
+    int limit = 240,
+  }) async {
+    final q = db.select(db.memoryFacts)
+      ..where((t) => t.characterId.equals(characterId))
+      ..orderBy([
+        (t) => OrderingTerm.desc(t.occurredAt),
+        (t) => OrderingTerm.desc(t.createdAt),
+      ])
+      ..limit(limit);
+    return (await q.get()).map(_factFromRow).toList();
+  }
+
+  /// 插入一条事实并裁剪到每角色 240 条上限（超额淘汰发生日期最旧的）。
+  Future<MemoryFact> addMemoryFact({
+    required String characterId,
+    required String fact,
+    required DateTime occurredAt,
+    String? sourceConversationId,
+    DateTime? createdAt,
+  }) async {
+    final f = MemoryFact(
+      id: newId(),
+      characterId: characterId,
+      fact: fact,
+      occurredAt: occurredAt,
+      sourceConversationId: sourceConversationId,
+      createdAt: createdAt ?? DateTime.now(),
+    );
+    await db.transaction(() async {
+      await db.into(db.memoryFacts).insert(
+        MemoryFactsCompanion.insert(
+          id: f.id,
+          characterId: f.characterId,
+          fact: f.fact,
+          occurredAt: f.occurredAt,
+          sourceConversationId: Value(f.sourceConversationId),
+          createdAt: f.createdAt,
+        ),
+      );
+      await _trimMemoryFacts(characterId);
+    });
+    return f;
+  }
+
+  Future<void> deleteMemoryFact(String id) async {
+    await (db.delete(db.memoryFacts)..where((t) => t.id.equals(id))).go();
+  }
+
+  Future<void> _trimMemoryFacts(String characterId) async {
+    final rows = await (db.select(db.memoryFacts)
+          ..where((t) => t.characterId.equals(characterId))
+          ..orderBy([
+            (t) => OrderingTerm.desc(t.occurredAt),
+            (t) => OrderingTerm.desc(t.createdAt),
+          ])
+          ..limit(1000))
+        .get();
+    if (rows.length <= kMemoryFactsMax) return;
+    final stale = rows.skip(kMemoryFactsMax).map((r) => r.id).toList();
+    await (db.delete(db.memoryFacts)..where((t) => t.id.isIn(stale))).go();
   }
 
   Future<void> delete(String id) async {
@@ -168,6 +258,15 @@ class CharacterRepository {
         source: row.source,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
+      );
+
+  MemoryFact _factFromRow(MemoryFactRow row) => MemoryFact(
+        id: row.id,
+        characterId: row.characterId,
+        fact: row.fact,
+        occurredAt: row.occurredAt,
+        sourceConversationId: row.sourceConversationId,
+        createdAt: row.createdAt,
       );
 
   CharactersCompanion _toRow(Character c) => CharactersCompanion(

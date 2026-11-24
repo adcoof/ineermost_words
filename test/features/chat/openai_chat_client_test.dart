@@ -240,5 +240,115 @@ void main() {
         'url': 'data:image/jpeg;base64,${base64Encode([9, 9])}',
       });
     });
+
+    test('delta.content 为 parts 数组时拼接所有 text', () async {
+      const raw = 'data: {"choices":[{"delta":{"content":'
+          '[{"type":"text","text":"你"},{"type":"text","text":"好"}]}}]}\n\n'
+          'data: [DONE]\n\n';
+      final client = _clientWith(_FakeAdapter(utf8.encode(raw)));
+      final deltas = await client
+          .streamChat(
+            profile: _profile(),
+            messages: const [ApiMessage(role: 'user', content: 'hi')],
+          )
+          .toList();
+      expect(deltas.map((d) => d.content).whereType<String>().join(), '你好');
+    });
+
+    test('reasoning_content 只进 reasoning，不写正文', () async {
+      const raw = 'data: {"choices":[{"delta":{"reasoning_content":"让我想想"}}]}\n\n'
+          'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+          'data: [DONE]\n\n';
+      final client = _clientWith(_FakeAdapter(utf8.encode(raw)));
+      final deltas = await client
+          .streamChat(
+            profile: _profile(),
+            messages: const [ApiMessage(role: 'user', content: 'hi')],
+          )
+          .toList();
+
+      expect(deltas.first.reasoning, '让我想想');
+      expect(deltas.first.content, isNull);
+      expect(deltas.map((d) => d.content).whereType<String>().join(), isEmpty);
+    });
+
+    test('老式 choices[0].text 兜底', () async {
+      const raw = 'data: {"choices":[{"text":"老接口"}]}\n\n'
+          'data: [DONE]\n\n';
+      final client = _clientWith(_FakeAdapter(utf8.encode(raw)));
+      final deltas = await client
+          .streamChat(
+            profile: _profile(),
+            messages: const [ApiMessage(role: 'user', content: 'hi')],
+          )
+          .toList();
+      expect(deltas.single.content, '老接口');
+    });
+
+    test('整包 JSON（application/json）解析为一条增量', () async {
+      final body = jsonEncode({
+        'choices': [
+          {
+            'message': {'content': '整包回复'},
+            'finish_reason': 'stop',
+          },
+        ],
+      });
+      final client = _clientWith(_FakeAdapter(
+        utf8.encode(body),
+        contentType: 'application/json',
+      ));
+      final deltas = await client
+          .streamChat(
+            profile: _profile(),
+            messages: const [ApiMessage(role: 'user', content: 'hi')],
+          )
+          .toList();
+
+      expect(deltas.single.content, '整包回复');
+      expect(deltas.single.finishReason, 'stop');
+    });
+
+    test('text/plain 整包 JSON 在零 SSE 事件后兜底', () async {
+      final body = jsonEncode({
+        'choices': [
+          {
+            'message': {
+              'content': [
+                {'type': 'text', 'text': '兜底'},
+              ],
+            },
+            'finish_reason': 'length',
+          },
+        ],
+      });
+      final client = _clientWith(_FakeAdapter(
+        utf8.encode(body),
+        contentType: 'text/plain; charset=utf-8',
+      ));
+      final deltas = await client
+          .streamChat(
+            profile: _profile(),
+            messages: const [ApiMessage(role: 'user', content: 'hi')],
+          )
+          .toList();
+
+      expect(deltas.single.content, '兜底');
+      expect(deltas.single.finishReason, 'length');
+    });
+
+    test('只有 finish_reason 的收尾帧也会透出', () async {
+      const raw = 'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\n'
+          'data: [DONE]\n\n';
+      final client = _clientWith(_FakeAdapter(utf8.encode(raw)));
+      final deltas = await client
+          .streamChat(
+            profile: _profile(),
+            messages: const [ApiMessage(role: 'user', content: 'hi')],
+          )
+          .toList();
+      expect(deltas.single.content, isNull);
+      expect(deltas.single.finishReason, 'length');
+    });
   });
 }

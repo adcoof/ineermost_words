@@ -1,10 +1,11 @@
-/// MaterialApp 装配：启动过渡页 + 会话 / 角色 / 桌宠 / 设置 四页导航壳。
+/// MaterialApp 装配：启动过渡页 + 会话 / 角色 / Agent / 桌宠 / 设置 五页导航壳。
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/widgets/glass.dart';
+import '../features/agent/presentation/agent_sessions_page.dart';
 import '../features/chat/presentation/conversation_list_page.dart';
 import '../features/characters/presentation/character_list_page.dart';
 import '../features/pet/presentation/pet_page.dart';
@@ -32,7 +33,7 @@ class AiRoleplayApp extends ConsumerWidget {
   }
 }
 
-/// 主界面壳：四页切换 + 底部导航。
+/// 主界面壳：五页切换 + 底部导航。
 class _MainShell extends ConsumerStatefulWidget {
   const _MainShell();
 
@@ -61,6 +62,7 @@ class _MainShellState extends ConsumerState<_MainShell> {
           children: const [
             ConversationListPage(),
             CharacterListPage(),
+            AgentSessionsPage(),
             PetPage(),
             SettingsPage(),
           ],
@@ -85,6 +87,10 @@ class _MainShellState extends ConsumerState<_MainShell> {
             NavigationDestination(
               icon: Icon(Icons.person_outline),
               label: '角色',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.smart_toy_outlined),
+              label: 'Agent',
             ),
             NavigationDestination(icon: Icon(Icons.pets_outlined), label: '桌宠'),
             NavigationDestination(

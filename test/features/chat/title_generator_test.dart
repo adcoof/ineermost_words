@@ -35,6 +35,7 @@ class _FakeApi implements ChatApiClient {
     required List<ApiMessage> messages,
     double? temperature,
     int? maxTokens,
+    List<ApiTool>? tools,
     CancelToken? cancelToken,
   }) {
     calls++;

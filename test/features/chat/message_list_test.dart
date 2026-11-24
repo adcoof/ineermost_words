@@ -305,7 +305,16 @@ void main() {
     await pumpList(tester, 'c1');
     expect(find.text('回复文本'), findsOneWidget);
     expect(find.byType(Image), findsNWidgets(1)); // 贴纸图
-    expect(find.byType(SelectableText), findsNWidgets(1)); // 仅正文那条
+    await unmount(tester);
+  });
+
+  testWidgets('长按消息弹出复制/删除菜单', (tester) async {
+    await insert('c1', '你好', role: ChatRole.user);
+    await pumpList(tester, 'c1');
+    await tester.longPress(find.text('你好'));
+    await tester.pumpAndSettle();
+    expect(find.text('复制文本'), findsOneWidget);
+    expect(find.text('删除这条消息'), findsOneWidget);
     await unmount(tester);
   });
 }

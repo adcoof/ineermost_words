@@ -20,6 +20,10 @@ part 'app_database.g.dart';
     Settings,
     CustomVoices,
     Stickers,
+    MemoryCursors,
+    MemoryFacts,
+    AgentSessions,
+    AgentMessages,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -29,11 +33,16 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    onCreate: (m) => m.createAll(),
+    onCreate: (m) async {
+      await m.createAll();
+      await _createMemoryIndexes();
+      await _createAgentIndexes();
+      await _createMessageIndexes();
+    },
     onUpgrade: (m, from, to) async {
       // v2：新增角色卡表（v1 的会话表已含 character_id 列）。
       if (from < 2) await m.createTable(characters);
@@ -74,6 +83,50 @@ class AppDatabase extends _$AppDatabase {
         }
         await m.createTable(stickers);
       }
+      // v9：多会话记忆游标 + 长期事实记忆（记忆压缩）。
+      if (from < 9) {
+        await m.createTable(memoryCursors);
+        await m.createTable(memoryFacts);
+        await _createMemoryIndexes();
+      }
+      // v10：Agent 会话与消息。
+      if (from < 10) {
+        await m.createTable(agentSessions);
+        await m.createTable(agentMessages);
+        await _createAgentIndexes();
+      }
+      // v11：会话级 Agent 权限（审批模式 + 授权文件夹）。
+      // from<10 时 createTable 已按当前定义建出这两列，不能再 addColumn。
+      if (from >= 10 && from < 11) {
+        await m.addColumn(agentSessions, agentSessions.approvalMode);
+        await m.addColumn(agentSessions, agentSessions.grantedFoldersJson);
+      }
+      // v12：消息/会话查询索引，长会话打开与流式落盘不再全表扫描。
+      if (from < 12) await _createMessageIndexes();
     },
   );
+
+  /// 事实表按「角色 + 发生日期」查询，量小但记忆页按日期倒序读。
+  Future<void> _createMemoryIndexes() => customStatement(
+    'CREATE INDEX IF NOT EXISTS idx_memory_facts_character_occurred '
+    'ON memory_facts (character_id, occurred_at DESC)',
+  );
+
+  /// Agent 消息按「会话 + 时间」顺序读取。
+  Future<void> _createAgentIndexes() => customStatement(
+    'CREATE INDEX IF NOT EXISTS idx_agent_messages_session_created '
+    'ON agent_messages (session_id, created_at)',
+  );
+
+  /// 会话消息按「会话 + 时间」读取；会话列表按「角色 + 更新时间」过滤。
+  Future<void> _createMessageIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_messages_conversation_created '
+      'ON messages (conversation_id, created_at)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_conversations_character_updated '
+      'ON conversations (character_id, updated_at)',
+    );
+  }
 }

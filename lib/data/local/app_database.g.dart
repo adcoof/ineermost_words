@@ -5267,6 +5267,1738 @@ class StickersCompanion extends UpdateCompanion<StickerRow> {
   }
 }
 
+class $MemoryCursorsTable extends MemoryCursors
+    with TableInfo<$MemoryCursorsTable, MemoryCursorRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MemoryCursorsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _characterIdMeta = const VerificationMeta(
+    'characterId',
+  );
+  @override
+  late final GeneratedColumn<String> characterId = GeneratedColumn<String>(
+    'character_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _conversationIdMeta = const VerificationMeta(
+    'conversationId',
+  );
+  @override
+  late final GeneratedColumn<String> conversationId = GeneratedColumn<String>(
+    'conversation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _summarizedAtMeta = const VerificationMeta(
+    'summarizedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> summarizedAt = GeneratedColumn<DateTime>(
+    'summarized_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    characterId,
+    conversationId,
+    summarizedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'memory_cursors';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MemoryCursorRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('character_id')) {
+      context.handle(
+        _characterIdMeta,
+        characterId.isAcceptableOrUnknown(
+          data['character_id']!,
+          _characterIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_characterIdMeta);
+    }
+    if (data.containsKey('conversation_id')) {
+      context.handle(
+        _conversationIdMeta,
+        conversationId.isAcceptableOrUnknown(
+          data['conversation_id']!,
+          _conversationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_conversationIdMeta);
+    }
+    if (data.containsKey('summarized_at')) {
+      context.handle(
+        _summarizedAtMeta,
+        summarizedAt.isAcceptableOrUnknown(
+          data['summarized_at']!,
+          _summarizedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_summarizedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {characterId, conversationId};
+  @override
+  MemoryCursorRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MemoryCursorRow(
+      characterId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}character_id'],
+      )!,
+      conversationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}conversation_id'],
+      )!,
+      summarizedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}summarized_at'],
+      )!,
+    );
+  }
+
+  @override
+  $MemoryCursorsTable createAlias(String alias) {
+    return $MemoryCursorsTable(attachedDatabase, alias);
+  }
+}
+
+class MemoryCursorRow extends DataClass implements Insertable<MemoryCursorRow> {
+  final String characterId;
+  final String conversationId;
+  final DateTime summarizedAt;
+  const MemoryCursorRow({
+    required this.characterId,
+    required this.conversationId,
+    required this.summarizedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['character_id'] = Variable<String>(characterId);
+    map['conversation_id'] = Variable<String>(conversationId);
+    map['summarized_at'] = Variable<DateTime>(summarizedAt);
+    return map;
+  }
+
+  MemoryCursorsCompanion toCompanion(bool nullToAbsent) {
+    return MemoryCursorsCompanion(
+      characterId: Value(characterId),
+      conversationId: Value(conversationId),
+      summarizedAt: Value(summarizedAt),
+    );
+  }
+
+  factory MemoryCursorRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MemoryCursorRow(
+      characterId: serializer.fromJson<String>(json['characterId']),
+      conversationId: serializer.fromJson<String>(json['conversationId']),
+      summarizedAt: serializer.fromJson<DateTime>(json['summarizedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'characterId': serializer.toJson<String>(characterId),
+      'conversationId': serializer.toJson<String>(conversationId),
+      'summarizedAt': serializer.toJson<DateTime>(summarizedAt),
+    };
+  }
+
+  MemoryCursorRow copyWith({
+    String? characterId,
+    String? conversationId,
+    DateTime? summarizedAt,
+  }) => MemoryCursorRow(
+    characterId: characterId ?? this.characterId,
+    conversationId: conversationId ?? this.conversationId,
+    summarizedAt: summarizedAt ?? this.summarizedAt,
+  );
+  MemoryCursorRow copyWithCompanion(MemoryCursorsCompanion data) {
+    return MemoryCursorRow(
+      characterId: data.characterId.present
+          ? data.characterId.value
+          : this.characterId,
+      conversationId: data.conversationId.present
+          ? data.conversationId.value
+          : this.conversationId,
+      summarizedAt: data.summarizedAt.present
+          ? data.summarizedAt.value
+          : this.summarizedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MemoryCursorRow(')
+          ..write('characterId: $characterId, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('summarizedAt: $summarizedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(characterId, conversationId, summarizedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MemoryCursorRow &&
+          other.characterId == this.characterId &&
+          other.conversationId == this.conversationId &&
+          other.summarizedAt == this.summarizedAt);
+}
+
+class MemoryCursorsCompanion extends UpdateCompanion<MemoryCursorRow> {
+  final Value<String> characterId;
+  final Value<String> conversationId;
+  final Value<DateTime> summarizedAt;
+  final Value<int> rowid;
+  const MemoryCursorsCompanion({
+    this.characterId = const Value.absent(),
+    this.conversationId = const Value.absent(),
+    this.summarizedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MemoryCursorsCompanion.insert({
+    required String characterId,
+    required String conversationId,
+    required DateTime summarizedAt,
+    this.rowid = const Value.absent(),
+  }) : characterId = Value(characterId),
+       conversationId = Value(conversationId),
+       summarizedAt = Value(summarizedAt);
+  static Insertable<MemoryCursorRow> custom({
+    Expression<String>? characterId,
+    Expression<String>? conversationId,
+    Expression<DateTime>? summarizedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (characterId != null) 'character_id': characterId,
+      if (conversationId != null) 'conversation_id': conversationId,
+      if (summarizedAt != null) 'summarized_at': summarizedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MemoryCursorsCompanion copyWith({
+    Value<String>? characterId,
+    Value<String>? conversationId,
+    Value<DateTime>? summarizedAt,
+    Value<int>? rowid,
+  }) {
+    return MemoryCursorsCompanion(
+      characterId: characterId ?? this.characterId,
+      conversationId: conversationId ?? this.conversationId,
+      summarizedAt: summarizedAt ?? this.summarizedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (characterId.present) {
+      map['character_id'] = Variable<String>(characterId.value);
+    }
+    if (conversationId.present) {
+      map['conversation_id'] = Variable<String>(conversationId.value);
+    }
+    if (summarizedAt.present) {
+      map['summarized_at'] = Variable<DateTime>(summarizedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MemoryCursorsCompanion(')
+          ..write('characterId: $characterId, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('summarizedAt: $summarizedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $MemoryFactsTable extends MemoryFacts
+    with TableInfo<$MemoryFactsTable, MemoryFactRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MemoryFactsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _characterIdMeta = const VerificationMeta(
+    'characterId',
+  );
+  @override
+  late final GeneratedColumn<String> characterId = GeneratedColumn<String>(
+    'character_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _factMeta = const VerificationMeta('fact');
+  @override
+  late final GeneratedColumn<String> fact = GeneratedColumn<String>(
+    'fact',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _occurredAtMeta = const VerificationMeta(
+    'occurredAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> occurredAt = GeneratedColumn<DateTime>(
+    'occurred_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceConversationIdMeta =
+      const VerificationMeta('sourceConversationId');
+  @override
+  late final GeneratedColumn<String> sourceConversationId =
+      GeneratedColumn<String>(
+        'source_conversation_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    characterId,
+    fact,
+    occurredAt,
+    sourceConversationId,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'memory_facts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MemoryFactRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('character_id')) {
+      context.handle(
+        _characterIdMeta,
+        characterId.isAcceptableOrUnknown(
+          data['character_id']!,
+          _characterIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_characterIdMeta);
+    }
+    if (data.containsKey('fact')) {
+      context.handle(
+        _factMeta,
+        fact.isAcceptableOrUnknown(data['fact']!, _factMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_factMeta);
+    }
+    if (data.containsKey('occurred_at')) {
+      context.handle(
+        _occurredAtMeta,
+        occurredAt.isAcceptableOrUnknown(data['occurred_at']!, _occurredAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_occurredAtMeta);
+    }
+    if (data.containsKey('source_conversation_id')) {
+      context.handle(
+        _sourceConversationIdMeta,
+        sourceConversationId.isAcceptableOrUnknown(
+          data['source_conversation_id']!,
+          _sourceConversationIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  MemoryFactRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MemoryFactRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      characterId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}character_id'],
+      )!,
+      fact: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}fact'],
+      )!,
+      occurredAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}occurred_at'],
+      )!,
+      sourceConversationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_conversation_id'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $MemoryFactsTable createAlias(String alias) {
+    return $MemoryFactsTable(attachedDatabase, alias);
+  }
+}
+
+class MemoryFactRow extends DataClass implements Insertable<MemoryFactRow> {
+  final String id;
+  final String characterId;
+
+  /// 一事一条的短事实（如「用户去关山游玩」），不含过程细节。
+  final String fact;
+
+  /// 事件发生日（本地 00:00），不是整理时间。
+  final DateTime occurredAt;
+  final String? sourceConversationId;
+  final DateTime createdAt;
+  const MemoryFactRow({
+    required this.id,
+    required this.characterId,
+    required this.fact,
+    required this.occurredAt,
+    this.sourceConversationId,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['character_id'] = Variable<String>(characterId);
+    map['fact'] = Variable<String>(fact);
+    map['occurred_at'] = Variable<DateTime>(occurredAt);
+    if (!nullToAbsent || sourceConversationId != null) {
+      map['source_conversation_id'] = Variable<String>(sourceConversationId);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  MemoryFactsCompanion toCompanion(bool nullToAbsent) {
+    return MemoryFactsCompanion(
+      id: Value(id),
+      characterId: Value(characterId),
+      fact: Value(fact),
+      occurredAt: Value(occurredAt),
+      sourceConversationId: sourceConversationId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceConversationId),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory MemoryFactRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MemoryFactRow(
+      id: serializer.fromJson<String>(json['id']),
+      characterId: serializer.fromJson<String>(json['characterId']),
+      fact: serializer.fromJson<String>(json['fact']),
+      occurredAt: serializer.fromJson<DateTime>(json['occurredAt']),
+      sourceConversationId: serializer.fromJson<String?>(
+        json['sourceConversationId'],
+      ),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'characterId': serializer.toJson<String>(characterId),
+      'fact': serializer.toJson<String>(fact),
+      'occurredAt': serializer.toJson<DateTime>(occurredAt),
+      'sourceConversationId': serializer.toJson<String?>(sourceConversationId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  MemoryFactRow copyWith({
+    String? id,
+    String? characterId,
+    String? fact,
+    DateTime? occurredAt,
+    Value<String?> sourceConversationId = const Value.absent(),
+    DateTime? createdAt,
+  }) => MemoryFactRow(
+    id: id ?? this.id,
+    characterId: characterId ?? this.characterId,
+    fact: fact ?? this.fact,
+    occurredAt: occurredAt ?? this.occurredAt,
+    sourceConversationId: sourceConversationId.present
+        ? sourceConversationId.value
+        : this.sourceConversationId,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  MemoryFactRow copyWithCompanion(MemoryFactsCompanion data) {
+    return MemoryFactRow(
+      id: data.id.present ? data.id.value : this.id,
+      characterId: data.characterId.present
+          ? data.characterId.value
+          : this.characterId,
+      fact: data.fact.present ? data.fact.value : this.fact,
+      occurredAt: data.occurredAt.present
+          ? data.occurredAt.value
+          : this.occurredAt,
+      sourceConversationId: data.sourceConversationId.present
+          ? data.sourceConversationId.value
+          : this.sourceConversationId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MemoryFactRow(')
+          ..write('id: $id, ')
+          ..write('characterId: $characterId, ')
+          ..write('fact: $fact, ')
+          ..write('occurredAt: $occurredAt, ')
+          ..write('sourceConversationId: $sourceConversationId, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    characterId,
+    fact,
+    occurredAt,
+    sourceConversationId,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MemoryFactRow &&
+          other.id == this.id &&
+          other.characterId == this.characterId &&
+          other.fact == this.fact &&
+          other.occurredAt == this.occurredAt &&
+          other.sourceConversationId == this.sourceConversationId &&
+          other.createdAt == this.createdAt);
+}
+
+class MemoryFactsCompanion extends UpdateCompanion<MemoryFactRow> {
+  final Value<String> id;
+  final Value<String> characterId;
+  final Value<String> fact;
+  final Value<DateTime> occurredAt;
+  final Value<String?> sourceConversationId;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const MemoryFactsCompanion({
+    this.id = const Value.absent(),
+    this.characterId = const Value.absent(),
+    this.fact = const Value.absent(),
+    this.occurredAt = const Value.absent(),
+    this.sourceConversationId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MemoryFactsCompanion.insert({
+    required String id,
+    required String characterId,
+    required String fact,
+    required DateTime occurredAt,
+    this.sourceConversationId = const Value.absent(),
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       characterId = Value(characterId),
+       fact = Value(fact),
+       occurredAt = Value(occurredAt),
+       createdAt = Value(createdAt);
+  static Insertable<MemoryFactRow> custom({
+    Expression<String>? id,
+    Expression<String>? characterId,
+    Expression<String>? fact,
+    Expression<DateTime>? occurredAt,
+    Expression<String>? sourceConversationId,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (characterId != null) 'character_id': characterId,
+      if (fact != null) 'fact': fact,
+      if (occurredAt != null) 'occurred_at': occurredAt,
+      if (sourceConversationId != null)
+        'source_conversation_id': sourceConversationId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MemoryFactsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? characterId,
+    Value<String>? fact,
+    Value<DateTime>? occurredAt,
+    Value<String?>? sourceConversationId,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return MemoryFactsCompanion(
+      id: id ?? this.id,
+      characterId: characterId ?? this.characterId,
+      fact: fact ?? this.fact,
+      occurredAt: occurredAt ?? this.occurredAt,
+      sourceConversationId: sourceConversationId ?? this.sourceConversationId,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (characterId.present) {
+      map['character_id'] = Variable<String>(characterId.value);
+    }
+    if (fact.present) {
+      map['fact'] = Variable<String>(fact.value);
+    }
+    if (occurredAt.present) {
+      map['occurred_at'] = Variable<DateTime>(occurredAt.value);
+    }
+    if (sourceConversationId.present) {
+      map['source_conversation_id'] = Variable<String>(
+        sourceConversationId.value,
+      );
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MemoryFactsCompanion(')
+          ..write('id: $id, ')
+          ..write('characterId: $characterId, ')
+          ..write('fact: $fact, ')
+          ..write('occurredAt: $occurredAt, ')
+          ..write('sourceConversationId: $sourceConversationId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AgentSessionsTable extends AgentSessions
+    with TableInfo<$AgentSessionsTable, AgentSessionRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AgentSessionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('新 Agent 会话'),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _approvalModeMeta = const VerificationMeta(
+    'approvalMode',
+  );
+  @override
+  late final GeneratedColumn<String> approvalMode = GeneratedColumn<String>(
+    'approval_mode',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _grantedFoldersJsonMeta =
+      const VerificationMeta('grantedFoldersJson');
+  @override
+  late final GeneratedColumn<String> grantedFoldersJson =
+      GeneratedColumn<String>(
+        'granted_folders_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    title,
+    createdAt,
+    updatedAt,
+    approvalMode,
+    grantedFoldersJson,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'agent_sessions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AgentSessionRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('approval_mode')) {
+      context.handle(
+        _approvalModeMeta,
+        approvalMode.isAcceptableOrUnknown(
+          data['approval_mode']!,
+          _approvalModeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('granted_folders_json')) {
+      context.handle(
+        _grantedFoldersJsonMeta,
+        grantedFoldersJson.isAcceptableOrUnknown(
+          data['granted_folders_json']!,
+          _grantedFoldersJsonMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AgentSessionRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AgentSessionRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      approvalMode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}approval_mode'],
+      ),
+      grantedFoldersJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}granted_folders_json'],
+      ),
+    );
+  }
+
+  @override
+  $AgentSessionsTable createAlias(String alias) {
+    return $AgentSessionsTable(attachedDatabase, alias);
+  }
+}
+
+class AgentSessionRow extends DataClass implements Insertable<AgentSessionRow> {
+  final String id;
+  final String title;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  /// 会话级审批模式（v11）；null 表示跟随设置页默认。
+  final String? approvalMode;
+
+  /// 会话级授权文件夹 JSON（v11）；null 表示跟随设置页默认。
+  final String? grantedFoldersJson;
+  const AgentSessionRow({
+    required this.id,
+    required this.title,
+    required this.createdAt,
+    required this.updatedAt,
+    this.approvalMode,
+    this.grantedFoldersJson,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['title'] = Variable<String>(title);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || approvalMode != null) {
+      map['approval_mode'] = Variable<String>(approvalMode);
+    }
+    if (!nullToAbsent || grantedFoldersJson != null) {
+      map['granted_folders_json'] = Variable<String>(grantedFoldersJson);
+    }
+    return map;
+  }
+
+  AgentSessionsCompanion toCompanion(bool nullToAbsent) {
+    return AgentSessionsCompanion(
+      id: Value(id),
+      title: Value(title),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      approvalMode: approvalMode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(approvalMode),
+      grantedFoldersJson: grantedFoldersJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(grantedFoldersJson),
+    );
+  }
+
+  factory AgentSessionRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AgentSessionRow(
+      id: serializer.fromJson<String>(json['id']),
+      title: serializer.fromJson<String>(json['title']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      approvalMode: serializer.fromJson<String?>(json['approvalMode']),
+      grantedFoldersJson: serializer.fromJson<String?>(
+        json['grantedFoldersJson'],
+      ),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'title': serializer.toJson<String>(title),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'approvalMode': serializer.toJson<String?>(approvalMode),
+      'grantedFoldersJson': serializer.toJson<String?>(grantedFoldersJson),
+    };
+  }
+
+  AgentSessionRow copyWith({
+    String? id,
+    String? title,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    Value<String?> approvalMode = const Value.absent(),
+    Value<String?> grantedFoldersJson = const Value.absent(),
+  }) => AgentSessionRow(
+    id: id ?? this.id,
+    title: title ?? this.title,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    approvalMode: approvalMode.present ? approvalMode.value : this.approvalMode,
+    grantedFoldersJson: grantedFoldersJson.present
+        ? grantedFoldersJson.value
+        : this.grantedFoldersJson,
+  );
+  AgentSessionRow copyWithCompanion(AgentSessionsCompanion data) {
+    return AgentSessionRow(
+      id: data.id.present ? data.id.value : this.id,
+      title: data.title.present ? data.title.value : this.title,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      approvalMode: data.approvalMode.present
+          ? data.approvalMode.value
+          : this.approvalMode,
+      grantedFoldersJson: data.grantedFoldersJson.present
+          ? data.grantedFoldersJson.value
+          : this.grantedFoldersJson,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AgentSessionRow(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('approvalMode: $approvalMode, ')
+          ..write('grantedFoldersJson: $grantedFoldersJson')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    title,
+    createdAt,
+    updatedAt,
+    approvalMode,
+    grantedFoldersJson,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AgentSessionRow &&
+          other.id == this.id &&
+          other.title == this.title &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.approvalMode == this.approvalMode &&
+          other.grantedFoldersJson == this.grantedFoldersJson);
+}
+
+class AgentSessionsCompanion extends UpdateCompanion<AgentSessionRow> {
+  final Value<String> id;
+  final Value<String> title;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<String?> approvalMode;
+  final Value<String?> grantedFoldersJson;
+  final Value<int> rowid;
+  const AgentSessionsCompanion({
+    this.id = const Value.absent(),
+    this.title = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.approvalMode = const Value.absent(),
+    this.grantedFoldersJson = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AgentSessionsCompanion.insert({
+    required String id,
+    this.title = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.approvalMode = const Value.absent(),
+    this.grantedFoldersJson = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<AgentSessionRow> custom({
+    Expression<String>? id,
+    Expression<String>? title,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<String>? approvalMode,
+    Expression<String>? grantedFoldersJson,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (title != null) 'title': title,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (approvalMode != null) 'approval_mode': approvalMode,
+      if (grantedFoldersJson != null)
+        'granted_folders_json': grantedFoldersJson,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AgentSessionsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? title,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<String?>? approvalMode,
+    Value<String?>? grantedFoldersJson,
+    Value<int>? rowid,
+  }) {
+    return AgentSessionsCompanion(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      approvalMode: approvalMode ?? this.approvalMode,
+      grantedFoldersJson: grantedFoldersJson ?? this.grantedFoldersJson,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (approvalMode.present) {
+      map['approval_mode'] = Variable<String>(approvalMode.value);
+    }
+    if (grantedFoldersJson.present) {
+      map['granted_folders_json'] = Variable<String>(grantedFoldersJson.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AgentSessionsCompanion(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('approvalMode: $approvalMode, ')
+          ..write('grantedFoldersJson: $grantedFoldersJson, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AgentMessagesTable extends AgentMessages
+    with TableInfo<$AgentMessagesTable, AgentMessageRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AgentMessagesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<String> sessionId = GeneratedColumn<String>(
+    'session_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _roleMeta = const VerificationMeta('role');
+  @override
+  late final GeneratedColumn<String> role = GeneratedColumn<String>(
+    'role',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _contentMeta = const VerificationMeta(
+    'content',
+  );
+  @override
+  late final GeneratedColumn<String> content = GeneratedColumn<String>(
+    'content',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _toolCallsJsonMeta = const VerificationMeta(
+    'toolCallsJson',
+  );
+  @override
+  late final GeneratedColumn<String> toolCallsJson = GeneratedColumn<String>(
+    'tool_calls_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _toolCallIdMeta = const VerificationMeta(
+    'toolCallId',
+  );
+  @override
+  late final GeneratedColumn<String> toolCallId = GeneratedColumn<String>(
+    'tool_call_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _toolNameMeta = const VerificationMeta(
+    'toolName',
+  );
+  @override
+  late final GeneratedColumn<String> toolName = GeneratedColumn<String>(
+    'tool_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('done'),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    sessionId,
+    role,
+    content,
+    toolCallsJson,
+    toolCallId,
+    toolName,
+    status,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'agent_messages';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AgentMessageRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sessionIdMeta);
+    }
+    if (data.containsKey('role')) {
+      context.handle(
+        _roleMeta,
+        role.isAcceptableOrUnknown(data['role']!, _roleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_roleMeta);
+    }
+    if (data.containsKey('content')) {
+      context.handle(
+        _contentMeta,
+        content.isAcceptableOrUnknown(data['content']!, _contentMeta),
+      );
+    }
+    if (data.containsKey('tool_calls_json')) {
+      context.handle(
+        _toolCallsJsonMeta,
+        toolCallsJson.isAcceptableOrUnknown(
+          data['tool_calls_json']!,
+          _toolCallsJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('tool_call_id')) {
+      context.handle(
+        _toolCallIdMeta,
+        toolCallId.isAcceptableOrUnknown(
+          data['tool_call_id']!,
+          _toolCallIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('tool_name')) {
+      context.handle(
+        _toolNameMeta,
+        toolName.isAcceptableOrUnknown(data['tool_name']!, _toolNameMeta),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AgentMessageRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AgentMessageRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}session_id'],
+      )!,
+      role: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}role'],
+      )!,
+      content: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}content'],
+      )!,
+      toolCallsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tool_calls_json'],
+      ),
+      toolCallId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tool_call_id'],
+      ),
+      toolName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tool_name'],
+      ),
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $AgentMessagesTable createAlias(String alias) {
+    return $AgentMessagesTable(attachedDatabase, alias);
+  }
+}
+
+class AgentMessageRow extends DataClass implements Insertable<AgentMessageRow> {
+  final String id;
+  final String sessionId;
+
+  /// user | assistant | tool
+  final String role;
+  final String content;
+
+  /// assistant 的 tool_calls 数组（OpenAI 形状）；无则 null。
+  final String? toolCallsJson;
+  final String? toolCallId;
+  final String? toolName;
+
+  /// streaming | done | error
+  final String status;
+  final DateTime createdAt;
+  const AgentMessageRow({
+    required this.id,
+    required this.sessionId,
+    required this.role,
+    required this.content,
+    this.toolCallsJson,
+    this.toolCallId,
+    this.toolName,
+    required this.status,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['session_id'] = Variable<String>(sessionId);
+    map['role'] = Variable<String>(role);
+    map['content'] = Variable<String>(content);
+    if (!nullToAbsent || toolCallsJson != null) {
+      map['tool_calls_json'] = Variable<String>(toolCallsJson);
+    }
+    if (!nullToAbsent || toolCallId != null) {
+      map['tool_call_id'] = Variable<String>(toolCallId);
+    }
+    if (!nullToAbsent || toolName != null) {
+      map['tool_name'] = Variable<String>(toolName);
+    }
+    map['status'] = Variable<String>(status);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  AgentMessagesCompanion toCompanion(bool nullToAbsent) {
+    return AgentMessagesCompanion(
+      id: Value(id),
+      sessionId: Value(sessionId),
+      role: Value(role),
+      content: Value(content),
+      toolCallsJson: toolCallsJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(toolCallsJson),
+      toolCallId: toolCallId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(toolCallId),
+      toolName: toolName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(toolName),
+      status: Value(status),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory AgentMessageRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AgentMessageRow(
+      id: serializer.fromJson<String>(json['id']),
+      sessionId: serializer.fromJson<String>(json['sessionId']),
+      role: serializer.fromJson<String>(json['role']),
+      content: serializer.fromJson<String>(json['content']),
+      toolCallsJson: serializer.fromJson<String?>(json['toolCallsJson']),
+      toolCallId: serializer.fromJson<String?>(json['toolCallId']),
+      toolName: serializer.fromJson<String?>(json['toolName']),
+      status: serializer.fromJson<String>(json['status']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'sessionId': serializer.toJson<String>(sessionId),
+      'role': serializer.toJson<String>(role),
+      'content': serializer.toJson<String>(content),
+      'toolCallsJson': serializer.toJson<String?>(toolCallsJson),
+      'toolCallId': serializer.toJson<String?>(toolCallId),
+      'toolName': serializer.toJson<String?>(toolName),
+      'status': serializer.toJson<String>(status),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  AgentMessageRow copyWith({
+    String? id,
+    String? sessionId,
+    String? role,
+    String? content,
+    Value<String?> toolCallsJson = const Value.absent(),
+    Value<String?> toolCallId = const Value.absent(),
+    Value<String?> toolName = const Value.absent(),
+    String? status,
+    DateTime? createdAt,
+  }) => AgentMessageRow(
+    id: id ?? this.id,
+    sessionId: sessionId ?? this.sessionId,
+    role: role ?? this.role,
+    content: content ?? this.content,
+    toolCallsJson: toolCallsJson.present
+        ? toolCallsJson.value
+        : this.toolCallsJson,
+    toolCallId: toolCallId.present ? toolCallId.value : this.toolCallId,
+    toolName: toolName.present ? toolName.value : this.toolName,
+    status: status ?? this.status,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  AgentMessageRow copyWithCompanion(AgentMessagesCompanion data) {
+    return AgentMessageRow(
+      id: data.id.present ? data.id.value : this.id,
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
+      role: data.role.present ? data.role.value : this.role,
+      content: data.content.present ? data.content.value : this.content,
+      toolCallsJson: data.toolCallsJson.present
+          ? data.toolCallsJson.value
+          : this.toolCallsJson,
+      toolCallId: data.toolCallId.present
+          ? data.toolCallId.value
+          : this.toolCallId,
+      toolName: data.toolName.present ? data.toolName.value : this.toolName,
+      status: data.status.present ? data.status.value : this.status,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AgentMessageRow(')
+          ..write('id: $id, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('role: $role, ')
+          ..write('content: $content, ')
+          ..write('toolCallsJson: $toolCallsJson, ')
+          ..write('toolCallId: $toolCallId, ')
+          ..write('toolName: $toolName, ')
+          ..write('status: $status, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    sessionId,
+    role,
+    content,
+    toolCallsJson,
+    toolCallId,
+    toolName,
+    status,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AgentMessageRow &&
+          other.id == this.id &&
+          other.sessionId == this.sessionId &&
+          other.role == this.role &&
+          other.content == this.content &&
+          other.toolCallsJson == this.toolCallsJson &&
+          other.toolCallId == this.toolCallId &&
+          other.toolName == this.toolName &&
+          other.status == this.status &&
+          other.createdAt == this.createdAt);
+}
+
+class AgentMessagesCompanion extends UpdateCompanion<AgentMessageRow> {
+  final Value<String> id;
+  final Value<String> sessionId;
+  final Value<String> role;
+  final Value<String> content;
+  final Value<String?> toolCallsJson;
+  final Value<String?> toolCallId;
+  final Value<String?> toolName;
+  final Value<String> status;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const AgentMessagesCompanion({
+    this.id = const Value.absent(),
+    this.sessionId = const Value.absent(),
+    this.role = const Value.absent(),
+    this.content = const Value.absent(),
+    this.toolCallsJson = const Value.absent(),
+    this.toolCallId = const Value.absent(),
+    this.toolName = const Value.absent(),
+    this.status = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AgentMessagesCompanion.insert({
+    required String id,
+    required String sessionId,
+    required String role,
+    this.content = const Value.absent(),
+    this.toolCallsJson = const Value.absent(),
+    this.toolCallId = const Value.absent(),
+    this.toolName = const Value.absent(),
+    this.status = const Value.absent(),
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       sessionId = Value(sessionId),
+       role = Value(role),
+       createdAt = Value(createdAt);
+  static Insertable<AgentMessageRow> custom({
+    Expression<String>? id,
+    Expression<String>? sessionId,
+    Expression<String>? role,
+    Expression<String>? content,
+    Expression<String>? toolCallsJson,
+    Expression<String>? toolCallId,
+    Expression<String>? toolName,
+    Expression<String>? status,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (sessionId != null) 'session_id': sessionId,
+      if (role != null) 'role': role,
+      if (content != null) 'content': content,
+      if (toolCallsJson != null) 'tool_calls_json': toolCallsJson,
+      if (toolCallId != null) 'tool_call_id': toolCallId,
+      if (toolName != null) 'tool_name': toolName,
+      if (status != null) 'status': status,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AgentMessagesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? sessionId,
+    Value<String>? role,
+    Value<String>? content,
+    Value<String?>? toolCallsJson,
+    Value<String?>? toolCallId,
+    Value<String?>? toolName,
+    Value<String>? status,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return AgentMessagesCompanion(
+      id: id ?? this.id,
+      sessionId: sessionId ?? this.sessionId,
+      role: role ?? this.role,
+      content: content ?? this.content,
+      toolCallsJson: toolCallsJson ?? this.toolCallsJson,
+      toolCallId: toolCallId ?? this.toolCallId,
+      toolName: toolName ?? this.toolName,
+      status: status ?? this.status,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (sessionId.present) {
+      map['session_id'] = Variable<String>(sessionId.value);
+    }
+    if (role.present) {
+      map['role'] = Variable<String>(role.value);
+    }
+    if (content.present) {
+      map['content'] = Variable<String>(content.value);
+    }
+    if (toolCallsJson.present) {
+      map['tool_calls_json'] = Variable<String>(toolCallsJson.value);
+    }
+    if (toolCallId.present) {
+      map['tool_call_id'] = Variable<String>(toolCallId.value);
+    }
+    if (toolName.present) {
+      map['tool_name'] = Variable<String>(toolName.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AgentMessagesCompanion(')
+          ..write('id: $id, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('role: $role, ')
+          ..write('content: $content, ')
+          ..write('toolCallsJson: $toolCallsJson, ')
+          ..write('toolCallId: $toolCallId, ')
+          ..write('toolName: $toolName, ')
+          ..write('status: $status, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -5282,6 +7014,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SettingsTable settings = $SettingsTable(this);
   late final $CustomVoicesTable customVoices = $CustomVoicesTable(this);
   late final $StickersTable stickers = $StickersTable(this);
+  late final $MemoryCursorsTable memoryCursors = $MemoryCursorsTable(this);
+  late final $MemoryFactsTable memoryFacts = $MemoryFactsTable(this);
+  late final $AgentSessionsTable agentSessions = $AgentSessionsTable(this);
+  late final $AgentMessagesTable agentMessages = $AgentMessagesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -5297,6 +7033,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     settings,
     customVoices,
     stickers,
+    memoryCursors,
+    memoryFacts,
+    agentSessions,
+    agentMessages,
   ];
 }
 
@@ -8012,6 +9752,938 @@ typedef $$StickersTableProcessedTableManager =
       StickerRow,
       PrefetchHooks Function()
     >;
+typedef $$MemoryCursorsTableCreateCompanionBuilder =
+    MemoryCursorsCompanion Function({
+      required String characterId,
+      required String conversationId,
+      required DateTime summarizedAt,
+      Value<int> rowid,
+    });
+typedef $$MemoryCursorsTableUpdateCompanionBuilder =
+    MemoryCursorsCompanion Function({
+      Value<String> characterId,
+      Value<String> conversationId,
+      Value<DateTime> summarizedAt,
+      Value<int> rowid,
+    });
+
+class $$MemoryCursorsTableFilterComposer
+    extends Composer<_$AppDatabase, $MemoryCursorsTable> {
+  $$MemoryCursorsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get summarizedAt => $composableBuilder(
+    column: $table.summarizedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MemoryCursorsTableOrderingComposer
+    extends Composer<_$AppDatabase, $MemoryCursorsTable> {
+  $$MemoryCursorsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get summarizedAt => $composableBuilder(
+    column: $table.summarizedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MemoryCursorsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MemoryCursorsTable> {
+  $$MemoryCursorsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get summarizedAt => $composableBuilder(
+    column: $table.summarizedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$MemoryCursorsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $MemoryCursorsTable,
+          MemoryCursorRow,
+          $$MemoryCursorsTableFilterComposer,
+          $$MemoryCursorsTableOrderingComposer,
+          $$MemoryCursorsTableAnnotationComposer,
+          $$MemoryCursorsTableCreateCompanionBuilder,
+          $$MemoryCursorsTableUpdateCompanionBuilder,
+          (
+            MemoryCursorRow,
+            BaseReferences<_$AppDatabase, $MemoryCursorsTable, MemoryCursorRow>,
+          ),
+          MemoryCursorRow,
+          PrefetchHooks Function()
+        > {
+  $$MemoryCursorsTableTableManager(_$AppDatabase db, $MemoryCursorsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MemoryCursorsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MemoryCursorsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MemoryCursorsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> characterId = const Value.absent(),
+                Value<String> conversationId = const Value.absent(),
+                Value<DateTime> summarizedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MemoryCursorsCompanion(
+                characterId: characterId,
+                conversationId: conversationId,
+                summarizedAt: summarizedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String characterId,
+                required String conversationId,
+                required DateTime summarizedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => MemoryCursorsCompanion.insert(
+                characterId: characterId,
+                conversationId: conversationId,
+                summarizedAt: summarizedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$MemoryCursorsTable, MemoryCursorRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $MemoryCursorsTable,
+                    MemoryCursorRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MemoryCursorsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $MemoryCursorsTable,
+      MemoryCursorRow,
+      $$MemoryCursorsTableFilterComposer,
+      $$MemoryCursorsTableOrderingComposer,
+      $$MemoryCursorsTableAnnotationComposer,
+      $$MemoryCursorsTableCreateCompanionBuilder,
+      $$MemoryCursorsTableUpdateCompanionBuilder,
+      (
+        MemoryCursorRow,
+        BaseReferences<_$AppDatabase, $MemoryCursorsTable, MemoryCursorRow>,
+      ),
+      MemoryCursorRow,
+      PrefetchHooks Function()
+    >;
+typedef $$MemoryFactsTableCreateCompanionBuilder =
+    MemoryFactsCompanion Function({
+      required String id,
+      required String characterId,
+      required String fact,
+      required DateTime occurredAt,
+      Value<String?> sourceConversationId,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$MemoryFactsTableUpdateCompanionBuilder =
+    MemoryFactsCompanion Function({
+      Value<String> id,
+      Value<String> characterId,
+      Value<String> fact,
+      Value<DateTime> occurredAt,
+      Value<String?> sourceConversationId,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$MemoryFactsTableFilterComposer
+    extends Composer<_$AppDatabase, $MemoryFactsTable> {
+  $$MemoryFactsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fact => $composableBuilder(
+    column: $table.fact,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceConversationId => $composableBuilder(
+    column: $table.sourceConversationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MemoryFactsTableOrderingComposer
+    extends Composer<_$AppDatabase, $MemoryFactsTable> {
+  $$MemoryFactsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get fact => $composableBuilder(
+    column: $table.fact,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceConversationId => $composableBuilder(
+    column: $table.sourceConversationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MemoryFactsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MemoryFactsTable> {
+  $$MemoryFactsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get fact =>
+      $composableBuilder(column: $table.fact, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sourceConversationId => $composableBuilder(
+    column: $table.sourceConversationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$MemoryFactsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $MemoryFactsTable,
+          MemoryFactRow,
+          $$MemoryFactsTableFilterComposer,
+          $$MemoryFactsTableOrderingComposer,
+          $$MemoryFactsTableAnnotationComposer,
+          $$MemoryFactsTableCreateCompanionBuilder,
+          $$MemoryFactsTableUpdateCompanionBuilder,
+          (
+            MemoryFactRow,
+            BaseReferences<_$AppDatabase, $MemoryFactsTable, MemoryFactRow>,
+          ),
+          MemoryFactRow,
+          PrefetchHooks Function()
+        > {
+  $$MemoryFactsTableTableManager(_$AppDatabase db, $MemoryFactsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MemoryFactsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MemoryFactsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MemoryFactsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> characterId = const Value.absent(),
+                Value<String> fact = const Value.absent(),
+                Value<DateTime> occurredAt = const Value.absent(),
+                Value<String?> sourceConversationId = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MemoryFactsCompanion(
+                id: id,
+                characterId: characterId,
+                fact: fact,
+                occurredAt: occurredAt,
+                sourceConversationId: sourceConversationId,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String characterId,
+                required String fact,
+                required DateTime occurredAt,
+                Value<String?> sourceConversationId = const Value.absent(),
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => MemoryFactsCompanion.insert(
+                id: id,
+                characterId: characterId,
+                fact: fact,
+                occurredAt: occurredAt,
+                sourceConversationId: sourceConversationId,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$MemoryFactsTable, MemoryFactRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $MemoryFactsTable,
+                    MemoryFactRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MemoryFactsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $MemoryFactsTable,
+      MemoryFactRow,
+      $$MemoryFactsTableFilterComposer,
+      $$MemoryFactsTableOrderingComposer,
+      $$MemoryFactsTableAnnotationComposer,
+      $$MemoryFactsTableCreateCompanionBuilder,
+      $$MemoryFactsTableUpdateCompanionBuilder,
+      (
+        MemoryFactRow,
+        BaseReferences<_$AppDatabase, $MemoryFactsTable, MemoryFactRow>,
+      ),
+      MemoryFactRow,
+      PrefetchHooks Function()
+    >;
+typedef $$AgentSessionsTableCreateCompanionBuilder =
+    AgentSessionsCompanion Function({
+      required String id,
+      Value<String> title,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<String?> approvalMode,
+      Value<String?> grantedFoldersJson,
+      Value<int> rowid,
+    });
+typedef $$AgentSessionsTableUpdateCompanionBuilder =
+    AgentSessionsCompanion Function({
+      Value<String> id,
+      Value<String> title,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<String?> approvalMode,
+      Value<String?> grantedFoldersJson,
+      Value<int> rowid,
+    });
+
+class $$AgentSessionsTableFilterComposer
+    extends Composer<_$AppDatabase, $AgentSessionsTable> {
+  $$AgentSessionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get approvalMode => $composableBuilder(
+    column: $table.approvalMode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get grantedFoldersJson => $composableBuilder(
+    column: $table.grantedFoldersJson,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AgentSessionsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AgentSessionsTable> {
+  $$AgentSessionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get approvalMode => $composableBuilder(
+    column: $table.approvalMode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get grantedFoldersJson => $composableBuilder(
+    column: $table.grantedFoldersJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AgentSessionsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AgentSessionsTable> {
+  $$AgentSessionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get approvalMode => $composableBuilder(
+    column: $table.approvalMode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get grantedFoldersJson => $composableBuilder(
+    column: $table.grantedFoldersJson,
+    builder: (column) => column,
+  );
+}
+
+class $$AgentSessionsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AgentSessionsTable,
+          AgentSessionRow,
+          $$AgentSessionsTableFilterComposer,
+          $$AgentSessionsTableOrderingComposer,
+          $$AgentSessionsTableAnnotationComposer,
+          $$AgentSessionsTableCreateCompanionBuilder,
+          $$AgentSessionsTableUpdateCompanionBuilder,
+          (
+            AgentSessionRow,
+            BaseReferences<_$AppDatabase, $AgentSessionsTable, AgentSessionRow>,
+          ),
+          AgentSessionRow,
+          PrefetchHooks Function()
+        > {
+  $$AgentSessionsTableTableManager(_$AppDatabase db, $AgentSessionsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AgentSessionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AgentSessionsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AgentSessionsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<String?> approvalMode = const Value.absent(),
+                Value<String?> grantedFoldersJson = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AgentSessionsCompanion(
+                id: id,
+                title: title,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                approvalMode: approvalMode,
+                grantedFoldersJson: grantedFoldersJson,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                Value<String> title = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<String?> approvalMode = const Value.absent(),
+                Value<String?> grantedFoldersJson = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AgentSessionsCompanion.insert(
+                id: id,
+                title: title,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                approvalMode: approvalMode,
+                grantedFoldersJson: grantedFoldersJson,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$AgentSessionsTable, AgentSessionRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $AgentSessionsTable,
+                    AgentSessionRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AgentSessionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AgentSessionsTable,
+      AgentSessionRow,
+      $$AgentSessionsTableFilterComposer,
+      $$AgentSessionsTableOrderingComposer,
+      $$AgentSessionsTableAnnotationComposer,
+      $$AgentSessionsTableCreateCompanionBuilder,
+      $$AgentSessionsTableUpdateCompanionBuilder,
+      (
+        AgentSessionRow,
+        BaseReferences<_$AppDatabase, $AgentSessionsTable, AgentSessionRow>,
+      ),
+      AgentSessionRow,
+      PrefetchHooks Function()
+    >;
+typedef $$AgentMessagesTableCreateCompanionBuilder =
+    AgentMessagesCompanion Function({
+      required String id,
+      required String sessionId,
+      required String role,
+      Value<String> content,
+      Value<String?> toolCallsJson,
+      Value<String?> toolCallId,
+      Value<String?> toolName,
+      Value<String> status,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$AgentMessagesTableUpdateCompanionBuilder =
+    AgentMessagesCompanion Function({
+      Value<String> id,
+      Value<String> sessionId,
+      Value<String> role,
+      Value<String> content,
+      Value<String?> toolCallsJson,
+      Value<String?> toolCallId,
+      Value<String?> toolName,
+      Value<String> status,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$AgentMessagesTableFilterComposer
+    extends Composer<_$AppDatabase, $AgentMessagesTable> {
+  $$AgentMessagesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get role => $composableBuilder(
+    column: $table.role,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get toolCallsJson => $composableBuilder(
+    column: $table.toolCallsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get toolCallId => $composableBuilder(
+    column: $table.toolCallId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get toolName => $composableBuilder(
+    column: $table.toolName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AgentMessagesTableOrderingComposer
+    extends Composer<_$AppDatabase, $AgentMessagesTable> {
+  $$AgentMessagesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get role => $composableBuilder(
+    column: $table.role,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get toolCallsJson => $composableBuilder(
+    column: $table.toolCallsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get toolCallId => $composableBuilder(
+    column: $table.toolCallId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get toolName => $composableBuilder(
+    column: $table.toolName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AgentMessagesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AgentMessagesTable> {
+  $$AgentMessagesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get sessionId =>
+      $composableBuilder(column: $table.sessionId, builder: (column) => column);
+
+  GeneratedColumn<String> get role =>
+      $composableBuilder(column: $table.role, builder: (column) => column);
+
+  GeneratedColumn<String> get content =>
+      $composableBuilder(column: $table.content, builder: (column) => column);
+
+  GeneratedColumn<String> get toolCallsJson => $composableBuilder(
+    column: $table.toolCallsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get toolCallId => $composableBuilder(
+    column: $table.toolCallId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get toolName =>
+      $composableBuilder(column: $table.toolName, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$AgentMessagesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AgentMessagesTable,
+          AgentMessageRow,
+          $$AgentMessagesTableFilterComposer,
+          $$AgentMessagesTableOrderingComposer,
+          $$AgentMessagesTableAnnotationComposer,
+          $$AgentMessagesTableCreateCompanionBuilder,
+          $$AgentMessagesTableUpdateCompanionBuilder,
+          (
+            AgentMessageRow,
+            BaseReferences<_$AppDatabase, $AgentMessagesTable, AgentMessageRow>,
+          ),
+          AgentMessageRow,
+          PrefetchHooks Function()
+        > {
+  $$AgentMessagesTableTableManager(_$AppDatabase db, $AgentMessagesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AgentMessagesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AgentMessagesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AgentMessagesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> sessionId = const Value.absent(),
+                Value<String> role = const Value.absent(),
+                Value<String> content = const Value.absent(),
+                Value<String?> toolCallsJson = const Value.absent(),
+                Value<String?> toolCallId = const Value.absent(),
+                Value<String?> toolName = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AgentMessagesCompanion(
+                id: id,
+                sessionId: sessionId,
+                role: role,
+                content: content,
+                toolCallsJson: toolCallsJson,
+                toolCallId: toolCallId,
+                toolName: toolName,
+                status: status,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String sessionId,
+                required String role,
+                Value<String> content = const Value.absent(),
+                Value<String?> toolCallsJson = const Value.absent(),
+                Value<String?> toolCallId = const Value.absent(),
+                Value<String?> toolName = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => AgentMessagesCompanion.insert(
+                id: id,
+                sessionId: sessionId,
+                role: role,
+                content: content,
+                toolCallsJson: toolCallsJson,
+                toolCallId: toolCallId,
+                toolName: toolName,
+                status: status,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$AgentMessagesTable, AgentMessageRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $AgentMessagesTable,
+                    AgentMessageRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AgentMessagesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AgentMessagesTable,
+      AgentMessageRow,
+      $$AgentMessagesTableFilterComposer,
+      $$AgentMessagesTableOrderingComposer,
+      $$AgentMessagesTableAnnotationComposer,
+      $$AgentMessagesTableCreateCompanionBuilder,
+      $$AgentMessagesTableUpdateCompanionBuilder,
+      (
+        AgentMessageRow,
+        BaseReferences<_$AppDatabase, $AgentMessagesTable, AgentMessageRow>,
+      ),
+      AgentMessageRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -8036,4 +10708,12 @@ class $AppDatabaseManager {
       $$CustomVoicesTableTableManager(_db, _db.customVoices);
   $$StickersTableTableManager get stickers =>
       $$StickersTableTableManager(_db, _db.stickers);
+  $$MemoryCursorsTableTableManager get memoryCursors =>
+      $$MemoryCursorsTableTableManager(_db, _db.memoryCursors);
+  $$MemoryFactsTableTableManager get memoryFacts =>
+      $$MemoryFactsTableTableManager(_db, _db.memoryFacts);
+  $$AgentSessionsTableTableManager get agentSessions =>
+      $$AgentSessionsTableTableManager(_db, _db.agentSessions);
+  $$AgentMessagesTableTableManager get agentMessages =>
+      $$AgentMessagesTableTableManager(_db, _db.agentMessages);
 }

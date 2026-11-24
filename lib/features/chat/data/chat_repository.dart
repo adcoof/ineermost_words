@@ -12,6 +12,17 @@ import '../../../core/utils/id.dart';
 import '../../../data/local/app_database.dart';
 import '../domain/models.dart';
 
+/// 跨会话片段：一个会话 + 该会话最近的若干条消息（按时间升序）。
+class CrossSessionGroup {
+  final Conversation conversation;
+  final List<ChatMessage> messages;
+
+  const CrossSessionGroup({
+    required this.conversation,
+    required this.messages,
+  });
+}
+
 class ChatRepository {
   final AppDatabase db;
 
@@ -181,6 +192,87 @@ class ChatRepository {
       ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
       ..limit(limit);
     return (await q.get()).reversed.map(_msgFromRow).toList();
+  }
+
+  /// 同角色未归档会话，按最近活跃倒序（记忆整理/跨会话片段用）。
+  Future<List<Conversation>> getConversationsForCharacter(
+    String characterId, {
+    int limit = 8,
+  }) async {
+    final q = db.select(db.conversations)
+      ..where(
+        (t) => t.characterId.equals(characterId) & t.archived.equals(false),
+      )
+      ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])
+      ..limit(limit);
+    return (await q.get()).map(_convFromRow).toList();
+  }
+
+  /// 会话自 [since]（null=全部，含边界）之后的完成文本消息，取最近 [limit] 条后升序。
+  ///
+  /// 用 `>=` 而非 `>`：Drift dateTime 存秒级，边界那一秒的消息宁可重复
+  /// 计入（由提示词去重），不能丢；纯图但有 imageSummary 的消息也算内容。
+  Future<List<ChatMessage>> getDoneMessagesAfter(
+    String conversationId,
+    DateTime? since, {
+    int limit = 80,
+  }) async {
+    final q = db.select(db.messages)
+      ..where(
+        (t) =>
+            t.conversationId.equals(conversationId) &
+            t.status.equals(MessageStatus.done.wire) &
+            t.kind.equals(MessageKind.text.wire) &
+            (t.content.equals('').not() | t.imageSummary.equals('').not()),
+      )
+      ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+      ..limit(limit);
+    if (since != null) {
+      q.where((t) => t.createdAt.isBiggerOrEqualValue(since));
+    }
+    return (await q.get()).reversed.map(_msgFromRow).toList();
+  }
+
+  /// 跨会话片段 v2：按会话分组，每组取最新 [perConversation] 条，
+  /// 取最近活跃的 [maxConversations] 个会话。纯图 + imageSummary 不再丢失。
+  Future<List<CrossSessionGroup>> getCrossSessionDigest({
+    required String characterId,
+    required String excludeConversationId,
+    int maxConversations = 4,
+    int perConversation = 8,
+  }) async {
+    final convQ = db.select(db.conversations)
+      ..where(
+        (t) =>
+            t.characterId.equals(characterId) &
+            t.archived.equals(false) &
+            t.id.equals(excludeConversationId).not(),
+      )
+      ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])
+      ..limit(maxConversations);
+    final groups = <CrossSessionGroup>[];
+    for (final row in await convQ.get()) {
+      final q = db.select(db.messages)
+        ..where(
+          (t) =>
+              t.conversationId.equals(row.id) &
+              t.status.equals(MessageStatus.done.wire) &
+              t.kind.equals(MessageKind.text.wire) &
+              (t.content.equals('').not() | t.imageSummary.equals('').not()),
+        )
+        ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+        ..limit(perConversation);
+      final messages = (await q.get()).reversed.map(_msgFromRow).toList();
+      if (messages.isNotEmpty) {
+        groups.add(
+          CrossSessionGroup(
+            conversation: _convFromRow(row),
+            messages: messages,
+          ),
+        );
+      }
+    }
+    return groups;
   }
 
   /// 本会话自 [since]（null=全部）之后的完成消息数（摘要触发阈值用）。

@@ -21,6 +21,7 @@ import '../../pet/presentation/pet_overlay.dart';
 import '../../voice/application/voice_orchestrator.dart';
 import '../domain/models.dart';
 import 'chat_input_bar.dart';
+import 'context_usage_chip.dart';
 import 'message_list.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
@@ -71,9 +72,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             content: Text(next.errorText!),
             behavior: SnackBarBehavior.floating,
             action: SnackBarAction(
-              label: '关闭',
-              onPressed: () =>
-                  ref.read(chatControllerProvider.notifier).clearError(),
+              label: conversationId == null ? '关闭' : '重试',
+              onPressed: () {
+                final notifier = ref.read(chatControllerProvider.notifier);
+                notifier.clearError();
+                if (conversationId != null) notifier.retryLastTurn();
+              },
             ),
           ),
         );
@@ -111,6 +115,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             ),
             title: _ChatTitle(conversationId: conversationId),
             actions: [
+              ContextUsageChip(usage: ui.contextUsage),
               _VoiceToggle(conversationId: conversationId),
               IconButton(
                 tooltip: '背景板',

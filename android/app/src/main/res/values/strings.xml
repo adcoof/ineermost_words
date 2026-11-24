@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="xinyu_accessibility_description">允许心语 Agent 读取屏幕文字并点击界面控件，用来帮你操作手机。仅在你主动开启时生效，可随时在系统设置中关闭。</string>
+</resources>

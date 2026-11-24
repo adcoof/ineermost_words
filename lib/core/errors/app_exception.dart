@@ -55,3 +55,11 @@ class CancelledException extends AppException {
 class UnknownException extends AppException {
   const UnknownException(super.message, [super.cause]);
 }
+
+/// 当前供应商/模型不支持 tools / tool_calls（Agent 模块用）。
+class AgentToolsUnsupportedException extends AppException {
+  const AgentToolsUnsupportedException([
+    super.message = '当前模型不支持工具调用',
+    super.cause,
+  ]);
+}

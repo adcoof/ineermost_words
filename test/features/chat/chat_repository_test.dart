@@ -30,6 +30,8 @@ void main() {
     ChatRole role = ChatRole.user,
     String? content,
     MessageStatus status = MessageStatus.done,
+    MessageKind kind = MessageKind.text,
+    String imageSummary = '',
     required DateTime createdAt,
   }) async {
     final text = content ?? '内容$id';
@@ -40,6 +42,8 @@ void main() {
           content: Value(text),
           rawContent: Value(text),
           status: Value(status.wire),
+          kind: Value(kind.wire),
+          imageSummary: Value(imageSummary),
           createdAt: Value(createdAt),
         ));
   }
@@ -276,6 +280,128 @@ void main() {
           (await repo.getConversation(c.id))!.backgroundPath, '/bg/a.jpg');
       await repo.setConversationBackground(c.id, null);
       expect((await repo.getConversation(c.id))!.backgroundPath, isNull);
+    });
+  });
+
+  group('记忆 v2 查询（v9）', () {
+    test('getDoneMessagesAfter：含纯图摘要、排除贴纸/空行/流式/旧消息', () async {
+      final c = await newConv(characterId: 'ch1', id: 'c1');
+      final t = DateTime(2026, 1, 1, 12);
+      await insertMsg(id: 'old', conversationId: c.id, createdAt: t.subtract(const Duration(hours: 1)));
+      await insertMsg(id: 'text1', conversationId: c.id, createdAt: t);
+      await insertMsg(
+        id: 'img',
+        conversationId: c.id,
+        content: '',
+        imageSummary: '一只橘猫',
+        createdAt: t.add(const Duration(minutes: 1)),
+      );
+      await insertMsg(
+        id: 'empty',
+        conversationId: c.id,
+        content: '',
+        createdAt: t.add(const Duration(minutes: 2)),
+      );
+      await insertMsg(
+        id: 'sticker',
+        conversationId: c.id,
+        content: '',
+        imageSummary: '表情包',
+        kind: MessageKind.sticker,
+        createdAt: t.add(const Duration(minutes: 3)),
+      );
+      await insertMsg(
+        id: 'streaming',
+        conversationId: c.id,
+        status: MessageStatus.streaming,
+        createdAt: t.add(const Duration(minutes: 4)),
+      );
+
+      final got = await repo.getDoneMessagesAfter(c.id, t);
+      expect(got.map((m) => m.id), ['text1', 'img']);
+    });
+
+    test('getCrossSessionDigest：排除当前/archived，按会话倒序、组内升序、限额', () async {
+      final now = DateTime(2026, 1, 1, 12);
+      final current = await newConv(characterId: 'ch1', id: 'current');
+      final c1 = await newConv(characterId: 'ch1', id: 'c1');
+      final c2 = await newConv(characterId: 'ch1', id: 'c2');
+      final archived = await newConv(characterId: 'ch1', id: 'arch');
+      final other = await newConv(characterId: 'ch2', id: 'other');
+      // c2 最新、c1 次之、archived 更新但应排除。
+      Future<void> setUpdated(String id, DateTime t, {bool archived = false}) =>
+          (db.update(db.conversations)..where((x) => x.id.equals(id))).write(
+            ConversationsCompanion(
+              updatedAt: Value(t),
+              archived: Value(archived),
+            ),
+          );
+      await setUpdated(c1.id, now.subtract(const Duration(minutes: 2)));
+      await setUpdated(c2.id, now);
+      await setUpdated(archived.id, now.add(const Duration(minutes: 5)), archived: true);
+      await setUpdated(current.id, now.add(const Duration(minutes: 6)));
+      await setUpdated(other.id, now.add(const Duration(minutes: 7)));
+
+      for (var i = 0; i < 10; i++) {
+        await insertMsg(
+          id: 'c1_$i',
+          conversationId: c1.id,
+          content: 'C1-$i',
+          createdAt: now.subtract(Duration(minutes: 30 - i)),
+        );
+        await insertMsg(
+          id: 'c2_$i',
+          conversationId: c2.id,
+          content: 'C2-$i',
+          createdAt: now.subtract(Duration(minutes: 20 - i)),
+        );
+      }
+      await insertMsg(
+        id: 'arch_0',
+        conversationId: archived.id,
+        content: 'ARCH',
+        createdAt: now,
+      );
+      await insertMsg(
+        id: 'other_0',
+        conversationId: other.id,
+        content: 'OTHER',
+        createdAt: now,
+      );
+
+      final groups = await repo.getCrossSessionDigest(
+        characterId: 'ch1',
+        excludeConversationId: current.id,
+        maxConversations: 4,
+        perConversation: 8,
+      );
+
+      expect(groups.map((g) => g.conversation.id), [c2.id, c1.id]);
+      expect(groups.first.messages, hasLength(8));
+      expect(groups.first.messages.first.content, 'C2-2');
+      expect(groups.first.messages.last.content, 'C2-9');
+      expect(groups[1].messages.last.content, 'C1-9');
+    });
+
+    test('getConversationsForCharacter：非 archived、更新倒序、limit', () async {
+      final now = DateTime(2026, 1, 1);
+      final a = await newConv(characterId: 'ch1', id: 'a');
+      final b = await newConv(characterId: 'ch1', id: 'b');
+      final archived = await newConv(characterId: 'ch1', id: 'x');
+      await (db.update(db.conversations)..where((t) => t.id.equals(a.id)))
+          .write(ConversationsCompanion(updatedAt: Value(now)));
+      await (db.update(db.conversations)..where((t) => t.id.equals(b.id)))
+          .write(ConversationsCompanion(updatedAt: Value(now.add(const Duration(minutes: 1)))));
+      await (db.update(db.conversations)..where((t) => t.id.equals(archived.id)))
+          .write(ConversationsCompanion(
+            updatedAt: Value(now.add(const Duration(minutes: 2))),
+            archived: const Value(true),
+          ));
+
+      final list = await repo.getConversationsForCharacter('ch1');
+      expect(list.map((c) => c.id), [b.id, a.id]);
+      expect(await repo.getConversationsForCharacter('ch1', limit: 1),
+          hasLength(1));
     });
   });
 

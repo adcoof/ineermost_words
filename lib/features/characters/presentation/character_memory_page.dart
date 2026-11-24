@@ -1,7 +1,9 @@
-/// 角色记忆文档 + 「TA眼中的用户」查看/导出页（v8）。
+/// 角色记忆 / 长期记忆 / 「TA眼中的用户」查看与导出页（v1.4 M3）。
 ///
+/// - 角色记忆：最近 3 天细节（自动整理，可按节渲染）；
+/// - 长期记忆：事实 + 发生日期时间线，长按可删；
+/// - TA眼中的你：用户画像。
 /// 入口：聊天页标题头像点击 / 角色编辑页入口。
-/// 文档按「# 小标题」分节渲染成卡片；支持导出 PNG 与 Word（.docx）分享。
 library;
 
 import 'dart:io';
@@ -14,11 +16,12 @@ import 'package:path_provider/path_provider.dart';
 import '../../../app/providers.dart';
 import '../../../core/utils/docx.dart';
 import '../../../core/utils/export_utils.dart';
+import '../domain/memory_fact.dart';
 
 /// 一节文档：可选小标题 + 正文。
 typedef DocSection = ({String? heading, String body});
 
-/// 把「# 小标题」分节的文档文本解析成节列表；无 # 时整篇归入无标题首节。
+/// 把「# 小标题」或独占一行的「**小标题**」解析成节列表。
 List<DocSection> parseDocSections(String doc) {
   final lines = doc.split('\n');
   final sections = <DocSection>[];
@@ -32,9 +35,14 @@ List<DocSection> parseDocSections(String doc) {
   }
 
   for (final line in lines) {
-    if (line.trim().startsWith('#')) {
+    final trimmed = line.trim();
+    final bold = RegExp(r'^\*\*(.+)\*\*$').firstMatch(trimmed);
+    if (trimmed.startsWith('#')) {
       flush();
-      heading = line.trim().replaceFirst(RegExp(r'^#+\s*'), '');
+      heading = trimmed.replaceFirst(RegExp(r'^#+\s*'), '');
+    } else if (bold != null && bold.group(1)!.trim().length <= 24) {
+      flush();
+      heading = bold.group(1)!.trim();
     } else {
       if (body.isNotEmpty) body.write('\n');
       body.write(line);
@@ -73,11 +81,13 @@ class CharacterMemoryPage extends ConsumerStatefulWidget {
 
 class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
   final _boundaryKey = GlobalKey();
-  var _showUserDoc = false;
+  var _tab = 0; // 0=近期记忆 1=长期记忆 2=TA眼中的你
   String _memoryDoc = '';
   String _userDoc = '';
   DateTime? _updatedAt;
+  List<MemoryFact> _facts = const [];
   var _loaded = false;
+  String? _error;
 
   @override
   void initState() {
@@ -86,23 +96,44 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
   }
 
   Future<void> _load() async {
-    final memory = await ref
-        .read(characterRepositoryProvider)
-        .getMemory(widget.characterId);
-    if (!mounted) return;
-    setState(() {
-      _memoryDoc = memory.summary;
-      _userDoc = memory.userSummary;
-      _updatedAt = memory.updatedAt;
-      _loaded = true;
-    });
+    setState(() => _error = null);
+    try {
+      final repo = ref.read(characterRepositoryProvider);
+      final memory = await repo.getMemory(widget.characterId);
+      final facts = await repo.getMemoryFacts(widget.characterId);
+      if (!mounted) return;
+      setState(() {
+        _memoryDoc = memory.summary;
+        _userDoc = memory.userSummary;
+        _updatedAt = memory.updatedAt;
+        _facts = facts;
+        _loaded = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = '加载失败，请下拉重试';
+        _loaded = true;
+      });
+      debugPrint('memory page load: $e');
+    }
   }
 
-  String get _currentDoc => _showUserDoc ? _userDoc : _memoryDoc;
+  String get _currentDocTitle => switch (_tab) {
+    1 => '${widget.characterName}的长期记忆',
+    2 => '${widget.characterName}眼中的你',
+    _ => '${widget.characterName}的记忆',
+  };
 
-  String get _currentDocTitle => _showUserDoc
-      ? '${widget.characterName}眼中的你'
-      : '${widget.characterName}的记忆';
+  String get _currentDoc => switch (_tab) {
+    1 => _factsDoc,
+    2 => _userDoc,
+    _ => _memoryDoc,
+  };
+
+  String get _factsDoc => _facts
+      .map((f) => '${_fmtDate(f.occurredAt)} · ${f.fact}')
+      .join('\n');
 
   Future<void> _exportPng() async {
     if (_currentDoc.trim().isEmpty) return;
@@ -113,11 +144,20 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
 
   Future<void> _exportDocx() async {
     if (_currentDoc.trim().isEmpty) return;
-    final sections = parseDocSections(_currentDoc);
+    final sections = _tab == 1
+        ? <DocSection>[
+            (
+              heading: '长期记忆',
+              body: _facts
+                  .map((f) => '${_fmtDate(f.occurredAt)} · ${f.fact}')
+                  .join('\n'),
+            ),
+          ]
+        : parseDocSections(_currentDoc);
     final dir = await getTemporaryDirectory();
     final file = p.join(
       dir.path,
-      'mem_${widget.characterId}_${_showUserDoc ? 1 : 0}.docx',
+      'mem_${widget.characterId}_$_tab.docx',
     );
     await writeSimpleDocx(
       File(file),
@@ -129,24 +169,50 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
     await shareFilePath(file, '$_currentDocTitle.docx');
   }
 
+  Future<void> _deleteFact(MemoryFact fact) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除这条长期记忆？'),
+        content: Text('${_fmtDate(fact.occurredAt)} · ${fact.fact}\n\n删除后无法恢复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await ref.read(characterRepositoryProvider).deleteMemoryFact(fact.id);
+    await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final doc = _currentDoc;
-    final sections = parseDocSections(doc);
     return Scaffold(
       appBar: AppBar(
-        title: Text(_showUserDoc ? 'TA眼中的你' : '角色记忆'),
+        title: const Text('角色记忆'),
         actions: [
+          IconButton(
+            tooltip: '刷新',
+            icon: const Icon(Icons.refresh),
+            onPressed: _load,
+          ),
           IconButton(
             tooltip: '导出图片',
             icon: const Icon(Icons.image_outlined),
-            onPressed: doc.trim().isEmpty ? null : _exportPng,
+            onPressed: _currentDoc.trim().isEmpty ? null : _exportPng,
           ),
           IconButton(
             tooltip: '导出 Word',
             icon: const Icon(Icons.description_outlined),
-            onPressed: doc.trim().isEmpty ? null : _exportDocx,
+            onPressed: _currentDoc.trim().isEmpty ? null : _exportDocx,
           ),
         ],
       ),
@@ -155,22 +221,42 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
           : Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: SegmentedButton<bool>(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                  child: SegmentedButton<int>(
                     segments: const [
-                      ButtonSegment(value: false, label: Text('角色记忆')),
-                      ButtonSegment(value: true, label: Text('TA眼中的你')),
+                      ButtonSegment(value: 0, label: Text('角色记忆')),
+                      ButtonSegment(value: 1, label: Text('长期记忆')),
+                      ButtonSegment(value: 2, label: Text('TA眼中的你')),
                     ],
-                    selected: {_showUserDoc},
-                    onSelectionChanged: (s) =>
-                        setState(() => _showUserDoc = s.first),
+                    selected: {_tab},
+                    showSelectedIcon: false,
+                    onSelectionChanged: (s) => setState(() => _tab = s.first),
                   ),
                 ),
-                if (_updatedAt != null)
+                if (_error != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(
-                      '更新于 ${_fmtShort(_updatedAt!)}',
+                      _error!,
+                      style: TextStyle(fontSize: 12, color: scheme.error),
+                    ),
+                  )
+                else if (_tab == 0 && _updatedAt != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      '上次整理 ${_fmtShort(_updatedAt!)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: scheme.onSurface.withValues(alpha: 0.45),
+                      ),
+                    ),
+                  )
+                else if (_tab == 1)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      '共 ${_facts.length} 条 · 长按可删除',
                       style: TextStyle(
                         fontSize: 12,
                         color: scheme.onSurface.withValues(alpha: 0.45),
@@ -178,30 +264,80 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
                     ),
                   ),
                 Expanded(
-                  child: doc.trim().isEmpty
-                      ? _EmptyHint(isUserDoc: _showUserDoc)
-                      : SingleChildScrollView(
-                          padding: const EdgeInsets.all(16),
-                          child: RepaintBoundary(
-                            key: _boundaryKey,
-                            child: _DocCard(
-                              title: _currentDocTitle,
-                              sections: sections,
-                              updatedAt: _updatedAt,
-                            ),
-                          ),
-                        ),
+                  child: RefreshIndicator(
+                    onRefresh: _load,
+                    child: _tab == 1
+                        ? _buildFacts()
+                        : _memoryDocView(),
+                  ),
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _buildFacts() {
+    if (_facts.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: const [
+          SizedBox(
+            height: 360,
+            child: _EmptyHint(isUserDoc: false, customText: '还没有长期记忆'),
+          ),
+        ],
+      );
+    }
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      child: RepaintBoundary(
+        key: _boundaryKey,
+        child: _FactsCard(
+          title: _currentDocTitle,
+          facts: _facts,
+          onLongPress: _deleteFact,
+        ),
+      ),
+    );
+  }
+
+  Widget _memoryDocView() {
+    final doc = _tab == 2 ? _userDoc : _memoryDoc;
+    if (doc.trim().isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(
+            height: 360,
+            child: _EmptyHint(
+              isUserDoc: _tab == 2,
+              customText: _tab == 2 ? '还没有对你的了解' : '还没有记忆',
+            ),
+          ),
+        ],
+      );
+    }
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      child: RepaintBoundary(
+        key: _boundaryKey,
+        child: _DocCard(
+          title: _currentDocTitle,
+          sections: parseDocSections(doc),
+          updatedAt: _tab == 0 ? _updatedAt : null,
+        ),
+      ),
     );
   }
 }
 
 class _EmptyHint extends StatelessWidget {
   final bool isUserDoc;
+  final String? customText;
 
-  const _EmptyHint({required this.isUserDoc});
+  const _EmptyHint({required this.isUserDoc, this.customText});
 
   @override
   Widget build(BuildContext context) {
@@ -219,7 +355,7 @@ class _EmptyHint extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              isUserDoc ? '还没有对你的了解' : '还没有记忆',
+              customText ?? (isUserDoc ? '还没有对你的了解' : '还没有记忆'),
               style: TextStyle(
                 fontSize: 15,
                 color: scheme.onSurface.withValues(alpha: 0.6),
@@ -228,7 +364,7 @@ class _EmptyHint extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               '和 TA 聊上几轮后，这里会自动整理出'
-              '${isUserDoc ? 'TA 对你的认识' : '跨会话的记忆文档'}',
+              '${isUserDoc ? 'TA 对你的认识' : '跨会话的记忆'}',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
@@ -237,6 +373,92 @@ class _EmptyHint extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 长期事实时间线（白底黑字，导出与展示共用）。
+class _FactsCard extends StatelessWidget {
+  final String title;
+  final List<MemoryFact> facts;
+  final Future<void> Function(MemoryFact) onLongPress;
+
+  const _FactsCard({
+    required this.title,
+    required this.facts,
+    required this.onLongPress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A1730),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '只保留事实与发生日期，细节会随时间淡忘',
+            style: const TextStyle(fontSize: 11, color: Color(0xFF8A86A6)),
+          ),
+          const SizedBox(height: 12),
+          for (final fact in facts)
+            InkWell(
+              onLongPress: () => onLongPress(fact),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 7),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 78,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1EFFA),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        _fmtDate(fact.occurredAt),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF6A5FA8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        fact.fact,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          height: 1.5,
+                          color: Color(0xFF2A2640),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

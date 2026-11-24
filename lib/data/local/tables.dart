@@ -253,6 +253,93 @@ class CustomVoices extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
+/// 记忆游标（v9）：按「角色 + 会话」记录该会话已摘要到的时间点。
+/// 旧实现只有一个角色级水位线，切换会话后旧会话的新消息永远进不了摘要；
+/// v9 起每个会话独立推进，升级后无游标按 epoch 处理（首次回填）。
+@DataClassName('MemoryCursorRow')
+class MemoryCursors extends Table {
+  TextColumn get characterId => text()();
+
+  TextColumn get conversationId => text()();
+
+  DateTimeColumn get summarizedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {characterId, conversationId};
+}
+
+/// 长期事实记忆（v9）：把「去关山游玩」这类事件压缩成
+/// 一条事实 + 发生日期；细节在近期摘要过期后消失，事实长期保留。
+@DataClassName('MemoryFactRow')
+class MemoryFacts extends Table {
+  TextColumn get id => text()();
+
+  TextColumn get characterId => text()();
+
+  /// 一事一条的短事实（如「用户去关山游玩」），不含过程细节。
+  TextColumn get fact => text()();
+
+  /// 事件发生日（本地 00:00），不是整理时间。
+  DateTimeColumn get occurredAt => dateTime()();
+
+  TextColumn get sourceConversationId => text().nullable()();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// Agent 会话（v10）：独立的工具调用对话，不参与角色聊天历史与记忆。
+@DataClassName('AgentSessionRow')
+class AgentSessions extends Table {
+  TextColumn get id => text()();
+
+  TextColumn get title => text().withDefault(const Constant('新 Agent 会话'))();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  DateTimeColumn get updatedAt => dateTime()();
+
+  /// 会话级审批模式（v11）；null 表示跟随设置页默认。
+  TextColumn get approvalMode => text().nullable()();
+
+  /// 会话级授权文件夹 JSON（v11）；null 表示跟随设置页默认。
+  TextColumn get grantedFoldersJson => text().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// Agent 消息（v10）：role=user/assistant/tool。
+/// assistant 可带 toolCallsJson；tool 行带 toolCallId/toolName 与结果 JSON。
+@DataClassName('AgentMessageRow')
+class AgentMessages extends Table {
+  TextColumn get id => text()();
+
+  TextColumn get sessionId => text()();
+
+  /// user | assistant | tool
+  TextColumn get role => text()();
+
+  TextColumn get content => text().withDefault(const Constant(''))();
+
+  /// assistant 的 tool_calls 数组（OpenAI 形状）；无则 null。
+  TextColumn get toolCallsJson => text().nullable()();
+
+  TextColumn get toolCallId => text().nullable()();
+
+  TextColumn get toolName => text().nullable()();
+
+  /// streaming | done | error
+  TextColumn get status => text().withDefault(const Constant('done'))();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
 /// 表情包：每角色一个库，按固定心情键（happy/angry/… 英文情绪标签值）分组，
 /// 一心情可多张（发送时随机选取）。文件存 documents/stickers/{characterId}/{id}.jpg。
 @DataClassName('StickerRow')

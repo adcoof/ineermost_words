@@ -42,6 +42,29 @@ const _v6CharactersTable =
 const _v7MessagesTable =
     '''CREATE TABLE IF NOT EXISTS "messages" ("id" TEXT NOT NULL, "conversation_id" TEXT NOT NULL, "role" TEXT NOT NULL, "content" TEXT NOT NULL DEFAULT '', "raw_content" TEXT NOT NULL DEFAULT '', "emotion_events" TEXT NOT NULL DEFAULT '[]', "status" TEXT NOT NULL DEFAULT 'done', "created_at" INTEGER NOT NULL, "image_paths" TEXT NOT NULL DEFAULT '[]', "image_summary" TEXT NOT NULL DEFAULT '', PRIMARY KEY ("id"))''';
 
+/// v8 时代的 conversations（v6 + 背景板）。
+const _v8ConversationsTable =
+    '''CREATE TABLE IF NOT EXISTS "conversations" ("id" TEXT NOT NULL, "title" TEXT NOT NULL DEFAULT '新会话', "character_id" TEXT NULL, "pet_model_id" TEXT NULL, "api_profile_id" TEXT NOT NULL, "created_at" INTEGER NOT NULL, "updated_at" INTEGER NOT NULL, "archived" INTEGER NOT NULL DEFAULT 0 CHECK ("archived" IN (0, 1)), "voice_enabled" INTEGER NOT NULL DEFAULT 1 CHECK ("voice_enabled" IN (0, 1)), "background_path" TEXT NULL, PRIMARY KEY ("id"))''';
+
+/// v8 时代的 messages（v7 + kind）。
+const _v8MessagesTable =
+    '''CREATE TABLE IF NOT EXISTS "messages" ("id" TEXT NOT NULL, "conversation_id" TEXT NOT NULL, "role" TEXT NOT NULL, "content" TEXT NOT NULL DEFAULT '', "raw_content" TEXT NOT NULL DEFAULT '', "emotion_events" TEXT NOT NULL DEFAULT '[]', "status" TEXT NOT NULL DEFAULT 'done', "created_at" INTEGER NOT NULL, "image_paths" TEXT NOT NULL DEFAULT '[]', "image_summary" TEXT NOT NULL DEFAULT '', "kind" TEXT NOT NULL DEFAULT 'text', PRIMARY KEY ("id"))''';
+
+/// v8 时代的 characters（v6 + 用户画像）。
+const _v8CharactersTable =
+    '''CREATE TABLE IF NOT EXISTS "characters" ("id" TEXT NOT NULL, "name" TEXT NOT NULL, "description" TEXT NOT NULL DEFAULT '', "personality" TEXT NOT NULL DEFAULT '', "scenario" TEXT NOT NULL DEFAULT '', "first_message" TEXT NOT NULL DEFAULT '', "example_dialogue" TEXT NOT NULL DEFAULT '', "avatar_path" TEXT NULL, "source" TEXT NOT NULL DEFAULT 'manual', "created_at" INTEGER NOT NULL, "updated_at" INTEGER NOT NULL, "memory_summary" TEXT NOT NULL DEFAULT '', "memory_updated_at" INTEGER NULL, "user_summary" TEXT NOT NULL DEFAULT '', PRIMARY KEY ("id"))''';
+
+const _v8StickersTable =
+    '''CREATE TABLE IF NOT EXISTS "stickers" ("id" TEXT NOT NULL, "character_id" TEXT NOT NULL, "mood" TEXT NOT NULL, "file_path" TEXT NOT NULL, "created_at" INTEGER NOT NULL, PRIMARY KEY ("id"))''';
+
+/// v10 时代的 agent_sessions（还没有会话级权限两列）。
+const _v10AgentSessionsTable =
+    '''CREATE TABLE IF NOT EXISTS "agent_sessions" ("id" TEXT NOT NULL, "title" TEXT NOT NULL DEFAULT '新 Agent 会话', "created_at" INTEGER NOT NULL, "updated_at" INTEGER NOT NULL, PRIMARY KEY ("id"))''';
+
+/// v10 时代的 agent_messages（v11 未改动）。
+const _v10AgentMessagesTable =
+    '''CREATE TABLE IF NOT EXISTS "agent_messages" ("id" TEXT NOT NULL, "session_id" TEXT NOT NULL, "role" TEXT NOT NULL, "content" TEXT NOT NULL DEFAULT '', "tool_calls_json" TEXT NULL, "tool_call_id" TEXT NULL, "tool_name" TEXT NULL, "status" TEXT NOT NULL DEFAULT 'done', "created_at" INTEGER NOT NULL, PRIMARY KEY ("id"))''';
+
 void main() {
   test('v1 → 当前版本：旧数据无损，v2/v3 新表创建', () async {
     final executor = NativeDatabase.memory(setup: (db) {
@@ -331,6 +354,155 @@ void main() {
     final version = await db.customSelect('PRAGMA user_version').getSingle();
     expect(version.data.values.single, db.schemaVersion); // 8
 
+    await db.close();
+  });
+
+  test('v8 → v9：创建记忆游标/长期事实表与索引，旧数据无损', () async {
+    final executor = NativeDatabase.memory(setup: (db) {
+      for (final ddl in [
+        _v8ConversationsTable,
+        _v8MessagesTable,
+        _v1Tables[2], // api_profiles
+        _v1Tables[3], // settings
+        _v8CharactersTable,
+        ..._v3ToV5Tables,
+        _v8StickersTable,
+      ]) {
+        db.execute(ddl);
+      }
+      db.execute('PRAGMA user_version = 8');
+      db.execute(
+          "INSERT INTO api_profiles (id, name, base_url, api_key, model, is_default) "
+          "VALUES ('p1', '测试供应商', 'https://api.example.com/v1', 'sk-test', 'm1', 1)");
+      db.execute(
+          "INSERT INTO characters (id, name, memory_summary, user_summary, created_at, updated_at) "
+          "VALUES ('ch1', '星野雀', '旧记忆', '旧画像', 1700000000000, 1700000000000)");
+      db.execute(
+          "INSERT INTO conversations (id, title, character_id, api_profile_id, background_path, created_at, updated_at) "
+          "VALUES ('c1', '旧会话', 'ch1', 'p1', '/bg8.jpg', 1700000000000, 1700000000000)");
+      db.execute(
+          "INSERT INTO messages (id, conversation_id, role, content, raw_content, status, kind, created_at) "
+          "VALUES ('m1', 'c1', 'user', '旧消息', '旧消息', 'done', 'sticker', 1700000000000)");
+      db.execute(
+          "INSERT INTO stickers (id, character_id, mood, file_path, created_at) "
+          "VALUES ('s1', 'ch1', 'happy', '/s1.jpg', 1700000000000)");
+    });
+
+    final db = AppDatabase.forTesting(executor);
+
+    // 旧数据完好。
+    final conv = await db.select(db.conversations).getSingle();
+    expect(conv.title, '旧会话');
+    expect(conv.backgroundPath, '/bg8.jpg');
+    final ch = await db.select(db.characters).getSingle();
+    expect(ch.memorySummary, '旧记忆');
+    expect(ch.userSummary, '旧画像');
+    final msg = await db.select(db.messages).getSingle();
+    expect(msg.content, '旧消息');
+    expect(msg.kind, 'sticker');
+    expect(await db.select(db.stickers).get(), hasLength(1));
+
+    // v9 新表为空且可写。
+    expect(await db.select(db.memoryCursors).get(), isEmpty);
+    expect(await db.select(db.memoryFacts).get(), isEmpty);
+    await db.into(db.memoryCursors).insert(MemoryCursorsCompanion.insert(
+          characterId: 'ch1',
+          conversationId: 'c1',
+          summarizedAt: DateTime(2026, 1, 2),
+        ));
+    await db.into(db.memoryFacts).insert(MemoryFactsCompanion.insert(
+          id: 'f1',
+          characterId: 'ch1',
+          fact: '和用户去了关山',
+          occurredAt: DateTime(2026, 1, 2),
+          createdAt: DateTime(2026, 1, 2),
+        ));
+    final cursor = await db.select(db.memoryCursors).getSingle();
+    expect(cursor.conversationId, 'c1');
+    final fact = await db.select(db.memoryFacts).getSingle();
+    expect(fact.fact, '和用户去了关山');
+
+    // 索引已建（跨角色最近事实查询依赖它）。
+    final index = await db.customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'index' "
+      "AND name = 'idx_memory_facts_character_occurred'",
+    ).get();
+    expect(index, hasLength(1));
+
+    // v10 新表为空且可写，索引已建（v8 一次迁移累积到 11）。
+    expect(await db.select(db.agentSessions).get(), isEmpty);
+    expect(await db.select(db.agentMessages).get(), isEmpty);
+    await db.into(db.agentSessions).insert(AgentSessionsCompanion.insert(
+          id: 's1',
+          title: const Value('测试会话'),
+          createdAt: DateTime(2026, 1, 3),
+          updatedAt: DateTime(2026, 1, 3),
+        ));
+    await db.into(db.agentMessages).insert(AgentMessagesCompanion.insert(
+          id: 'am1',
+          sessionId: 's1',
+          role: 'user',
+          content: const Value('你好'),
+          createdAt: DateTime(2026, 1, 3),
+        ));
+    final sessionRow = await db.select(db.agentSessions).getSingle();
+    expect(sessionRow.title, '测试会话');
+    // v11 新列默认 null（跟随设置页默认）。
+    expect(sessionRow.approvalMode, isNull);
+    expect(sessionRow.grantedFoldersJson, isNull);
+    expect((await db.select(db.agentMessages).getSingle()).content, '你好');
+    final agentIndex = await db.customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'index' "
+      "AND name = 'idx_agent_messages_session_created'",
+    ).get();
+    expect(agentIndex, hasLength(1));
+    final msgIndex = await db.customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'index' "
+      "AND name = 'idx_messages_conversation_created'",
+    ).get();
+    expect(msgIndex, hasLength(1));
+    final convIndex = await db.customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'index' "
+      "AND name = 'idx_conversations_character_updated'",
+    ).get();
+    expect(convIndex, hasLength(1));
+
+    final version = await db.customSelect('PRAGMA user_version').getSingle();
+    expect(version.data.values.single, db.schemaVersion); // 12
+
+    await db.close();
+  });
+
+  test('v10 → v11：agent_sessions 增加会话级权限列，旧数据无损', () async {
+    final executor = NativeDatabase.memory(setup: (db) {
+      db.execute(_v8ConversationsTable);
+      db.execute(_v8MessagesTable);
+      db.execute(_v10AgentSessionsTable);
+      db.execute(_v10AgentMessagesTable);
+      db.execute('PRAGMA user_version = 10');
+      db.execute(
+        "INSERT INTO agent_sessions (id, title, created_at, updated_at) "
+        "VALUES ('s10', '旧 Agent 会话', 1700000000000, 1700000000000)",
+      );
+    });
+
+    final db = AppDatabase.forTesting(executor);
+    final row = await db.select(db.agentSessions).getSingle();
+    expect(row.title, '旧 Agent 会话');
+    expect(row.approvalMode, isNull);
+    expect(row.grantedFoldersJson, isNull);
+
+    await (db.update(db.agentSessions)..where((t) => t.id.equals('s10')))
+        .write(const AgentSessionsCompanion(
+      approvalMode: Value('auto'),
+      grantedFoldersJson: Value('[]'),
+    ));
+    final updated = await db.select(db.agentSessions).getSingle();
+    expect(updated.approvalMode, 'auto');
+    expect(updated.grantedFoldersJson, '[]');
+
+    final version = await db.customSelect('PRAGMA user_version').getSingle();
+    expect(version.data.values.single, db.schemaVersion);
     await db.close();
   });
 }
