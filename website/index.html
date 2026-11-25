@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>心语 · ineermost_words — 让每一次对话，都怦然心动</title>
-<meta name="description" content="心语（ineermost_words）是一款开源的安卓 AI 角色扮演聊天应用：导入 SillyTavern 角色卡，跨会话记忆、Live2D 桌宠、双向语音、五套深空主题。自备 API，数据留在本地。">
+<meta name="description" content="心语（ineermost_words）是一款开源的安卓 AI 角色扮演聊天应用：导入 SillyTavern 角色卡，跨会话记忆、Live2D 桌宠、双向语音，以及能读写文件/执行命令的本地 Agent。自备 API，数据留在本地。">
 <meta name="theme-color" content="#07060F">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="心语 · ineermost_words">
 <meta property="og:title" content="心语 · ineermost_words — 让每一次对话，都怦然心动">
-<meta property="og:description" content="开源安卓 AI 角色扮演聊天应用：角色卡、跨会话记忆、Live2D 桌宠、双向语音。自备 API，数据全在本地。">
+<meta property="og:description" content="开源安卓 AI 角色扮演聊天应用：角色卡、跨会话记忆、Live2D 桌宠、双向语音，以及本地 Agent 的文件/命令/搜索能力。自备 API，数据全在本地。">
 <meta property="og:image" content="https://ineermostwords.sigborn.xyz/assets/img/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -79,12 +79,12 @@
         <p class="hero__en">ineermost_words</p>
         <p class="hero__tagline">让每一次对话，都怦然心动。</p>
         <p class="hero__lead">
-          自带 API 的 AI 角色扮演应用：导入你的角色卡，让 TA 记住你们聊过的每一次心跳。桌宠会随情绪动起来，也会开口说话。
+          自带 API 的 AI 角色扮演应用：导入你的角色卡，让 TA 记住你们聊过的每一次心跳。桌宠会随情绪动起来，也会开口说话。<br>现在还多了一个能帮你读写文件、执行命令、联网搜索的本地 Agent。
         </p>
         <div class="hero__cta">
           <a class="btn btn--primary btn--lg" href="/dl/github" rel="noopener">
             <svg class="ico" aria-hidden="true"><use href="#i-android"/></svg>
-            <span>下载 APK · v1.3.5</span>
+            <span>下载 APK · v1.7.0</span>
             <small>GitHub</small>
           </a>
           <a class="btn btn--ghost btn--lg" href="/dl/gitee" rel="noopener">
@@ -94,7 +94,7 @@
           </a>
         </div>
         <ul class="hero__meta">
-          <li>约 75 MB</li>
+          <li>约 80 MB</li>
           <li>Android 7.0+</li>
           <li>木兰宽松许可证 v2</li>
           <li>数据只在本机</li>
@@ -143,6 +143,13 @@
         </article>
 
         <article class="card reveal">
+          <span class="card__ico"><svg class="ico" aria-hidden="true"><use href="#i-code"/></svg></span>
+          <h3>本地 Agent</h3>
+          <p>读写工作区与授权文件夹、转换格式、联网搜索、发 HTTP 请求；授权 Shizuku 后可执行 shell，开启无障碍后可读屏、按文字点击。</p>
+          <p class="card__note">每步确认 / 自动审查 / 全自动三种模式，也能按会话单独设置。</p>
+        </article>
+
+        <article class="card reveal">
           <span class="card__ico"><svg class="ico" aria-hidden="true"><use href="#i-paw"/></svg></span>
           <h3>Live2D 桌宠</h3>
           <p>回复里的情绪与动作标签实时驱动表情、动作和句级口型；关键词兜底，没有标签也能读懂气氛。</p>
@@ -176,7 +183,7 @@
           <p>手动创建，或直接导入 SillyTavern V2 角色卡（PNG / JSON）：人设、性格、场景、开场白、示例对话完整映射。立绘支持 1:1 可视化裁剪，双指缩放取局部。</p>
           <ul class="ticks">
             <li>按固定顺序组装提示词，人设不跑偏</li>
-            <li>最近 40 条滑动窗口 + 记忆 + Few-shot</li>
+            <li>可调 token 窗口（默认 4096）+ 记忆 + Few-shot</li>
             <li>会话独立背景板，键盘弹出不缩放</li>
           </ul>
         </article>
@@ -229,7 +236,7 @@
             <div class="msg msg--in is-typing"><i></i><i></i><i></i></div>
           </div>
           <div class="preview__nav">
-            <span class="is-on">会话</span><span>角色</span><span>桌宠</span><span>设置</span>
+            <span class="is-on">会话</span><span>角色</span><span>Agent</span><span>桌宠</span><span>设置</span>
           </div>
         </div>
       </div>
@@ -280,7 +287,7 @@
       <header class="sec-head reveal">
         <p class="eyebrow"><span class="dot"></span>下载</p>
         <h2>选一个离你更近的源</h2>
-        <p class="sec-head__sub">同一份 v1.3.5 安装包，两个仓库同步发布。</p>
+        <p class="sec-head__sub">同一份 v1.7.0 安装包，两个仓库同步发布。</p>
       </header>
 
       <div class="dl">
@@ -291,11 +298,11 @@
               <h3>GitHub</h3>
               <p>主仓库 · 完整更新日志</p>
             </div>
-            <span class="dl__badge">v1.3.5</span>
+            <span class="dl__badge">v1.7.0</span>
           </div>
           <dl class="dl__spec">
             <div><dt>安装包</dt><dd>app-release.apk</dd></div>
-            <div><dt>大小</dt><dd>约 75 MB</dd></div>
+            <div><dt>大小</dt><dd>约 80 MB</dd></div>
             <div><dt>要求</dt><dd>Android 7.0+</dd></div>
           </dl>
           <div class="dl__actions">
@@ -303,7 +310,7 @@
               <svg class="ico" aria-hidden="true"><use href="#i-download"/></svg>下载 APK
             </a>
             <div class="dl__links">
-              <a href="https://github.com/adcoof/ineermost_words/releases/tag/v1.3.5" rel="noopener">发行版说明<svg class="ico" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+              <a href="https://github.com/adcoof/ineermost_words/releases/tag/v1.7.0" rel="noopener">发行版说明<svg class="ico" aria-hidden="true"><use href="#i-arrow"/></svg></a>
               <a href="https://github.com/adcoof/ineermost_words" rel="noopener">查看源码<svg class="ico" aria-hidden="true"><use href="#i-code"/></svg></a>
             </div>
           </div>
@@ -316,11 +323,11 @@
               <h3>Gitee</h3>
               <p>国内镜像 · 访问更快</p>
             </div>
-            <span class="dl__badge">v1.3.5</span>
+            <span class="dl__badge">v1.7.0</span>
           </div>
           <dl class="dl__spec">
             <div><dt>安装包</dt><dd>app-release.apk</dd></div>
-            <div><dt>大小</dt><dd>约 75 MB</dd></div>
+            <div><dt>大小</dt><dd>约 80 MB</dd></div>
             <div><dt>要求</dt><dd>Android 7.0+</dd></div>
           </dl>
           <div class="dl__actions">
@@ -353,23 +360,24 @@
     <div class="wrap">
       <header class="sec-head reveal">
         <p class="eyebrow"><span class="dot"></span>更新日志</p>
-        <h2>v1.3.5 <span class="grad">表情包与液态玻璃</span></h2>
-        <p class="sec-head__sub">2026-11-01 发布 · 数据库自动升级至 schema 8，旧数据完整保留。</p>
+        <h2>v1.7.0 <span class="grad">Agent、记忆 v2 与更稳的回复</span></h2>
+        <p class="sec-head__sub">2026-11-24 发布 · 数据库自动升级至 schema 12，旧数据完整保留。</p>
       </header>
 
       <div class="log">
         <article class="log__card reveal">
           <ul class="log__list">
-            <li><strong>表情包</strong>：14 种心情分组，回复情绪到位时自动发贴纸，相近心情自动借用。</li>
-            <li><strong>多段短回复</strong>：一轮最多 4 条短消息逐条上屏，模型不配合时客户端兜底分段。</li>
-            <li><strong>液态玻璃界面</strong>：导航、顶栏、输入栏真实背景模糊 + 渐变描边。</li>
-            <li><strong>记忆文档与「TA 眼中的你」</strong>：分节文档 + 用户画像，可导出 PNG / Word。</li>
-            <li><strong>内置 Haru 桌宠</strong>：首次启动自动导入，新会话默认绑定。</li>
-            <li><strong>时间感知</strong>：注入当前日期时间，跨天消息自动带时间锚点。</li>
-            <li class="log__fix"><strong>修复</strong>：背景板只能裁 1:1、竖图头像裁剪框跑到屏幕外、键盘弹出背景缩小、回复不分段、自造标签漏进气泡。</li>
+            <li><strong>本地 Agent</strong>：新增第 5 个 tab，可读写工作区与授权文件夹、转换格式、联网搜索、发 HTTP 请求；Shizuku 授权后可执行 shell，无障碍开启后可读屏与按文字点击。</li>
+            <li><strong>三种审批模式</strong>：每步确认 / 自动审查 / 全自动；设置页配置默认值，每个 Agent 会话可单独覆盖。</li>
+            <li><strong>记忆 v2</strong>：近期记忆默认保留 3 天细节，更早的对话压缩成带日期的长期事实；多会话独立水位线，换会话不再漏记。</li>
+            <li><strong>上下文窗口</strong>：聊天与 Agent 各自独立可调（1024–32768），顶栏实时显示用量；超预算自动压缩并保留摘要。</li>
+            <li><strong>输出稳定性</strong>：空回复自动重试、错误一键重试、长度截断识别、整包 JSON 兜底。</li>
+            <li><strong>隐私收紧</strong>：关闭系统自动备份与设备迁移，数据库不再被云备份带出应用沙盒。</li>
+            <li><strong>体验</strong>：消息长按复制/删除、Agent 打开定位最新、Markdown 渲染、图片转 PNG、文件保存到下载目录。</li>
+            <li class="log__fix"><strong>修复</strong>：偶发空气泡、记忆被模型拒绝语覆盖、工作区路径误判、SAF 移动递归建目录、旧会话换 Key 后 401、Agent 打开停在顶部。</li>
           </ul>
           <div class="log__foot">
-            <span>测试用例增至 304 项，<code>flutter analyze</code> 无告警。</span>
+            <span>测试用例增至 421 项，<code>flutter analyze</code> 无告警。</span>
             <a class="link" href="https://github.com/adcoof/ineermost_words/releases" rel="noopener">全部版本<svg class="ico" aria-hidden="true"><use href="#i-arrow"/></svg></a>
           </div>
         </article>
@@ -395,7 +403,11 @@
         </details>
         <details class="reveal">
           <summary>我的聊天数据会被上传吗？</summary>
-          <p>角色、会话、记忆、表情包、桌宠模型全部保存在本机 SQLite 与本地文件里。只有你主动发起的模型请求会发往你自己配置的接口地址，应用不经过任何中转服务器。</p>
+          <p>角色、会话、记忆、表情包、桌宠模型全部保存在本机 SQLite 与本地文件里。只有你主动发起的模型请求会发往你自己配置的接口地址，应用不经过任何中转服务器。v1.7 起还关闭了 Android 系统自动备份与设备迁移，数据库不会被云备份带出应用沙盒。</p>
+        </details>
+        <details class="reveal">
+          <summary>Agent 能做什么？安全吗？</summary>
+          <p>Agent 可以在你授权的工作区或系统文件夹内读写/移动/删除文件、转换格式、联网搜索、发 HTTP 请求；授权 Shizuku 后可执行 shell，开启无障碍后可读屏与按文字点击。高风险操作会按当前审批模式请求确认，「全自动」模式风险自负；文件访问始终限制在授权目录内。</p>
         </details>
         <details class="reveal">
           <summary>为什么语音会失败或没声音？</summary>
@@ -407,7 +419,7 @@
         </details>
         <details class="reveal">
           <summary>我的手机能用吗？</summary>
-          <p>需要 Android 7.0（API 24）及以上，安装包约 75 MB。iOS 暂无计划。</p>
+          <p>需要 Android 7.0（API 24）及以上，安装包约 80 MB。iOS 暂无计划。</p>
         </details>
       </div>
     </div>
@@ -418,7 +430,7 @@
       <img class="cta__icon" src="assets/img/icon-192.png" alt="" width="88" height="88" loading="lazy" decoding="async">
       <div class="cta__copy">
         <h2>今晚，就和一个会记得你的人说说话。</h2>
-        <p>v1.3.5 · 约 75 MB · Android 7.0+</p>
+        <p>v1.7.0 · 约 80 MB · Android 7.0+</p>
       </div>
       <div class="cta__actions">
         <a class="btn btn--primary btn--lg" href="/dl/github" rel="noopener">

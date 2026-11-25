@@ -103,14 +103,15 @@ certbot certonly --webroot -w /var/www/ineermostwords -d ineermostwords.sigborn.
 
 ## 版本号与下载链接
 
-页面里 v1.3.5 与 APK 直链出现在以下位置，发新版时全局替换即可：
+页面里 v1.7.0 与 APK 直链出现在以下位置，发新版时全局替换即可：
 
 - `index.html` 顶部：`<title>`、`description`、`og:*`、`canonical`
-- hero 主按钮：`releases/download/v1.3.5/app-release.apk`（GitHub）与同路径的 Gitee
-- hero 徽标：`约 75 MB`（APK 大小变了记得改）
+- hero 主按钮：`releases/download/v1.7.0/app-release.apk`（GitHub）与同路径的 Gitee
+- hero 徽标：`约 80 MB`（APK 大小变了记得改）
 - `#download`：两张源卡片的版本徽标、`发行版说明`、`查看源码`
 - `#changelog`：标题、日期、条目、`全部版本`
-- 结尾 CTA：`v1.3.5 · 约 75 MB · Android 7.0+`
+- 结尾 CTA：`v1.7.0 · 约 80 MB · Android 7.0+`
+- `/dl/github` 与 `/dl/gitee` 的 302 目标在服务器 nginx 配置里（仓库副本：`tool/deploy/ineermostwords.conf`），发版时两处一起改
 
 下载地址模板：
 
