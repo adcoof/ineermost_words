@@ -79,6 +79,12 @@ class ChatMessage {
   /// 消息种类（v8）：sticker 为角色自动发送的表情包（纯图）。
   final MessageKind kind;
 
+  /// 当前选中的候选回复 id（v14）；null=正文即唯一候选。
+  final String? activeVariantId;
+
+  /// 群聊中这条消息的发言角色 id（v16）；null=单角色会话。
+  final String? speakerCharacterId;
+
   final DateTime createdAt;
 
   const ChatMessage({
@@ -92,6 +98,8 @@ class ChatMessage {
     this.imageSummary = '',
     required this.status,
     this.kind = MessageKind.text,
+    this.activeVariantId,
+    this.speakerCharacterId,
     required this.createdAt,
   });
 
@@ -134,6 +142,8 @@ class ChatMessage {
         imageSummary: imageSummary ?? this.imageSummary,
         status: status ?? this.status,
         kind: kind ?? this.kind,
+        activeVariantId: activeVariantId,
+        speakerCharacterId: speakerCharacterId,
         createdAt: createdAt,
       );
 }
@@ -155,6 +165,12 @@ class Conversation {
   /// 自定义聊天背景板文件绝对路径（v8）；null=默认主题背景。
   final String? backgroundPath;
 
+  /// 分支来源会话 id（v16）；null=非分支会话。
+  final String? parentConversationId;
+
+  /// 分支点消息 id（v16）。
+  final String? branchFromMessageId;
+
   const Conversation({
     required this.id,
     required this.title,
@@ -166,5 +182,42 @@ class Conversation {
     required this.archived,
     this.voiceEnabled = true,
     this.backgroundPath,
+    this.parentConversationId,
+    this.branchFromMessageId,
+  });
+}
+/// 一条 assistant 消息的候选回复（v14）。
+class MessageVariant {
+  final String id;
+  final String messageId;
+  final String content;
+  final String rawContent;
+  final String emotionEvents;
+  final DateTime createdAt;
+
+  const MessageVariant({
+    required this.id,
+    required this.messageId,
+    required this.content,
+    required this.rawContent,
+    required this.emotionEvents,
+    required this.createdAt,
+  });
+}
+
+/// 群聊会话的参与者（v16）。
+class ConversationParticipant {
+  final String id;
+  final String conversationId;
+  final String characterId;
+  final int sortOrder;
+  final DateTime createdAt;
+
+  const ConversationParticipant({
+    required this.id,
+    required this.conversationId,
+    required this.characterId,
+    required this.sortOrder,
+    required this.createdAt,
   });
 }

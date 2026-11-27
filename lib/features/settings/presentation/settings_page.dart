@@ -14,9 +14,6 @@ import '../../../app/theme.dart';
 import '../../../core/widgets/glass.dart';
 import '../data/app_settings_repository.dart';
 import 'api_profiles_page.dart';
-import '../../agent/data/device_gateway.dart';
-import '../../agent/data/saf_gateway.dart';
-import '../../agent/domain/agent_approval.dart';
 import '../../voice/presentation/voice_settings_page.dart';
 
 /// 奇点重现官网。
@@ -35,10 +32,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   bool _autoRetryEnabled = true;
   int _contextWindowTokens = kContextWindowDefault;
   int _contextOtherTokens = kContextWindowOtherDefault;
-  AgentApprovalMode _agentApprovalMode = AgentApprovalMode.ask;
-  List<AgentGrantedFolder> _agentFolders = const [];
-  int _agentContextWindow = kContextWindowDefault;
-  int _agentMaxSteps = kAgentMaxStepsDefault;
 
   @override
   void initState() {
@@ -47,7 +40,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _loadMemory();
     _loadAutoRetry();
     _loadContextWindow();
-    _loadAgentPermissions();
   }
 
   Future<void> _loadTheme() async {
@@ -111,40 +103,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ),
     );
     await _loadContextWindow();
-  }
-
-  Future<void> _loadAgentPermissions() async {
-    final repo = ref.read(appSettingsRepositoryProvider);
-    final mode = await repo.agentApprovalMode();
-    final folders = await repo.agentGrantedFolders();
-    final window = await repo.agentContextWindowTokens();
-    final steps = await repo.agentMaxSteps();
-    if (mounted) {
-      setState(() {
-        _agentApprovalMode = mode;
-        _agentFolders = folders;
-        _agentContextWindow = window;
-        _agentMaxSteps = steps;
-      });
-    }
-  }
-
-  Future<void> _openAgentPermissions() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (_) => _AgentPermissionSheet(
-        repo: ref.read(appSettingsRepositoryProvider),
-        saf: ref.read(safGatewayProvider),
-        device: ref.read(deviceGatewayProvider),
-        mode: _agentApprovalMode,
-        folders: _agentFolders,
-        contextWindow: _agentContextWindow,
-        maxSteps: _agentMaxSteps,
-      ),
-    );
-    await _loadAgentPermissions();
   }
 
   Future<void> _openSite(BuildContext context) async {
@@ -233,17 +191,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => unawaited(_openContextWindowSheet()),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.shield_outlined),
-                    title: const Text('Agent 默认权限'),
-                    subtitle: Text(
-                      '${_agentApprovalMode.label} · '
-                      '${_agentFolders.isEmpty ? '仅工作区' : '${_agentFolders.length} 个授权文件夹'}'
-                      ' · 新会话默认',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => unawaited(_openAgentPermissions()),
                   ),
                 ],
               ),
@@ -623,326 +570,6 @@ class _ContextWindowSheetState extends State<_ContextWindowSheet> {
               const SizedBox(height: 4),
               Text(
                 '按估算 token 计算，实际可用预算为窗口的 90%。修改立即生效。',
-                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Agent 审批模式 + SAF 授权文件夹。
-class _AgentPermissionSheet extends StatefulWidget {
-  const _AgentPermissionSheet({
-    required this.repo,
-    required this.saf,
-    required this.device,
-    required this.mode,
-    required this.folders,
-    required this.contextWindow,
-    required this.maxSteps,
-  });
-
-  final AppSettingsRepository repo;
-  final SafGateway saf;
-  final DeviceGateway device;
-  final AgentApprovalMode mode;
-  final List<AgentGrantedFolder> folders;
-  final int contextWindow;
-  final int maxSteps;
-
-  @override
-  State<_AgentPermissionSheet> createState() => _AgentPermissionSheetState();
-}
-
-class _AgentPermissionSheetState extends State<_AgentPermissionSheet> {
-  late AgentApprovalMode _mode = widget.mode;
-  late List<AgentGrantedFolder> _folders = List.of(widget.folders);
-  late int _window = widget.contextWindow;
-  late int _steps = widget.maxSteps;
-  bool _picking = false;
-  DeviceStatus? _device;
-  bool _loadingDevice = true;
-  String? _deviceError;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_loadDevice());
-  }
-
-  Future<void> _loadDevice() async {
-    try {
-      final status = await widget.device.status();
-      if (!mounted) return;
-      setState(() {
-        _device = status;
-        _loadingDevice = false;
-        _deviceError = null;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _loadingDevice = false;
-        _deviceError = '$e';
-      });
-    }
-  }
-
-  Future<void> _requestShizuku() async {
-    try {
-      await widget.device.requestShizuku();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Shizuku 授权失败：$e')));
-      }
-    }
-    await _loadDevice();
-  }
-
-  Future<void> _openAccessibilitySettings() async {
-    try {
-      await widget.device.openAccessibilitySettings();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('打开无障碍设置失败：$e')));
-      }
-    }
-    await _loadDevice();
-  }
-
-  String _fmt(int n) => n.toString().replaceAllMapped(
-        RegExp(r'(\d)(?=(\d{3})+$)'),
-        (m) => '${m[1]},',
-      );
-
-  String _shizukuLabel() {
-    final status = _device;
-    if (status == null) return _loadingDevice ? '正在检测…' : '未检测到';
-    if (!status.shizukuAvailable) return '未运行（需安装并启动 Shizuku）';
-    if (!status.shizukuGranted) return '已运行，等待授权';
-    return '已授权，可执行 shell';
-  }
-
-  Future<void> _setMode(AgentApprovalMode mode) async {
-    setState(() => _mode = mode);
-    await widget.repo.setAgentApprovalMode(mode);
-  }
-
-  Future<void> _addFolder() async {
-    if (_picking) return;
-    setState(() => _picking = true);
-    try {
-      final folder = await widget.saf.pickDirectory();
-      if (folder == null) return;
-      await widget.repo.addAgentGrantedFolder(folder);
-      final next = await widget.repo.agentGrantedFolders();
-      if (mounted) setState(() => _folders = next);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('选择文件夹失败：$e')));
-      }
-    } finally {
-      if (mounted) setState(() => _picking = false);
-    }
-  }
-
-  Future<void> _removeFolder(AgentGrantedFolder folder) async {
-    await widget.repo.removeAgentGrantedFolder(folder.uri);
-    final next = await widget.repo.agentGrantedFolders();
-    if (mounted) setState(() => _folders = next);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Agent 默认审批模式',
-                  style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 4),
-              Text(
-                '这里是新会话的默认值，可在 Agent 会话右上角按会话单独调整。'
-                '全自动会跳过确认，但文件仍限制在工作区与授权文件夹内；'
-                'shell 禁用 su，HTTP 禁止内网。',
-                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-              ),
-              const SizedBox(height: 8),
-              RadioGroup<AgentApprovalMode>(
-                groupValue: _mode,
-                onChanged: (v) {
-                  if (v != null) unawaited(_setMode(v));
-                },
-                child: Column(
-                  children: [
-                    for (final mode in AgentApprovalMode.values)
-                      RadioListTile<AgentApprovalMode>(
-                        value: mode,
-                        title: Text(mode.label),
-                        subtitle: Text(mode.description),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                  ],
-                ),
-              ),
-              const Divider(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text('上下文窗口',
-                        style: Theme.of(context).textTheme.titleMedium),
-                  ),
-                  Text('${_fmt(_window)} token',
-                      style: TextStyle(fontSize: 12, color: scheme.primary)),
-                ],
-              ),
-              Slider(
-                value: _window.toDouble().clamp(1024, 32768),
-                min: 1024,
-                max: 32768,
-                divisions: 62,
-                label: '${_fmt(_window)} token',
-                onChanged: (v) => setState(() => _window = (v / 512).round() * 512),
-                onChangeEnd: (v) => unawaited(
-                  widget.repo.setAgentContextWindowTokens((v / 512).round() * 512),
-                ),
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text('单轮工具调用上限',
-                        style: Theme.of(context).textTheme.titleMedium),
-                  ),
-                  Text('$_steps 步',
-                      style: TextStyle(fontSize: 12, color: scheme.primary)),
-                ],
-              ),
-              Slider(
-                value: _steps.toDouble().clamp(1, 12),
-                min: 1,
-                max: 12,
-                divisions: 11,
-                label: '$_steps 步',
-                onChanged: (v) => setState(() => _steps = v.round()),
-                onChangeEnd: (v) => unawaited(
-                  widget.repo.setAgentMaxSteps(v.round()),
-                ),
-              ),
-              Text(
-                '工具调用上限越高，单轮能连续完成的任务越多；超过上限会提示并停止。',
-                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
-              ),
-              const Divider(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text('手机控制',
-                        style: Theme.of(context).textTheme.titleMedium),
-                  ),
-                  if (_loadingDevice)
-                    const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Shizuku 让 Agent 执行 shell（点击、启动应用、截图）；'
-                '无障碍让 Agent 读屏并按文字点击。两者都需要你在系统里手动开启。',
-                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-              ),
-              if (_deviceError != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    '读取手机控制状态失败：$_deviceError',
-                    style: TextStyle(fontSize: 12, color: scheme.error),
-                  ),
-                ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.terminal),
-                title: const Text('Shizuku'),
-                subtitle: Text(_shizukuLabel()),
-                trailing: (_device?.shizukuGranted ?? false)
-                    ? const Text('已授权')
-                    : TextButton(
-                        onPressed: (_device?.shizukuAvailable ?? false)
-                            ? () => unawaited(_requestShizuku())
-                            : null,
-                        child: const Text('授权'),
-                      ),
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.accessibility_new),
-                title: const Text('无障碍服务'),
-                subtitle: Text(
-                  (_device?.accessibilityEnabled ?? false)
-                      ? '已开启，可读取屏幕文字并点击'
-                      : '未开启，无法读屏/点击',
-                ),
-                trailing: TextButton(
-                  onPressed: () => unawaited(_openAccessibilitySettings()),
-                  child: Text(
-                    (_device?.accessibilityEnabled ?? false) ? '设置' : '去开启',
-                  ),
-                ),
-              ),
-              const Divider(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text('授权文件夹',
-                        style: Theme.of(context).textTheme.titleMedium),
-                  ),
-                  TextButton.icon(
-                    onPressed: _picking ? null : _addFolder,
-                    icon: const Icon(Icons.add),
-                    label: Text(_picking ? '选择中…' : '添加'),
-                  ),
-                ],
-              ),
-              if (_folders.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    '还没有授权文件夹。添加后 Agent 可读写其中的文件。',
-                    style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-                  ),
-                ),
-              for (final folder in _folders)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.folder_outlined),
-                  title: Text(folder.name),
-                  subtitle: Text(
-                    folder.uri,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 10),
-                  ),
-                  trailing: IconButton(
-                    tooltip: '移除',
-                    icon: const Icon(Icons.close),
-                    onPressed: () => unawaited(_removeFolder(folder)),
-                  ),
-                ),
-              const SizedBox(height: 8),
-              Text(
-                '移除授权只影响 Agent 列表，不会删除文件；系统授权可随时在系统设置中撤销。',
                 style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
               ),
             ],

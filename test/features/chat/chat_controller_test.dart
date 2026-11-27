@@ -8,6 +8,7 @@ import 'package:ai_roleplay_chat/app/providers.dart';
 import 'package:ai_roleplay_chat/core/errors/app_exception.dart';
 import 'package:ai_roleplay_chat/data/local/app_database.dart';
 import 'package:ai_roleplay_chat/features/characters/data/character_repository.dart';
+import 'package:ai_roleplay_chat/features/characters/domain/character.dart';
 import 'package:ai_roleplay_chat/features/chat/application/chat_controller.dart';
 import 'package:ai_roleplay_chat/features/chat/application/memory_summarizer.dart';
 import 'package:ai_roleplay_chat/features/chat/application/speech_sink.dart';
@@ -32,6 +33,7 @@ class _ScriptedApi implements ChatApiClient {
   List<_Responder> responses;
   int calls = 0;
   final List<int?> maxTokensHistory = [];
+  final List<List<ApiMessage>> sentMessages = [];
 
   @override
   Stream<ChatDelta> streamChat({
@@ -43,6 +45,7 @@ class _ScriptedApi implements ChatApiClient {
     CancelToken? cancelToken,
   }) {
     maxTokensHistory.add(maxTokens);
+    sentMessages.add(List<ApiMessage>.from(messages));
     final index = calls < responses.length ? calls : responses.length - 1;
     calls++;
     return responses[index]();
@@ -322,4 +325,165 @@ void main() {
     expect(replies[1].content, contains('第二段'));
     expect(replies.every((m) => m.status == MessageStatus.done), isTrue);
   });
+
+  group('候选回复 / 重新生成 / 编辑 / 开场白（v14）', () {
+    test('重新生成：旧正文落候选，新正文成为当前候选', () async {
+      final conv = await chatRepo.createConversation(apiProfileId: profile.id);
+      controller.bindConversation(conv.id);
+      await chatRepo.insertMessage(
+        conversationId: conv.id,
+        role: ChatRole.user,
+        content: 'hi',
+        rawContent: 'hi',
+      );
+      final assistant = await chatRepo.insertMessage(
+        conversationId: conv.id,
+        role: ChatRole.assistant,
+        content: '旧回复',
+        rawContent: '旧回复',
+        status: MessageStatus.done,
+      );
+      api.responses = [text('新回复')];
+      expect(await controller.regenerateMessage(assistant.id), isTrue);
+
+      final message = await chatRepo.getMessage(assistant.id);
+      expect(message!.content, '新回复');
+      expect(message.status, MessageStatus.done);
+      final variants = await chatRepo.getVariants(assistant.id);
+      expect(variants.length, 2);
+      expect(
+        variants.firstWhere((v) => v.id == message.activeVariantId).content,
+        '新回复',
+      );
+    });
+
+    test('swipe 切换候选不发请求，编辑保存为候选', () async {
+      final conv = await chatRepo.createConversation(apiProfileId: profile.id);
+      controller.bindConversation(conv.id);
+      await chatRepo.insertMessage(
+        conversationId: conv.id,
+        role: ChatRole.user,
+        content: 'hi',
+        rawContent: 'hi',
+      );
+      final assistant = await chatRepo.insertMessage(
+        conversationId: conv.id,
+        role: ChatRole.assistant,
+        content: '旧回复',
+        rawContent: '旧回复',
+        status: MessageStatus.done,
+      );
+      api.responses = [text('新回复')];
+      await controller.regenerateMessage(assistant.id);
+
+      final callsBefore = api.calls;
+      expect(await controller.switchVariant(assistant.id, -1), isTrue);
+      expect(api.calls, callsBefore);
+      expect((await chatRepo.getMessage(assistant.id))!.content, '旧回复');
+
+      expect(await controller.editMessage(assistant.id, '编辑版'), isTrue);
+      final message = await chatRepo.getMessage(assistant.id);
+      expect(message!.content, '编辑版');
+      final variants = await chatRepo.getVariants(assistant.id);
+      expect(variants.any((v) => v.content == '编辑版'), isTrue);
+    });
+
+    test('无用户消息时可循环开场白', () async {
+      final chars = CharacterRepository(db);
+      final character = chars.blank().copyWith(
+        name: '小雨',
+        firstMessage: '主开场',
+        alternateGreetings: const ['备用开场'],
+      );
+      await chars.save(character);
+      final conv = await chatRepo.createConversation(
+        apiProfileId: profile.id,
+        characterId: character.id,
+      );
+      controller.bindConversation(conv.id);
+      final first = await chatRepo.insertMessage(
+        conversationId: conv.id,
+        role: ChatRole.assistant,
+        content: '主开场',
+        rawContent: '主开场',
+        status: MessageStatus.done,
+      );
+
+      expect(await controller.cycleAlternateGreeting(), isTrue);
+      expect((await chatRepo.getMessage(first.id))!.content, '备用开场');
+      expect(await controller.cycleAlternateGreeting(), isTrue);
+      expect((await chatRepo.getMessage(first.id))!.content, '主开场');
+    });
+  });
+  group('群聊与分支（v16）', () {
+    Future<void> seedChar(String id, String name) async {
+      await CharacterRepository(db).save(
+        Character(
+          id: id,
+          name: name,
+          createdAt: DateTime(2026),
+          updatedAt: DateTime(2026),
+        ),
+      );
+    }
+
+    test('群聊轮换：A 之后 B 发言，消息带 speaker', () async {
+      await seedChar('a', '角色A');
+      await seedChar('b', '角色B');
+      final conv = await chatRepo.createGroupConversation(
+        apiProfileId: 'p1',
+        characterIds: ['a', 'b'],
+      );
+      controller.bindConversation(conv.id);
+      api.responses = [text('from A'), text('from B')];
+
+      await controller.send('hi');
+      await controller.send('again');
+
+      final assistants = await assistantMessages();
+      expect(assistants.map((m) => m.speakerCharacterId), ['a', 'b']);
+    });
+
+    test('群聊历史把其他角色发言转成带名字的 user', () async {
+      await seedChar('a', '角色A');
+      await seedChar('b', '角色B');
+      final conv = await chatRepo.createGroupConversation(
+        apiProfileId: 'p1',
+        characterIds: ['a', 'b'],
+      );
+      controller.bindConversation(conv.id);
+      api.responses = [text('from A'), text('from B'), text('from A again')];
+
+      await controller.send('hi');
+      await controller.send('again');
+      await controller.send('third');
+
+      final sent = api.sentMessages[1];
+      expect(
+        sent.any((m) => m.role == 'user' && m.content.contains('【角色A】')),
+        isTrue,
+      );
+    });
+
+    test('branchFromMessage 返回新会话并复制前缀', () async {
+      final conv = await chatRepo.createConversation(
+        apiProfileId: 'p1',
+        characterId: 'a',
+      );
+      controller.bindConversation(conv.id);
+      final u = await chatRepo.insertMessage(
+        conversationId: conv.id,
+        role: ChatRole.user,
+        content: '起点',
+      );
+      final newId = await controller.branchFromMessage(u.id);
+      expect(newId, isNotNull);
+      final branch = await chatRepo.getConversation(newId!);
+      expect(branch!.parentConversationId, conv.id);
+      expect(branch.branchFromMessageId, u.id);
+      final msgs = await chatRepo.watchMessages(newId).first;
+      expect(msgs.map((m) => m.content), ['起点']);
+    });
+  });
+
 }

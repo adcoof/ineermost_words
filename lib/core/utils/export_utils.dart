@@ -49,3 +49,11 @@ Future<void> shareFilePath(String path, String fileName) async {
     ShareParams(files: [XFile(path)], title: fileName),
   );
 }
+
+/// 任意字节写入临时文件并拉起分享面板（角色卡导出用）。
+Future<void> shareBytes(Uint8List bytes, String fileName) async {
+  final dir = await getTemporaryDirectory();
+  final file = File('${dir.path}/$fileName');
+  await file.writeAsBytes(bytes, flush: true);
+  await shareFilePath(file.path, fileName);
+}

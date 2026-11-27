@@ -118,6 +118,24 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ContextUsageChip(usage: ui.contextUsage),
               _VoiceToggle(conversationId: conversationId),
               IconButton(
+                tooltip: '换开场白',
+                icon: const Icon(Icons.style_outlined),
+                onPressed: conversationId == null
+                    ? null
+                    : () async {
+                        final ok = await ref
+                            .read(chatControllerProvider.notifier)
+                            .cycleAlternateGreeting();
+                        if (!ok && context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('当前没有更多开场白（仅首条角色消息可切换）'),
+                            ),
+                          );
+                        }
+                      },
+              ),
+              IconButton(
                 tooltip: '背景板',
                 icon: const Icon(Icons.wallpaper_outlined),
                 onPressed: conversationId == null
@@ -147,7 +165,21 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   Expanded(
                     child: conversationId == null
                         ? const Center(child: Text('输入第一条消息开始对话'))
-                        : MessageList(conversationId: conversationId),
+                        : MessageList(
+                            conversationId: conversationId,
+                            onBranch: (messageId) async {
+                              final newId = await ref
+                                  .read(chatControllerProvider.notifier)
+                                  .branchFromMessage(messageId);
+                              if (newId == null || !context.mounted) return;
+                              await Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) =>
+                                      ChatPage(conversationId: newId),
+                                ),
+                              );
+                            },
+                          ),
                   ),
                   const ChatInputBar(),
                 ],

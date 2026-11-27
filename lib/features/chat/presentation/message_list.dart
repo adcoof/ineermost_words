@@ -46,8 +46,13 @@ List<String?> timeSeparators(List<ChatMessage> messages, {DateTime? now}) {
 
 class MessageList extends ConsumerStatefulWidget {
   final String conversationId;
+  final Future<void> Function(String messageId)? onBranch;
 
-  const MessageList({super.key, required this.conversationId});
+  const MessageList({
+    super.key,
+    required this.conversationId,
+    this.onBranch,
+  });
 
   @override
   ConsumerState<MessageList> createState() => _MessageListState();
@@ -186,10 +191,12 @@ class _MessageListState extends ConsumerState<MessageList> {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
             if (hasText)
               ListTile(
                 leading: const Icon(Icons.copy_outlined),
@@ -202,6 +209,109 @@ class _MessageListState extends ConsumerState<MessageList> {
                       const SnackBar(content: Text('已复制到剪贴板')),
                     );
                   }
+                },
+              ),
+            if (message.role == ChatRole.assistant &&
+                message.status == MessageStatus.done)
+              ListTile(
+                leading: const Icon(Icons.refresh),
+                title: const Text('重新生成'),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  final ok = await ref
+                      .read(chatControllerProvider.notifier)
+                      .regenerateMessage(message.id);
+                  if (context.mounted && !ok) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('暂时无法重新生成')),
+                    );
+                  }
+                },
+              ),
+            if (message.role == ChatRole.assistant &&
+                message.status == MessageStatus.done)
+              ListTile(
+                leading: const Icon(Icons.swap_horiz),
+                title: const Text('上一个候选'),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  final ok = await ref
+                      .read(chatControllerProvider.notifier)
+                      .switchVariant(message.id, -1);
+                  if (context.mounted && !ok) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('没有更多候选回复')),
+                    );
+                  }
+                },
+              ),
+            if (message.role == ChatRole.assistant &&
+                message.status == MessageStatus.done)
+              ListTile(
+                leading: const Icon(Icons.swap_horiz),
+                title: const Text('下一个候选'),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  final ok = await ref
+                      .read(chatControllerProvider.notifier)
+                      .switchVariant(message.id, 1);
+                  if (context.mounted && !ok) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('没有更多候选回复')),
+                    );
+                  }
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('编辑'),
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                final controller = TextEditingController(text: message.content);
+                final edited = await showDialog<String>(
+                  context: context,
+                  builder: (dialogContext) => AlertDialog(
+                    title: const Text('编辑消息'),
+                    content: TextField(
+                      controller: controller,
+                      autofocus: true,
+                      maxLines: 6,
+                      minLines: 2,
+                      decoration: const InputDecoration(
+                        hintText: '输入新的内容',
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialogContext),
+                        child: const Text('取消'),
+                      ),
+                      FilledButton(
+                        onPressed: () =>
+                            Navigator.pop(dialogContext, controller.text),
+                        child: const Text('保存'),
+                      ),
+                    ],
+                  ),
+                );
+                controller.dispose();
+                if (edited != null &&
+                    edited.trim().isNotEmpty &&
+                    edited.trim() != message.content) {
+                  await ref
+                      .read(chatControllerProvider.notifier)
+                      .editMessage(message.id, edited);
+                }
+              },
+            ),
+            if (widget.onBranch != null)
+              ListTile(
+                leading: const Icon(Icons.account_tree_outlined),
+                title: const Text('从这里分支'),
+                subtitle: const Text('复制这条及之前的消息到新会话'),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await widget.onBranch!(message.id);
                 },
               ),
             ListTile(
@@ -232,7 +342,8 @@ class _MessageListState extends ConsumerState<MessageList> {
                 }
               },
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -241,6 +352,8 @@ class _MessageListState extends ConsumerState<MessageList> {
   @override
   Widget build(BuildContext context) {
     final repo = ref.watch(chatRepositoryProvider);
+    final characters = ref.watch(charactersStreamProvider).value ?? const [];
+    final speakerNames = {for (final c in characters) c.id: c.name};
     return StreamBuilder<List<ChatMessage>>(
       stream: repo.watchMessages(widget.conversationId),
       builder: (context, snapshot) {
@@ -261,6 +374,9 @@ class _MessageListState extends ConsumerState<MessageList> {
             final bubble = _MessageBubble(
               message: m,
               isStreaming: m.status == MessageStatus.streaming,
+              speakerName: m.speakerCharacterId == null
+                  ? null
+                  : speakerNames[m.speakerCharacterId],
               onLongPress: m.status == MessageStatus.streaming
                   ? null
                   : () => _showMessageActions(context, repo, m),
@@ -296,11 +412,13 @@ class _MessageBubble extends StatelessWidget {
   final ChatMessage message;
   final bool isStreaming;
   final VoidCallback? onLongPress;
+  final String? speakerName;
 
   const _MessageBubble({
     required this.message,
     required this.isStreaming,
     this.onLongPress,
+    this.speakerName,
   });
 
   @override
@@ -335,6 +453,20 @@ class _MessageBubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (!isUser &&
+                speakerName != null &&
+                speakerName!.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  speakerName!,
+                  style: TextStyle(
+                    color: fg.withValues(alpha: 0.65),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
             if (message.imageFilePaths.isNotEmpty) ...[
               _ImageGrid(paths: message.imageFilePaths),
               if (text.isNotEmpty || isStreaming) const SizedBox(height: 6),
@@ -376,8 +508,8 @@ class _MessageBubble extends StatelessWidget {
           ],
         ),
       ),
-      ),
-    );
+    ),
+  );
   }
 }
 

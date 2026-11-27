@@ -88,9 +88,23 @@ class _ContextUsageSheet extends StatelessWidget {
         icon: Icons.badge_outlined,
         tokens: usage.systemTokens,
       ),
+      if (usage.profileTokens > 0)
+        (
+          label: '角色档案',
+          icon: Icons.person_pin_outlined,
+          tokens: usage.profileTokens,
+        ),
+      if (usage.cardPromptTokens > 0)
+        (
+          label: '卡内提示',
+          icon: Icons.sticky_note_2_outlined,
+          tokens: usage.cardPromptTokens,
+        ),
       (label: '记忆（近期+画像）', icon: Icons.psychology_outlined, tokens: usage.memoryTokens),
       if (usage.factTokens > 0)
         (label: '长期记忆（事实）', icon: Icons.timeline_outlined, tokens: usage.factTokens),
+      if (usage.loreTokens > 0)
+        (label: '世界书', icon: Icons.menu_book_outlined, tokens: usage.loreTokens),
       (
         label: '跨会话片段',
         icon: Icons.forum_outlined,

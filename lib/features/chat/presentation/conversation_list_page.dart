@@ -58,7 +58,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     final fmt = DateFormat('MM-dd HH:mm');
     return Scaffold(
       appBar: AppBar(
-        title: const Text('会话'),
+        title: const Text('聊天'),
       ),
       body: Column(
         children: [
@@ -115,6 +115,95 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     );
   }
 
+  /// 群聊：选择 2–3 个角色，按选择顺序轮换发言。
+  Future<void> _startGroupChat(BuildContext context, WidgetRef ref) async {
+    final characterRepo = ref.read(characterRepositoryProvider);
+    final characters = await characterRepo.watchCharacters().first;
+    if (!context.mounted) return;
+    if (characters.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('至少需要两个角色才能创建群聊')),
+      );
+      return;
+    }
+    final selected = <String>{};
+    final result = await showModalBottomSheet<List<String>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setState) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const ListTile(
+                  title: Text('选择 2–3 个角色'),
+                  subtitle: Text('每轮由一位角色回复，按选择顺序轮换'),
+                ),
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      for (final c in characters)
+                        CheckboxListTile(
+                          value: selected.contains(c.id),
+                          title: Text(c.name),
+                          onChanged: (v) {
+                            setState(() {
+                              if (v == true) {
+                                if (selected.length >= 3) return;
+                                selected.add(c.id);
+                              } else {
+                                selected.remove(c.id);
+                              }
+                            });
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: selected.length >= 2
+                          ? () => Navigator.pop(
+                                sheetContext,
+                                selected.toList(),
+                              )
+                          : null,
+                      child: const Text('创建群聊'),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (result == null || result.length < 2 || !context.mounted) return;
+    final profile =
+        await ref.read(apiProfileRepositoryProvider).getDefault();
+    final names = {
+      for (final c in characters) c.id: c.name,
+    };
+    final conversation =
+        await ref.read(chatRepositoryProvider).createGroupConversation(
+              apiProfileId: profile?.id ?? '',
+              characterIds: result,
+              title: result.map((id) => names[id] ?? '角色').join('、'),
+            );
+    if (!context.mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ChatPage(conversationId: conversation.id),
+      ),
+    );
+  }
+
   /// 新会话入口：无角色直接聊 / 选已有角色 / 导入角色卡并开始。
   Future<void> _showNewConversationSheet(
       BuildContext context, WidgetRef ref) async {
@@ -135,6 +224,11 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
               onTap: () => Navigator.pop(context, 'pick'),
             ),
             ListTile(
+              leading: const Icon(Icons.groups_outlined),
+              title: const Text('创建群聊（2–3 个角色）'),
+              onTap: () => Navigator.pop(context, 'group'),
+            ),
+            ListTile(
               leading: const Icon(Icons.file_upload_outlined),
               title: const Text('导入角色卡并开始（PNG/JSON）'),
               onTap: () => Navigator.pop(context, 'import'),
@@ -149,6 +243,11 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
       Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const ChatPage()),
       );
+      return;
+    }
+
+    if (choice == 'group') {
+      await _startGroupChat(context, ref);
       return;
     }
 
@@ -194,7 +293,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                 leading: CharacterAvatar(
                     avatarPath: c.avatarPath, radius: 18),
                 title: Text(c.name),
-                subtitle: Text(c.source == 'st_v2' ? 'SillyTavern 卡' : '手动创建'),
+                subtitle: Text(c.sourceLabel),
                 onTap: () => Navigator.pop(context, c),
               ),
           ],

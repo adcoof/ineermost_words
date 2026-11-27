@@ -47,9 +47,3 @@ kotlin {
 flutter {
     source = "../.."
 }
-
-dependencies {
-    // Shizuku：用 ADB 权限执行 shell（input/am/screencap），无需 root。
-    implementation("dev.rikka.shizuku:api:13.1.5")
-    implementation("dev.rikka.shizuku:provider:13.1.5")
-}

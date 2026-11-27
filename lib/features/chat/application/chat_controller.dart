@@ -13,6 +13,8 @@ import '../../../core/errors/app_exception.dart';
 import '../../../core/utils/id.dart';
 import '../../../core/utils/text.dart';
 import '../../../core/utils/token_estimate.dart';
+import '../../characters/application/memory_recall.dart';
+import '../../characters/application/lore_recall.dart';
 import '../../characters/application/prompt_assembler.dart';
 import '../../characters/domain/character.dart';
 import '../../characters/domain/memory_fact.dart';
@@ -206,29 +208,83 @@ class ChatController extends Notifier<ChatUiState> {
         ? realSink
         : const NoopSpeechSink();
 
-    // 3. 助手占位消息。
+    // 3. 组装请求消息：预算来自设置里的上下文窗口（token 估算）；
+    //    当前用户消息永远保留，历史从最新往前按预算取。角色会话注入
+    //    跨会话记忆（近期原文+长期摘要，设置可关）；无角色会话只注入
+    //    当前时间。历史消息只带图片概括文本备注，当前用户消息在最后
+    //    显式追加（带图走多模态 parts）。
+    final history = await chatRepo.watchMessages(activeConvId).first;
+    final characterRepo = ref.read(characterRepositoryProvider);
+    final participants = conv == null
+        ? const <ConversationParticipant>[]
+        : await chatRepo.listParticipants(activeConvId);
+    final participantCharacters = <String, Character>{};
+    for (final p in participants) {
+      final c = await characterRepo.getById(p.characterId);
+      if (c != null) participantCharacters[c.id] = c;
+    }
+    String? speakerId;
+    if (participants.isNotEmpty) {
+      final reversedAssistants = history.reversed.where(
+        (m) =>
+            m.role == ChatRole.assistant &&
+            m.speakerCharacterId != null &&
+            participantCharacters.containsKey(m.speakerCharacterId),
+      );
+      final lastAssistant = reversedAssistants.isEmpty
+          ? null
+          : reversedAssistants.first;
+      final prevIndex = lastAssistant == null
+          ? -1
+          : participants.indexWhere(
+              (p) => p.characterId == lastAssistant.speakerCharacterId,
+            );
+      final nextIndex = prevIndex < 0
+          ? 0
+          : (prevIndex + 1) % participants.length;
+      speakerId = participants[nextIndex].characterId;
+    }
+    final Character? character = speakerId != null
+        ? participantCharacters[speakerId]
+        : conv?.characterId == null
+        ? null
+        : await characterRepo.getById(conv!.characterId!);
     final assistant = await chatRepo.insertMessage(
       conversationId: activeConvId,
       role: ChatRole.assistant,
       content: '',
       rawContent: '',
       status: MessageStatus.streaming,
+      speakerCharacterId: character?.id,
     );
-
-    // 4. 组装请求消息：预算来自设置里的上下文窗口（token 估算）；
-    //    当前用户消息永远保留，历史从最新往前按预算取。角色会话注入
-    //    跨会话记忆（近期原文+长期摘要，设置可关）；无角色会话只注入
-    //    当前时间。历史消息只带图片概括文本备注，当前用户消息在最后
-    //    显式追加（带图走多模态 parts）。
-    final history = await chatRepo.watchMessages(activeConvId).first;
-    final Character? character = conv?.characterId == null
-        ? null
-        : await ref
-              .read(characterRepositoryProvider)
-              .getById(conv!.characterId!);
-    final historyExceptCurrent = history
+    final rawHistoryExceptCurrent = history
         .where((m) => m.id != userMsg.id)
         .toList();
+    final historyExceptCurrent = participants.length <= 1 || character == null
+        ? rawHistoryExceptCurrent
+        : [
+            for (final m in rawHistoryExceptCurrent)
+              if (m.role == ChatRole.assistant &&
+                  m.speakerCharacterId != null &&
+                  m.speakerCharacterId != character.id)
+                ChatMessage(
+                  id: m.id,
+                  conversationId: m.conversationId,
+                  role: ChatRole.user,
+                  content:
+                      '【${participantCharacters[m.speakerCharacterId]?.name ?? '角色'}】${m.content}',
+                  rawContent: m.rawContent,
+                  emotionEvents: m.emotionEvents,
+                  imagePaths: m.imagePaths,
+                  imageSummary: m.imageSummary,
+                  status: m.status,
+                  kind: m.kind,
+                  speakerCharacterId: m.speakerCharacterId,
+                  createdAt: m.createdAt,
+                )
+              else
+                m,
+          ];
     final settings = ref.read(appSettingsRepositoryProvider);
     final windowTokens = await settings.contextWindowTokens();
     final otherTokens = await settings.contextWindowOtherTokens();
@@ -248,12 +304,19 @@ class ChatController extends Notifier<ChatUiState> {
       var userSummary = '';
       final pastSessions = <PastSession>[];
       var facts = const <MemoryFact>[];
+      final recallQuery = [
+        trimmed,
+        ...historyExceptCurrent.reversed.take(4).map((m) => m.contentWithImageNote),
+      ].join('\n');
       if (await settings.memoryEnabled()) {
         final characterRepo = ref.read(characterRepositoryProvider);
         final memory = await characterRepo.getMemory(character.id);
         memorySummary = memory.summary;
         userSummary = memory.userSummary;
-        facts = await characterRepo.getMemoryFacts(character.id);
+        facts = recallMemoryFacts(
+          facts: await characterRepo.getMemoryFacts(character.id),
+          query: recallQuery,
+        );
         // 跨会话片段按会话分组、每会话独立配额，纯图 + 图片摘要也纳入。
         final groups = await chatRepo.getCrossSessionDigest(
           characterId: character.id,
@@ -268,12 +331,19 @@ class ChatController extends Notifier<ChatUiState> {
           );
         }
       }
+      final lore = matchLoreEntries(
+        entries: await ref
+            .read(loreRepositoryProvider)
+            .listForCharacter(character.id, enabledOnly: true),
+        query: recallQuery,
+      );
       final assembled = PromptAssembler().assembleDetailed(
         character: character,
         history: historyExceptCurrent,
         memorySummary: memorySummary,
         pastSessions: pastSessions,
         facts: facts,
+        lore: lore,
         userSummary: userSummary,
         tokenBudget: windowTokens,
         otherTokenBudget: otherTokens,
@@ -726,6 +796,341 @@ class ChatController extends Notifier<ChatUiState> {
   /// 停止生成（保留已生成部分）。
   void stop() {
     _cancelToken?.cancel('用户停止');
+  }
+
+  /// 重新生成一条已完成的 assistant 消息。
+  ///
+  /// 只允许 done 的 assistant；旧正文先存为候选，失败/空回复会恢复旧正文。
+  Future<bool> regenerateMessage(String messageId) async {
+    if (state.isStreaming) return false;
+    final repo = ref.read(chatRepositoryProvider);
+    final message = await repo.getMessage(messageId);
+    if (message == null ||
+        message.role != ChatRole.assistant ||
+        message.status != MessageStatus.done) {
+      return false;
+    }
+    final conversation = await repo.getConversation(message.conversationId);
+    if (conversation == null) return false;
+    final history = await repo.watchMessages(conversation.id).first;
+    final index = history.indexWhere((m) => m.id == messageId);
+    if (index <= 0) return false;
+    final before = history.sublist(0, index);
+    if (before.isEmpty || before.last.role != ChatRole.user) return false;
+
+    final profileRepo = ref.read(apiProfileRepositoryProvider);
+    final api = ref.read(chatApiClientProvider);
+    final settings = ref.read(appSettingsRepositoryProvider);
+    final windowTokens = await settings.contextWindowTokens();
+    final otherTokens = await settings.contextWindowOtherTokens();
+
+    final Character? character = conversation.characterId == null
+        ? null
+        : await ref
+              .read(characterRepositoryProvider)
+              .getById(conversation.characterId!);
+    final List<ApiMessage> apiMessages;
+    if (character == null) {
+      apiMessages = PromptAssembler().assembleBare(
+        history: before,
+        tokenBudget: windowTokens,
+      ).messages;
+    } else {
+      var memorySummary = '';
+      var userSummary = '';
+      var facts = const <MemoryFact>[];
+      final pastSessions = <PastSession>[];
+      final recallQuery = before.reversed
+          .take(4)
+          .map((m) => m.contentWithImageNote)
+          .join('\n');
+      if (await settings.memoryEnabled()) {
+        final characterRepo = ref.read(characterRepositoryProvider);
+        final memory = await characterRepo.getMemory(character.id);
+        memorySummary = memory.summary;
+        userSummary = memory.userSummary;
+        facts = recallMemoryFacts(
+          facts: await characterRepo.getMemoryFacts(character.id),
+          query: recallQuery,
+        );
+        for (final g in await repo.getCrossSessionDigest(
+          characterId: character.id,
+          excludeConversationId: conversation.id,
+        )) {
+          pastSessions.add(
+            PastSession(title: g.conversation.title, messages: g.messages),
+          );
+        }
+      }
+      final lore = matchLoreEntries(
+        entries: await ref
+            .read(loreRepositoryProvider)
+            .listForCharacter(character.id, enabledOnly: true),
+        query: recallQuery,
+      );
+      apiMessages = PromptAssembler().assembleDetailed(
+        character: character,
+        history: before,
+        memorySummary: memorySummary,
+        pastSessions: pastSessions,
+        facts: facts,
+        lore: lore,
+        userSummary: userSummary,
+        tokenBudget: windowTokens,
+        otherTokenBudget: otherTokens,
+      ).messages;
+    }
+
+    var profile = conversation.apiProfileId.isEmpty
+        ? null
+        : await profileRepo.getById(conversation.apiProfileId);
+    if (profile == null || profile.apiKey.trim().isEmpty) {
+      profile = await profileRepo.getDefault();
+    }
+    if (profile == null || profile.apiKey.trim().isEmpty) {
+      if (state.conversationId == conversation.id) {
+        state = state.copyWith(errorText: '请先在设置中添加 API 供应商配置');
+      }
+      return false;
+    }
+    final activeProfile = profile;
+
+    // 旧正文先落候选（若还没有 active 候选）。
+    await _ensureActiveVariant(message);
+    final oldContent = message.content;
+    final oldRaw = message.rawContent;
+    final oldEvents = message.emotionEvents;
+
+    final cancelToken = CancelToken();
+    _cancelToken = cancelToken;
+    await repo.updateMessage(
+      messageId,
+      content: '',
+      rawContent: '',
+      status: MessageStatus.streaming,
+    );
+    if (state.conversationId == conversation.id) {
+      state = state.copyWith(
+        streamingMessageId: messageId,
+        clearError: true,
+      );
+    }
+
+    final buf = StringBuffer();
+    final rawBuf = StringBuffer();
+    final parser = EmotionTagParser();
+    final events = <EmotionEvent>[];
+    Timer? flushTimer;
+    void scheduleFlush() {
+      if (flushTimer?.isActive ?? false) return;
+      flushTimer = Timer(const Duration(milliseconds: 150), () {
+        repo.updateMessage(
+          messageId,
+          content: buf.toString(),
+          rawContent: rawBuf.toString(),
+        );
+      });
+    }
+
+    var failed = false;
+    try {
+      await for (final delta in api.streamChat(
+        profile: activeProfile,
+        messages: apiMessages,
+        cancelToken: cancelToken,
+      )) {
+        final text = delta.content;
+        if (text == null || text.isEmpty) continue;
+        rawBuf.write(text);
+        final parsed = parser.feed(text);
+        buf.write(parsed.flushed);
+        events.addAll(parsed.events);
+        scheduleFlush();
+      }
+      buf.write(parser.flush());
+    } catch (e) {
+      failed = true;
+      debugPrint('重新生成失败：$e');
+    } finally {
+      flushTimer?.cancel();
+      if (_cancelToken == cancelToken) _cancelToken = null;
+    }
+
+    final newContent = buf.toString().trim();
+    if (!failed && newContent.isNotEmpty) {
+      final variantId = newId();
+      await repo.addVariant(
+        MessageVariant(
+          id: variantId,
+          messageId: messageId,
+          content: newContent,
+          rawContent: rawBuf.toString(),
+          emotionEvents: EmotionTagParser.encodeEvents(events),
+          createdAt: DateTime.now(),
+        ),
+      );
+      await repo.updateMessage(
+        messageId,
+        content: newContent,
+        rawContent: rawBuf.toString(),
+        emotionEvents: EmotionTagParser.encodeEvents(events),
+        status: MessageStatus.done,
+      );
+      if (state.conversationId == conversation.id) {
+        state = state.copyWith(clearStreaming: true);
+      }
+      return true;
+    }
+
+    // 失败/空回复：恢复旧正文，status 保持 done（不把旧回复标错）。
+    await repo.updateMessage(
+      messageId,
+      content: oldContent,
+      rawContent: oldRaw,
+      emotionEvents: oldEvents,
+      status: MessageStatus.done,
+    );
+    if (state.conversationId == conversation.id) {
+      state = state.copyWith(
+        clearStreaming: true,
+        errorText: failed ? '重新生成失败，已保留原回复' : '模型没有返回内容，已保留原回复',
+      );
+    }
+    return false;
+  }
+
+  /// 左右切换候选（direction=±1）；没有候选时先把当前正文存为候选。
+  Future<bool> switchVariant(String messageId, int direction) async {
+    if (state.isStreaming) return false;
+    final repo = ref.read(chatRepositoryProvider);
+    final message = await repo.getMessage(messageId);
+    if (message == null || message.role != ChatRole.assistant) return false;
+    await _ensureActiveVariant(message);
+    final variants = await repo.getVariants(messageId);
+    if (variants.length < 2) return false;
+    final currentId = (await repo.getMessage(messageId))?.activeVariantId;
+    var index = variants.indexWhere((v) => v.id == currentId);
+    if (index < 0) index = 0;
+    final next = (index + direction) % variants.length;
+    final variant = variants[next < 0 ? next + variants.length : next];
+    await repo.setActiveVariant(messageId, variant.id);
+    await repo.updateMessage(
+      messageId,
+      content: variant.content,
+      rawContent: variant.rawContent,
+      emotionEvents: variant.emotionEvents,
+      status: MessageStatus.done,
+    );
+    return true;
+  }
+
+  /// 编辑消息。assistant 的旧正文保存为候选；user 消息直接改。
+  Future<bool> editMessage(String messageId, String text) async {
+    if (state.isStreaming) return false;
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return false;
+    final repo = ref.read(chatRepositoryProvider);
+    final message = await repo.getMessage(messageId);
+    if (message == null) return false;
+    if (message.role == ChatRole.user) {
+      await repo.updateMessage(
+        messageId,
+        content: trimmed,
+        rawContent: trimmed,
+        status: MessageStatus.done,
+      );
+      return true;
+    }
+    await _ensureActiveVariant(message);
+    final variantId = newId();
+    await repo.addVariant(
+      MessageVariant(
+        id: variantId,
+        messageId: messageId,
+        content: trimmed,
+        rawContent: trimmed,
+        emotionEvents: '[]',
+        createdAt: DateTime.now(),
+      ),
+    );
+    await repo.updateMessage(
+      messageId,
+      content: trimmed,
+      rawContent: trimmed,
+      emotionEvents: '[]',
+      status: MessageStatus.done,
+    );
+    return true;
+  }
+
+  /// 无用户消息时循环切换主开场白 + alternate_greetings。
+  Future<bool> cycleAlternateGreeting() async {
+    if (state.isStreaming) return false;
+    final conversationId = state.conversationId;
+    if (conversationId == null) return false;
+    final repo = ref.read(chatRepositoryProvider);
+    final conversation = await repo.getConversation(conversationId);
+    if (conversation?.characterId == null) return false;
+    final character = await ref
+        .read(characterRepositoryProvider)
+        .getById(conversation!.characterId!);
+    if (character == null || character.alternateGreetings.isEmpty) return false;
+    final messages = await repo.watchMessages(conversationId).first;
+    if (messages.length != 1 ||
+        messages.first.role != ChatRole.assistant ||
+        messages.first.status != MessageStatus.done) {
+      return false;
+    }
+    final options = [
+      if (character.firstMessage.trim().isNotEmpty)
+        character.firstMessage.trim(),
+      ...character.alternateGreetings,
+    ];
+    if (options.length < 2) return false;
+    final current = messages.first.content;
+    var index = options.indexWhere((e) => e == current);
+    if (index < 0) index = 0;
+    final next = options[(index + 1) % options.length];
+    await repo.updateMessage(
+      messages.first.id,
+      content: next,
+      rawContent: next,
+      status: MessageStatus.done,
+    );
+    return true;
+  }
+
+  /// 从某条消息分支：复制前缀到新会话并返回新会话 id。
+  Future<String?> branchFromMessage(String messageId) async {
+    final conversationId = state.conversationId;
+    if (conversationId == null || state.isStreaming) return null;
+    final repo = ref.read(chatRepositoryProvider);
+    final message = await repo.getMessage(messageId);
+    if (message == null ||
+        message.conversationId != conversationId ||
+        message.status == MessageStatus.streaming) {
+      return null;
+    }
+    final branch = await repo.branchConversation(
+      sourceConversationId: conversationId,
+      messageId: messageId,
+    );
+    return branch.id;
+  }
+
+  Future<void> _ensureActiveVariant(ChatMessage message) async {
+    if (message.activeVariantId != null) return;
+    final repo = ref.read(chatRepositoryProvider);
+    await repo.addVariant(
+      MessageVariant(
+        id: newId(),
+        messageId: message.id,
+        content: message.content,
+        rawContent: message.rawContent,
+        emotionEvents: message.emotionEvents,
+        createdAt: message.createdAt,
+      ),
+    );
   }
 
   void clearError() {

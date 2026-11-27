@@ -52,6 +52,8 @@ class ChatRepository {
     required String apiProfileId,
     String? characterId,
     String? title,
+    String? parentConversationId,
+    String? branchFromMessageId,
   }) async {
     final now = DateTime.now();
     // 默认桌宠（v8）：内置 Haru 存在时新会话自动绑定；「不使用桌宠」仍可事后解绑。
@@ -69,12 +71,122 @@ class ChatRepository {
       createdAt: now,
       updatedAt: now,
       archived: false,
+      parentConversationId: parentConversationId,
+      branchFromMessageId: branchFromMessageId,
     );
     await db.into(db.conversations).insert(_convToRow(conv));
     return conv;
   }
 
-  /// 绑定/解绑会话的桌宠模型。
+  Future<List<ConversationParticipant>> listParticipants(
+    String conversationId,
+  ) async {
+    final q = db.select(db.conversationParticipants)
+      ..where((t) => t.conversationId.equals(conversationId))
+      ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]);
+    return (await q.get()).map(_participantFromRow).toList();
+  }
+
+  Future<void> replaceParticipants(
+    String conversationId,
+    List<String> characterIds,
+  ) async {
+    await db.transaction(() async {
+      await (db.delete(db.conversationParticipants)
+            ..where((t) => t.conversationId.equals(conversationId)))
+          .go();
+      for (var i = 0; i < characterIds.length; i++) {
+        await db.into(db.conversationParticipants).insert(
+          ConversationParticipantsCompanion.insert(
+            id: newId(),
+            conversationId: conversationId,
+            characterId: characterIds[i],
+            sortOrder: Value(i),
+            createdAt: DateTime.now(),
+          ),
+        );
+      }
+    });
+  }
+
+  /// 创建群聊：第一位角色作为会话主角色，其余按顺序进入参与者。
+  Future<Conversation> createGroupConversation({
+    required String apiProfileId,
+    required List<String> characterIds,
+    String? title,
+  }) async {
+    final ids = characterIds.toSet().toList();
+    final conv = await createConversation(
+      apiProfileId: apiProfileId,
+      characterId: ids.isEmpty ? null : ids.first,
+      title: title ?? '群聊',
+    );
+    await replaceParticipants(conv.id, ids);
+    return conv;
+  }
+
+  /// 从某条消息分支：复制该消息及之前的全部消息到新会话。
+  Future<Conversation> branchConversation({
+    required String sourceConversationId,
+    required String messageId,
+  }) async {
+    final source = await getConversation(sourceConversationId);
+    final cut = await getMessage(messageId);
+    if (source == null || cut == null || cut.conversationId != source.id) {
+      throw StateError('分支源不存在');
+    }
+    final participants = await listParticipants(source.id);
+    final branch = await createConversation(
+      apiProfileId: source.apiProfileId,
+      characterId: source.characterId,
+      title: '${source.title} · 分支',
+      parentConversationId: source.id,
+      branchFromMessageId: cut.id,
+    );
+    final rows =
+        await (db.select(db.messages)
+              ..where(
+                (t) =>
+                    t.conversationId.equals(source.id) &
+                    t.createdAt.isSmallerOrEqualValue(cut.createdAt),
+              )
+              ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+            .get();
+    await db.transaction(() async {
+      for (final row in rows) {
+        final msg = _msgFromRow(row);
+        final copy = ChatMessage(
+          id: newId(),
+          conversationId: branch.id,
+          role: msg.role,
+          content: msg.content,
+          rawContent: msg.rawContent,
+          emotionEvents: msg.emotionEvents,
+          imagePaths: msg.imagePaths,
+          imageSummary: msg.imageSummary,
+          status: msg.status,
+          kind: msg.kind,
+          speakerCharacterId: msg.speakerCharacterId,
+          createdAt: msg.createdAt,
+        );
+        await db.into(db.messages).insert(_msgToRow(copy));
+      }
+      for (var i = 0; i < participants.length; i++) {
+        await db.into(db.conversationParticipants).insert(
+          ConversationParticipantsCompanion.insert(
+            id: newId(),
+            conversationId: branch.id,
+            characterId: participants[i].characterId,
+            sortOrder: Value(participants[i].sortOrder),
+            createdAt: DateTime.now(),
+          ),
+        );
+      }
+    });
+    return branch;
+  }
+
+
   Future<void> setConversationPetModel(String id, String? petModelId) async {
     await (db.update(db.conversations)..where((t) => t.id.equals(id))).write(
       ConversationsCompanion(petModelId: Value(petModelId)),
@@ -109,9 +221,23 @@ class ChatRepository {
 
   Future<void> deleteConversation(String id) async {
     await db.transaction(() async {
+      final messageIds =
+          await (db.selectOnly(db.messages)
+                ..addColumns([db.messages.id])
+                ..where(db.messages.conversationId.equals(id)))
+              .map((row) => row.read(db.messages.id)!)
+              .get();
+      if (messageIds.isNotEmpty) {
+        await (db.delete(db.messageVariants)
+              ..where((t) => t.messageId.isIn(messageIds)))
+            .go();
+      }
       await (db.delete(
         db.messages,
       )..where((t) => t.conversationId.equals(id))).go();
+      await (db.delete(db.conversationParticipants)
+            ..where((t) => t.conversationId.equals(id)))
+          .go();
       await (db.delete(db.conversations)..where((t) => t.id.equals(id))).go();
     });
   }
@@ -139,6 +265,7 @@ class ChatRepository {
     List<String> imagePaths = const [],
     String imageSummary = '',
     MessageKind kind = MessageKind.text,
+    String? speakerCharacterId,
     DateTime? createdAt,
   }) async {
     final msg = ChatMessage(
@@ -152,6 +279,7 @@ class ChatRepository {
       imageSummary: imageSummary,
       status: status,
       kind: kind,
+      speakerCharacterId: speakerCharacterId,
       createdAt: createdAt ?? DateTime.now(),
     );
     await db.into(db.messages).insert(_msgToRow(msg));
@@ -160,8 +288,56 @@ class ChatRepository {
   }
 
   Future<void> deleteMessage(String id) async {
-    await (db.delete(db.messages)..where((t) => t.id.equals(id))).go();
+    await db.transaction(() async {
+      await (db.delete(
+        db.messageVariants,
+      )..where((t) => t.messageId.equals(id))).go();
+      await (db.delete(db.messages)..where((t) => t.id.equals(id))).go();
+    });
   }
+
+  /// 读取某条消息的全部候选，按创建时间正序。
+  Future<List<MessageVariant>> getVariants(String messageId) async {
+    final q = db.select(db.messageVariants)
+      ..where((t) => t.messageId.equals(messageId))
+      ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]);
+    return (await q.get()).map(_variantFromRow).toList();
+  }
+
+  /// 追加候选并把它设为当前候选。
+  Future<void> addVariant(MessageVariant variant) async {
+    await db.transaction(() async {
+      await db.into(db.messageVariants).insertOnConflictUpdate(
+        MessageVariantsCompanion(
+          id: Value(variant.id),
+          messageId: Value(variant.messageId),
+          content: Value(variant.content),
+          rawContent: Value(variant.rawContent),
+          emotionEvents: Value(variant.emotionEvents),
+          createdAt: Value(variant.createdAt),
+        ),
+      );
+      await (db.update(db.messages)
+            ..where((t) => t.id.equals(variant.messageId)))
+          .write(MessagesCompanion(activeVariantId: Value(variant.id)));
+    });
+  }
+
+  /// 切换当前候选；variantId 为 null 时回到正文。
+  Future<void> setActiveVariant(String messageId, String? variantId) async {
+    await (db.update(db.messages)..where((t) => t.id.equals(messageId))).write(
+      MessagesCompanion(activeVariantId: Value(variantId)),
+    );
+  }
+
+  MessageVariant _variantFromRow(MessageVariantRow row) => MessageVariant(
+    id: row.id,
+    messageId: row.messageId,
+    content: row.content,
+    rawContent: row.rawContent,
+    emotionEvents: row.emotionEvents,
+    createdAt: row.createdAt,
+  );
 
   /// 同角色其他会话中最近的完成消息，按时间升序返回（跨会话记忆·近期原文）。
   ///
@@ -370,6 +546,8 @@ class ChatRepository {
     archived: row.archived,
     voiceEnabled: row.voiceEnabled,
     backgroundPath: row.backgroundPath,
+    parentConversationId: row.parentConversationId,
+    branchFromMessageId: row.branchFromMessageId,
   );
 
   ConversationsCompanion _convToRow(Conversation c) => ConversationsCompanion(
@@ -383,6 +561,8 @@ class ChatRepository {
     archived: Value(c.archived),
     voiceEnabled: Value(c.voiceEnabled),
     backgroundPath: Value(c.backgroundPath),
+    parentConversationId: Value(c.parentConversationId),
+    branchFromMessageId: Value(c.branchFromMessageId),
   );
 
   ChatMessage _msgFromRow(MessageRow row) => ChatMessage(
@@ -396,6 +576,8 @@ class ChatRepository {
     imageSummary: row.imageSummary,
     status: MessageStatus.fromWire(row.status),
     kind: MessageKind.fromWire(row.kind),
+    activeVariantId: row.activeVariantId,
+    speakerCharacterId: row.speakerCharacterId,
     createdAt: row.createdAt,
   );
 
@@ -410,6 +592,18 @@ class ChatRepository {
     imageSummary: Value(m.imageSummary),
     status: Value(m.status.wire),
     kind: Value(m.kind.wire),
+    activeVariantId: Value(m.activeVariantId),
+    speakerCharacterId: Value(m.speakerCharacterId),
     createdAt: Value(m.createdAt),
+  );
+
+  ConversationParticipant _participantFromRow(
+    ConversationParticipantRow row,
+  ) => ConversationParticipant(
+    id: row.id,
+    conversationId: row.conversationId,
+    characterId: row.characterId,
+    sortOrder: row.sortOrder,
+    createdAt: row.createdAt,
   );
 }

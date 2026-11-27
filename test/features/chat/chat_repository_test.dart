@@ -424,4 +424,162 @@ void main() {
       expect(c.petModelId, 'haru');
     });
   });
+
+  group('候选回复（v14）', () {
+    test('addVariant 追加候选并设为当前，getVariants 按时间正序', () async {
+      final c = await newConv(id: 'cv');
+      final t = DateTime(2026, 1, 1, 10);
+      await insertMsg(
+        id: 'm1',
+        conversationId: c.id,
+        role: ChatRole.assistant,
+        content: '第一版',
+        createdAt: t,
+      );
+      await repo.addVariant(
+        MessageVariant(
+          id: 'v1',
+          messageId: 'm1',
+          content: '第一版',
+          rawContent: '第一版',
+          emotionEvents: '[]',
+          createdAt: t,
+        ),
+      );
+      await repo.addVariant(
+        MessageVariant(
+          id: 'v2',
+          messageId: 'm1',
+          content: '第二版',
+          rawContent: '第二版',
+          emotionEvents: '[]',
+          createdAt: t.add(const Duration(seconds: 1)),
+        ),
+      );
+      final msg = await repo.getMessage('m1');
+      expect(msg!.activeVariantId, 'v2');
+      final variants = await repo.getVariants('m1');
+      expect(variants.map((e) => e.id), ['v1', 'v2']);
+    });
+
+    test('switch 只改 active 指针', () async {
+      final c = await newConv(id: 'cv2');
+      final t = DateTime(2026);
+      await insertMsg(
+        id: 'm2',
+        conversationId: c.id,
+        role: ChatRole.assistant,
+        content: 'A',
+        createdAt: t,
+      );
+      await repo.addVariant(
+        MessageVariant(
+          id: 'v1',
+          messageId: 'm2',
+          content: 'A',
+          rawContent: 'A',
+          emotionEvents: '[]',
+          createdAt: t,
+        ),
+      );
+      await repo.setActiveVariant('m2', null);
+      expect((await repo.getMessage('m2'))!.activeVariantId, isNull);
+      await repo.setActiveVariant('m2', 'v1');
+      expect((await repo.getMessage('m2'))!.activeVariantId, 'v1');
+      expect((await repo.getVariants('m2')).length, 1);
+    });
+
+    test('删除消息/会话级联删除候选', () async {
+      final c = await newConv(id: 'cv3');
+      final t = DateTime(2026);
+      await insertMsg(
+        id: 'm3',
+        conversationId: c.id,
+        role: ChatRole.assistant,
+        content: 'A',
+        createdAt: t,
+      );
+      await repo.addVariant(
+        MessageVariant(
+          id: 'v3',
+          messageId: 'm3',
+          content: 'A',
+          rawContent: 'A',
+          emotionEvents: '[]',
+          createdAt: t,
+        ),
+      );
+      await repo.deleteMessage('m3');
+      expect(await repo.getVariants('m3'), isEmpty);
+
+      await insertMsg(
+        id: 'm4',
+        conversationId: c.id,
+        role: ChatRole.assistant,
+        content: 'B',
+        createdAt: t,
+      );
+      await repo.addVariant(
+        MessageVariant(
+          id: 'v4',
+          messageId: 'm4',
+          content: 'B',
+          rawContent: 'B',
+          emotionEvents: '[]',
+          createdAt: t,
+        ),
+      );
+      await repo.deleteConversation(c.id);
+      expect(await repo.getVariants('m4'), isEmpty);
+    });
+  });
+
+  group('群聊与分支（v16）', () {
+    test('createGroupConversation 去重并保持选择顺序', () async {
+      final c = await repo.createGroupConversation(
+        apiProfileId: 'p1',
+        characterIds: ['a', 'b', 'a'],
+        title: '群聊测试',
+      );
+      expect(c.characterId, 'a');
+      final ps = await repo.listParticipants(c.id);
+      expect(ps.map((p) => p.characterId), ['a', 'b']);
+      expect(ps.map((p) => p.sortOrder), [0, 1]);
+    });
+
+    test('branchConversation 只复制目标及之前消息，并复制参与者', () async {
+      final c = await newConv(characterId: 'a', id: 'src');
+      await repo.replaceParticipants(c.id, ['a', 'b']);
+      final t = DateTime(2026, 1, 1, 10);
+      await insertMsg(id: 's1', conversationId: c.id, content: 'one', createdAt: t);
+      await insertMsg(
+        id: 's2',
+        conversationId: c.id,
+        role: ChatRole.assistant,
+        content: 'two',
+        createdAt: t.add(const Duration(minutes: 1)),
+      );
+      await insertMsg(id: 's3', conversationId: c.id, content: 'three', createdAt: t.add(const Duration(minutes: 2)));
+
+      final branch = await repo.branchConversation(
+        sourceConversationId: c.id,
+        messageId: 's2',
+      );
+      expect(branch.parentConversationId, c.id);
+      expect(branch.branchFromMessageId, 's2');
+      final msgs = await repo.watchMessages(branch.id).first;
+      expect(msgs.map((m) => m.content), ['one', 'two']);
+      final ps = await repo.listParticipants(branch.id);
+      expect(ps.map((p) => p.characterId), ['a', 'b']);
+    });
+
+    test('deleteConversation 级联删除参与者', () async {
+      final c = await repo.createGroupConversation(
+        apiProfileId: 'p1',
+        characterIds: ['a', 'b'],
+      );
+      await repo.deleteConversation(c.id);
+      expect(await repo.listParticipants(c.id), isEmpty);
+    });
+  });
 }

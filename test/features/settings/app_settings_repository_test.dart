@@ -1,5 +1,4 @@
 import 'package:ai_roleplay_chat/data/local/app_database.dart';
-import 'package:ai_roleplay_chat/features/agent/domain/agent_approval.dart';
 import 'package:ai_roleplay_chat/features/settings/data/app_settings_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -63,40 +62,5 @@ void main() {
     expect(await repo.contextWindowOtherTokens(), 0);
     await repo.setContextWindowOtherTokens(999999);
     expect(await repo.contextWindowOtherTokens(), kContextWindowOtherMax);
-  });
-
-  test('agentApprovalMode 缺省 ask，可持久化', () async {
-    expect(await repo.agentApprovalMode(), AgentApprovalMode.ask);
-    await repo.setAgentApprovalMode(AgentApprovalMode.full);
-    expect(await repo.agentApprovalMode(), AgentApprovalMode.full);
-    final again = AppSettingsRepository(db);
-    expect(await again.agentApprovalMode(), AgentApprovalMode.full);
-  });
-
-  test('授权文件夹增删与去重', () async {
-    expect(await repo.agentGrantedFolders(), isEmpty);
-    await repo.addAgentGrantedFolder(
-      const AgentGrantedFolder(uri: 'tree://a', name: 'A'),
-    );
-    await repo.addAgentGrantedFolder(
-      const AgentGrantedFolder(uri: 'tree://b', name: 'B'),
-    );
-    await repo.addAgentGrantedFolder(
-      const AgentGrantedFolder(uri: 'tree://a', name: 'A2'),
-    );
-    final folders = await repo.agentGrantedFolders();
-    expect(folders.map((f) => f.uri), ['tree://b', 'tree://a']);
-    expect(folders.last.name, 'A2');
-
-    await repo.removeAgentGrantedFolder('tree://a');
-    expect((await repo.agentGrantedFolders()).map((f) => f.uri), ['tree://b']);
-  });
-
-  test('HTTP 域名列表：小写、去重、空串过滤', () async {
-    expect(await repo.agentHttpDomains(), isEmpty);
-    await repo.setAgentHttpDomains([' Example.com ', 'b.com', 'example.com', '']);
-    expect(await repo.agentHttpDomains(), ['example.com', 'b.com']);
-    await repo.setAgentHttpDomains([]);
-    expect(await repo.agentHttpDomains(), isEmpty);
   });
 }

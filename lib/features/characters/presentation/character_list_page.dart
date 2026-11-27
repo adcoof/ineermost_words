@@ -7,8 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
 import '../domain/character.dart';
+import '../domain/character_import_result.dart';
 import 'character_avatar.dart';
 import 'character_edit_page.dart';
+import 'character_workshop_page.dart';
 import 'start_chat.dart';
 
 class CharacterListPage extends ConsumerStatefulWidget {
@@ -27,7 +29,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
     final repo = ref.watch(characterRepositoryProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('角色'),
+        title: const Text('角色工坊'),
         actions: [
           IconButton(
             tooltip: '导入角色卡（PNG/JSON）',
@@ -44,35 +46,33 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
             return const Center(child: CircularProgressIndicator());
           }
           final characters = snapshot.data ?? const [];
-          if (characters.isEmpty) {
-            return const Center(
-              child: Text('还没有角色\n点右上角导入 SillyTavern 角色卡，或点 + 手动新建',
-                  textAlign: TextAlign.center),
-            );
-          }
-          return ListView.separated(
-            itemCount: characters.length,
-            separatorBuilder: (_, _) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final c = characters[index];
-              return ListTile(
-                leading: CharacterAvatar(avatarPath: c.avatarPath),
-                title: Text(c.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                subtitle: Text(
-                  c.source == 'st_v2' ? 'SillyTavern 卡' : '手动创建',
-                  maxLines: 1,
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+            children: [
+              _aiCreateCard(context),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  '我的角色',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-                trailing: IconButton(
-                  tooltip: '与 TA 对话',
-                  icon: const Icon(Icons.chat_bubble_outline),
-                  onPressed: () => _startChat(context, ref, c),
-                ),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                      builder: (_) => CharacterEditPage(character: c)),
-                ),
-              );
-            },
+              ),
+              const SizedBox(height: 8),
+              if (characters.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Text(
+                    '还没有角色\n点右上角导入 SillyTavern 角色卡，或从上面的 AI 创作开始',
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              else
+                for (var i = 0; i < characters.length; i++) ...[
+                  if (i > 0) const Divider(height: 1),
+                  _characterTile(context, ref, characters[i]),
+                ],
+            ],
           );
         },
       ),
@@ -89,6 +89,76 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
     );
   }
 
+  Widget _aiCreateCard(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const CharacterWorkshopPage()),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: theme.colorScheme.primaryContainer,
+                child: Icon(
+                  Icons.auto_awesome,
+                  color: theme.colorScheme.onPrimaryContainer,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('AI 创作角色', style: theme.textTheme.titleMedium),
+                    const SizedBox(height: 2),
+                    Text(
+                      '从一句话生成完整角色草稿，再逐字段调整',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _characterTile(
+    BuildContext context,
+    WidgetRef ref,
+    Character character,
+  ) {
+    return ListTile(
+      leading: CharacterAvatar(avatarPath: character.avatarPath),
+      title: Text(
+        character.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(character.sourceLabel, maxLines: 1),
+      trailing: IconButton(
+        tooltip: '与 TA 对话',
+        icon: const Icon(Icons.chat_bubble_outline),
+        onPressed: () => _startChat(context, ref, character),
+      ),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CharacterEditPage(character: character),
+        ),
+      ),
+    );
+  }
+
   Future<void> _importCard(BuildContext context, WidgetRef ref) async {
     final repo = ref.read(characterRepositoryProvider);
     final picked = await FilePicker.pickFile(
@@ -98,10 +168,19 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
     if (picked == null) return;
     try {
       final bytes = await picked.xFile.readAsBytes();
-      final character = await repo.importFromBytes(bytes);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已导入角色「${character.name}」')),
+      final result = await repo.importCard(bytes);
+      if (!context.mounted) return;
+      final view = await showModalBottomSheet<bool>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        builder: (_) => _ImportResultSheet(result: result),
+      );
+      if (view == true && context.mounted) {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => CharacterEditPage(character: result.character),
+          ),
         );
       }
     } catch (e) {
@@ -127,5 +206,117 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
     } finally {
       _startingChat = false;
     }
+  }
+}
+
+/// 导入结果卡片：格式、世界书数量、保留字段与警告；可跳转查看角色。
+class _ImportResultSheet extends StatelessWidget {
+  final CharacterImportResult result;
+
+  const _ImportResultSheet({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.check_circle_outline,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text('导入完成', style: theme.textTheme.titleMedium),
+                const Spacer(),
+                Text(
+                  'ST ${result.formatLabel}',
+                  style: theme.textTheme.labelLarge?.copyWith(color: muted),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(result.character.name, style: theme.textTheme.headlineSmall),
+            const SizedBox(height: 12),
+            _infoRow(
+              context,
+              Icons.menu_book_outlined,
+              '世界书',
+              result.loreCount == 0
+                  ? '无'
+                  : '${result.loreCount} 条（默认禁用）',
+            ),
+            _infoRow(
+              context,
+              Icons.inventory_2_outlined,
+              '保留第三方/未识别字段',
+              '${result.preservedKeyCount} 个',
+            ),
+            if (result.warnings.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text('提示', style: theme.textTheme.labelLarge),
+              const SizedBox(height: 4),
+              for (final warning in result.warnings)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Text(
+                    '· $warning',
+                    style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                  ),
+                ),
+            ],
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('完成'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('查看角色'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _infoRow(
+    BuildContext context,
+    IconData icon,
+    String label,
+    String value,
+  ) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 17, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Expanded(child: Text(label)),
+          Text(
+            value,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

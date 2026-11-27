@@ -2,6 +2,8 @@ import 'package:ai_roleplay_chat/core/utils/token_estimate.dart';
 import 'package:ai_roleplay_chat/features/chat/domain/models.dart';
 import 'package:ai_roleplay_chat/features/characters/application/prompt_assembler.dart';
 import 'package:ai_roleplay_chat/features/characters/domain/character.dart';
+import 'package:ai_roleplay_chat/features/characters/domain/character_profile.dart';
+import 'package:ai_roleplay_chat/features/characters/domain/lore_entry.dart';
 import 'package:ai_roleplay_chat/features/characters/domain/memory_fact.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -465,6 +467,197 @@ void main() {
       );
       final window = messages.where((m) => m.role != 'system').toList();
       expect(window[1].content, startsWith('【今天 13:30】'));
+    });
+  });
+
+  group('世界书注入（v15）', () {
+    LoreEntry entry(
+      String id,
+      String content, {
+      String position = 'before',
+      int depth = 0,
+    }) => LoreEntry(
+      id: id,
+      characterId: 'c1',
+      keys: const ['天台'],
+      content: content,
+      position: position,
+      depth: depth,
+      createdAt: DateTime(2026, 1, 1),
+    );
+
+    test('before 在历史前、after 在历史后，并计入 loreTokens', () {
+      final history = [
+        msg(ChatRole.user, '天台好冷', minute: 0),
+        msg(ChatRole.assistant, '嗯。', minute: 1),
+      ];
+      final assembled = PromptAssembler().assembleDetailed(
+        character: character,
+        history: history,
+        lore: [
+          entry('a', '天台的风很大', position: 'before'),
+          entry('b', '栏杆有些凉', position: 'after'),
+        ],
+      );
+      final contents = assembled.messages.map((m) => m.content).toList();
+      final beforeIndex = contents.indexWhere((c) => c.contains('天台的风很大'));
+      final historyIndex = contents.indexWhere((c) => c.contains('天台好冷'));
+      final afterIndex = contents.indexWhere((c) => c.contains('栏杆有些凉'));
+      expect(beforeIndex, greaterThanOrEqualTo(0));
+      expect(historyIndex, greaterThan(beforeIndex));
+      expect(afterIndex, greaterThan(historyIndex));
+      expect(assembled.usage.loreTokens, greaterThan(0));
+    });
+
+    test('无世界书时 loreTokens 为 0', () {
+      final assembled = PromptAssembler().assembleDetailed(
+        character: character,
+        history: [msg(ChatRole.user, '你好')],
+      );
+      expect(assembled.usage.loreTokens, 0);
+    });
+
+    test('超预算时只取能放下的条目', () {
+      final assembled = PromptAssembler().assembleDetailed(
+        character: character,
+        history: const [],
+        lore: [
+          for (var i = 0; i < 30; i++)
+            entry('e$i', '很长很长的世界书设定' * 2, position: 'before'),
+        ],
+        tokenBudget: 1024,
+      );
+      expect(assembled.usage.loreTokens, greaterThan(0));
+      // 15% 预算（约 153 token），不能超过窗口预算。
+      expect(assembled.usage.loreTokens, lessThan(1024));
+      final loreMessages = assembled.messages.where(
+        (m) => m.content.contains('世界书设定'),
+      );
+      expect(loreMessages, hasLength(1));
+    });
+  });
+
+  group('角色档案与卡内提示注入（v2.1）', () {
+    const profile = CharacterProfile(
+      basic: BasicProfile(nickname: '小雨', age: '17'),
+      appearance: AppearanceProfile(hair: '银白长发', eyes: '红瞳'),
+      background: BackgroundProfile(origin: '北境'),
+      relationships: RelationshipProfile(userRelation: '同桌'),
+      language: LanguageProfile(tone: '冷淡', verbalTics: '哼'),
+      interaction: InteractionProfile(replyLength: '1-2 句'),
+      creator: CreatorProfile(notes: '创作者备注'),
+      runConfig: RunConfigProfile(
+        systemPrompt: '始终称呼用户为「笨蛋」。',
+        postHistoryInstructions: '回复末尾不要总结。',
+      ),
+    );
+
+    test('档案块在人设后、时间前；创作者备注不进提示词', () {
+      final assembled = PromptAssembler().assembleDetailed(
+        character: character.copyWith(profile: profile),
+        history: [msg(ChatRole.user, '嗨')],
+      );
+
+      expect(assembled.messages[0].content, contains('林小雨'));
+      expect(assembled.messages[1].content, contains('【角色档案补充设定】'));
+      expect(
+        assembled.messages[1].content,
+        contains('身份：昵称 小雨；年龄 17'),
+      );
+      expect(
+        assembled.messages[1].content,
+        contains('外貌：发型 银白长发；瞳色 红瞳'),
+      );
+      expect(assembled.messages[1].content, isNot(contains('创作者备注')));
+      expect(assembled.messages[2].content, contains('【角色卡系统提示】'));
+      expect(assembled.messages[3].content, startsWith('现在时间：'));
+      expect(assembled.usage.profileTokens, greaterThan(0));
+      expect(assembled.usage.cardPromptTokens, greaterThan(0));
+      expect(
+        assembled.usage.usedTokens,
+        greaterThanOrEqualTo(
+          assembled.usage.profileTokens + assembled.usage.cardPromptTokens,
+        ),
+      );
+    });
+
+    test('空档案不产生额外 system 消息与用量', () {
+      final assembled = PromptAssembler().assembleDetailed(
+        character: character,
+        history: const [],
+      );
+      expect(
+        assembled.messages.where(
+          (m) => m.content.contains('【角色档案补充设定】'),
+        ),
+        isEmpty,
+      );
+      expect(assembled.usage.profileTokens, 0);
+      expect(assembled.usage.cardPromptTokens, 0);
+    });
+
+    test('历史后置指令是世界书 after 之后的最后一条 system', () {
+      final lore = LoreEntry(
+        id: 'l1',
+        characterId: 'c1',
+        keys: const ['天台'],
+        content: '世界书后置设定',
+        position: 'after',
+        createdAt: DateTime(2026),
+      );
+      final assembled = PromptAssembler().assembleDetailed(
+        character: character.copyWith(profile: profile),
+        history: [msg(ChatRole.user, '嗨')],
+        lore: [lore],
+      );
+      final contents = assembled.messages.map((m) => m.content).toList();
+      final loreIndex = contents.indexWhere((c) => c.contains('世界书后置设定'));
+      final postIndex = contents.indexWhere((c) => c.contains('【历史后置指令】'));
+      expect(loreIndex, greaterThanOrEqualTo(0));
+      expect(postIndex, greaterThan(loreIndex));
+      expect(assembled.messages.last.content, contains('不要总结'));
+      expect(assembled.messages.last.role, 'system');
+    });
+
+    test('超长卡内提示保留尾部并限长', () {
+      final longSystem = '${List.filled(2500, '甲').join()}尾部指令';
+      final longPost = '${List.filled(1500, '乙').join()}尾部要求';
+      final withLong = character.copyWith(
+        profile: const CharacterProfile().copyWith(
+          runConfig: RunConfigProfile(
+            systemPrompt: longSystem,
+            postHistoryInstructions: longPost,
+          ),
+        ),
+      );
+      final assembled = PromptAssembler().assembleDetailed(
+        character: withLong,
+        history: const [],
+      );
+      final systemMsg = assembled.messages.singleWhere(
+        (m) => m.content.contains('【角色卡系统提示】'),
+      );
+      expect(systemMsg.content, contains('尾部指令'));
+      expect(systemMsg.content.length, lessThan(2100));
+
+      final postMsg = assembled.messages.last;
+      expect(postMsg.content, contains('尾部要求'));
+      expect(postMsg.content.length, lessThan(1030));
+    });
+
+    test('档案块超预算时截断，profileTokens 不超过 300', () {
+      final huge = CharacterProfile(
+        background: BackgroundProfile(
+          origin: List.filled(20000, '很长').join(),
+        ),
+      );
+      final assembled = PromptAssembler().assembleDetailed(
+        character: character.copyWith(profile: huge),
+        history: const [],
+        tokenBudget: 1024,
+      );
+      expect(assembled.usage.profileTokens, greaterThan(0));
+      expect(assembled.usage.profileTokens, lessThanOrEqualTo(300));
     });
   });
 }

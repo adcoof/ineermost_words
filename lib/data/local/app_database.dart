@@ -22,8 +22,10 @@ part 'app_database.g.dart';
     Stickers,
     MemoryCursors,
     MemoryFacts,
-    AgentSessions,
-    AgentMessages,
+    MessageVariants,
+    LoreEntries,
+    ConversationParticipants,
+    CharacterVersions,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -33,15 +35,18 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) async {
       await m.createAll();
       await _createMemoryIndexes();
-      await _createAgentIndexes();
       await _createMessageIndexes();
+      await _createVariantIndexes();
+      await _createLoreIndexes();
+      await _createParticipantIndexes();
+      await _createCharacterVersionIndexes();
     },
     onUpgrade: (m, from, to) async {
       // v2：新增角色卡表（v1 的会话表已含 character_id 列）。
@@ -89,20 +94,50 @@ class AppDatabase extends _$AppDatabase {
         await m.createTable(memoryFacts);
         await _createMemoryIndexes();
       }
-      // v10：Agent 会话与消息。
-      if (from < 10) {
-        await m.createTable(agentSessions);
-        await m.createTable(agentMessages);
-        await _createAgentIndexes();
-      }
-      // v11：会话级 Agent 权限（审批模式 + 授权文件夹）。
-      // from<10 时 createTable 已按当前定义建出这两列，不能再 addColumn。
-      if (from >= 10 && from < 11) {
-        await m.addColumn(agentSessions, agentSessions.approvalMode);
-        await m.addColumn(agentSessions, agentSessions.grantedFoldersJson);
-      }
       // v12：消息/会话查询索引，长会话打开与流式落盘不再全表扫描。
       if (from < 12) await _createMessageIndexes();
+      // v13：移除 Agent，删除其会话与消息表。
+      if (from < 13) {
+        await customStatement('DROP TABLE IF EXISTS agent_messages');
+        await customStatement('DROP TABLE IF EXISTS agent_sessions');
+      }
+      // v14：消息候选回复 + 当前候选 + 多开场白。
+      // from<2 时 createTable(characters) 已按当前定义建出 alternate_greetings，
+      // 不能再 addColumn；messages 从 v1 就存在，需要补列。
+      if (from < 14) {
+        await m.addColumn(messages, messages.activeVariantId);
+        if (from >= 2) {
+          await m.addColumn(characters, characters.alternateGreetings);
+        }
+        await m.createTable(messageVariants);
+        await _createVariantIndexes();
+      }
+      if (from < 15) {
+        await m.createTable(loreEntries);
+        await _createLoreIndexes();
+      }
+      // v16：群聊参与者 + 会话分支指针。
+      if (from < 16) {
+        await m.addColumn(conversations, conversations.parentConversationId);
+        await m.addColumn(conversations, conversations.branchFromMessageId);
+        await m.addColumn(messages, messages.speakerCharacterId);
+        await m.createTable(conversationParticipants);
+        await _createParticipantIndexes();
+      }
+      // v17：角色扩展档案 + 第三方扩展保留 + 版本快照 + 世界书条目原文。
+      // from<2 时 characters 已按当前定义建出；from<15 时 lore_entries 同理，
+      // 不能再 addColumn（否则 duplicate column）。
+      if (from < 17) {
+        if (from >= 2) {
+          await m.addColumn(characters, characters.profileJson);
+          await m.addColumn(characters, characters.extensionsJson);
+        }
+        if (from >= 15) {
+          await m.addColumn(loreEntries, loreEntries.sourceJson);
+        }
+        await m.createTable(characterVersions);
+        await _createCharacterVersionIndexes();
+      }
     },
   );
 
@@ -112,10 +147,28 @@ class AppDatabase extends _$AppDatabase {
     'ON memory_facts (character_id, occurred_at DESC)',
   );
 
-  /// Agent 消息按「会话 + 时间」顺序读取。
-  Future<void> _createAgentIndexes() => customStatement(
-    'CREATE INDEX IF NOT EXISTS idx_agent_messages_session_created '
-    'ON agent_messages (session_id, created_at)',
+  /// 候选回复按「消息 + 创建时间」读取。
+  Future<void> _createVariantIndexes() => customStatement(
+    'CREATE INDEX IF NOT EXISTS idx_message_variants_message '
+    'ON message_variants (message_id, created_at)',
+  );
+
+  /// 世界书按角色 + 启停读取。
+  Future<void> _createLoreIndexes() => customStatement(
+    'CREATE INDEX IF NOT EXISTS idx_lore_character '
+    'ON lore_entries (character_id, enabled)',
+  );
+
+  /// 群聊参与者按「会话 + 顺序」读取。
+  Future<void> _createParticipantIndexes() => customStatement(
+    'CREATE INDEX IF NOT EXISTS idx_participants_conversation '
+    'ON conversation_participants (conversation_id, sort_order)',
+  );
+
+  /// 角色版本按「角色 + 毫秒时间倒序」读取。
+  Future<void> _createCharacterVersionIndexes() => customStatement(
+    'CREATE INDEX IF NOT EXISTS idx_character_versions_character '
+    'ON character_versions (character_id, created_at_ms DESC)',
   );
 
   /// 会话消息按「会话 + 时间」读取；会话列表按「角色 + 更新时间」过滤。

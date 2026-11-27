@@ -25,15 +25,28 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
 
-    // 会话页标题与导航标签都叫「会话」，断言至少各出现一次。
-    expect(find.widgetWithText(AppBar, '会话'), findsOneWidget);
-    expect(find.text('角色'), findsOneWidget);
+    // 聊天页标题 + 四栏导航。
+    expect(find.widgetWithText(AppBar, '聊天'), findsOneWidget);
+    expect(find.text('工坊'), findsOneWidget);
+    expect(find.text('资产'), findsOneWidget);
     expect(find.text('设置'), findsOneWidget);
 
-    // 切到角色页。
-    await tester.tap(find.text('角色'));
+    // 切到工坊：AI 创作入口 + 我的角色。
+    await tester.tap(find.text('工坊'));
     await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, '角色工坊'), findsOneWidget);
+    expect(find.text('AI 创作角色'), findsOneWidget);
+    expect(find.text('我的角色'), findsOneWidget);
     expect(find.textContaining('还没有角色'), findsOneWidget);
+
+    // 切到资产：四个入口。
+    await tester.tap(find.text('资产'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, '角色资产'), findsOneWidget);
+    expect(find.text('桌宠模型'), findsOneWidget);
+    expect(find.text('角色立绘'), findsOneWidget);
+    expect(find.text('表情包'), findsOneWidget);
+    expect(find.text('音色'), findsOneWidget);
 
     // 卸载树并排空 Drift 查询流关闭时调度的 0ms 清理定时器，
     // 否则 flutter_test 会因 "Timer is still pending" 失败。

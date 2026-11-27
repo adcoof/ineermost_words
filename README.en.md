@@ -7,7 +7,7 @@
 <p align="center">Make every conversation a flutter of the heart.</p>
 
 <p align="center">
-  An Android AI roleplay chat app: bring your own API, import character cards, interact with a Live2D desktop pet, and talk both ways with voice.<br>
+  An Android AI roleplay chat app: bring your own API, build full character profiles, import/export V1/V2/V3 character cards, interact with a Live2D desktop pet, and talk both ways with voice.<br>
   By Sigborn Studio · <a href="https://www.sigborn.xyz">www.sigborn.xyz</a><br>
   中文文档：<a href="README.md">README.md</a>
 </p>
@@ -35,8 +35,12 @@
 - Character-bound sessions assemble prompts in a fixed order: persona → scenario → **cross-chat memory** → **what the character knows about you** → tag spec → few-shot examples → sliding window of the last 40 messages
 
 ### 👤 Characters
-- Create manually, or **import SillyTavern V2 character cards** (PNG tEXt / JSON)
-- Description, personality, scenario, first message and example dialogues are fully mapped
+- Create manually, or **import SillyTavern V1/V2/V3 character cards** (PNG tEXt / JSON)
+- Description, personality, scenario, first message and example dialogues are fully mapped; `nickname / creator / tags / system_prompt / post_history_instructions` are preserved
+- **Full character profile**: identity, appearance, background, relationships, language style, interaction style, creator info and card prompts, edited in a three-tab **Basics / Profile / Advanced** editor
+- **Card export**: V2/V3 JSON and PNG cards; unknown extensions and unrecognised fields are kept; lorebooks round-trip with the card; data-loss warnings before export
+- **Version history**: automatic snapshot on save (up to 20 per character), with diff summary, restore and delete; artwork is not versioned
+- **Alternate greetings and tags**: one main greeting plus multiple alternates, switchable in chat; tags for the library and export
 - Character artwork displayed locally, with a 1:1 visual crop when uploading
 - **Cross-chat memory**: the same character remembers across separate conversations — recent excerpts are injected into the prompt, and older history is condensed by an LLM into a first-person memory summary; globally toggleable in Settings
 - **Memory documents + "You in their eyes"**: memories are organised into a sectioned document, plus a portrait of you written from the character's point of view. Open it by tapping the avatar in chat or from the character editor, and export as PNG / Word
@@ -74,10 +78,14 @@
 - Anime-tech styling with multiple switchable full themes (including one light theme)
 - **Liquid glass**: the bottom navigation, chat app bar and input bar use real background blur with translucent gradient borders; chat bubbles use translucent fills (the scrolling list is never blurred per-item, keeping it smooth)
 - Splash transition page: icon + tagline + studio credit
-- Bottom navigation: Chats / Characters / Pet / Settings
+- Bottom navigation: Chats / Workshop / Assets / Settings; pet models, artwork, stickers and voices live under Assets
 
 ## Recent Updates
 
+- **v2.1**: full character profiles, SillyTavern V1/V2/V3 import and V2/V3/PNG export with unknown-field preservation, automatic version snapshots, three-tab editor, alternate greetings, tags, profile token estimate, four-tab navigation and asset hub; schema v17; 466 tests
+- **v2.0**: multi-character group chats (one speaker per turn, speaker names in bubbles) and chat branching (copy a message prefix into a new conversation, keeping participants and parent pointers); schema v16; 416 tests
+- **v1.9**: keyword-triggered lorebook injection and on-demand long-term memory recall; lorebook import from SillyTavern `character_book`
+- **v1.8**: removed the general-purpose Agent and focused on the AI character workshop
 - **v1.3 series**: stickers, multi-bubble short replies, liquid-glass UI, memory documents with "You in their eyes" export, per-chat backgrounds and avatar cropping, built-in Haru pet, time awareness
 - Fixes: background crop limited to 1:1 / "crop failed", background shrinking with the keyboard, replies still arriving as one big block when the model ignores the format, model-invented tags leaking into bubbles, portrait avatar crop frame landing off-screen
 
@@ -123,7 +131,8 @@ lib/
   data/local/   # Drift database and table definitions
   features/
     chat/       # conversations, message list, input bar (push-to-talk), segment splitter, cross-chat memory, stickers, chat background
-    characters/ # character cards, SillyTavern import, prompt assembly, emotion tag parsing, memory documents, sticker library, image cropping
+    characters/ # character cards, full profiles, SillyTavern import/export, version snapshots, lorebook, prompt assembly, memory documents, sticker library, image cropping
+    assets/     # asset hub (pet / artwork / stickers / voices)
     pet/        # Live2D pet, WebView bridge, emotion→expression mapping, bundled Haru
     voice/      # TTS/ASR engine implementations, playback queue, Voice Workshop, voice settings
     settings/   # API providers, general app settings
@@ -136,7 +145,7 @@ assets/
 
 ```bash
 flutter analyze   # static checks
-flutter test      # 304 cases: SSE/tag parsing, splitting and fallback, prompt time anchors, sticker mapping, voice queue, auto-scroll, migrations, memory summarizer, crop geometry, …
+flutter test      # 466 cases: SSE/tag parsing, splitting and fallback, prompt budgets, sticker mapping, voice queue, auto-scroll, migrations, memory summarizer, lorebook recall, character profiles and versions, card import/export, PNG tEXt, …
 ```
 
 ## Acknowledgments & Copyright

@@ -13,13 +13,9 @@ import '../features/chat/data/chat_api_client.dart';
 import '../features/chat/data/chat_repository.dart';
 import '../features/chat/data/sticker_repository.dart';
 import '../features/chat/domain/models.dart';
-import '../features/agent/application/agent_tools.dart';
-import '../features/agent/data/agent_repository.dart';
-import '../features/agent/data/device_gateway.dart';
-import '../features/agent/data/download_gateway.dart';
-import '../features/agent/data/saf_gateway.dart';
-import '../features/agent/domain/agent_models.dart';
+import '../features/characters/application/character_assistant_service.dart';
 import '../features/characters/data/character_repository.dart';
+import '../features/characters/data/lore_repository.dart';
 import '../features/characters/domain/character.dart';
 import '../features/pet/data/pet_model_repository.dart';
 import '../features/settings/data/api_profile_repository.dart';
@@ -52,6 +48,18 @@ final chatRepositoryProvider = Provider<ChatRepository>(
 
 final characterRepositoryProvider = Provider<CharacterRepository>(
   (ref) => CharacterRepository(ref.watch(appDatabaseProvider)),
+);
+
+final loreRepositoryProvider = Provider<LoreRepository>(
+  (ref) => LoreRepository(ref.watch(appDatabaseProvider)),
+);
+
+/// 角色工坊：只读写角色文本，不接入 Agent 工具。
+final characterAssistantProvider = Provider<CharacterAssistantService>(
+  (ref) => CharacterAssistantService(
+    api: ref.watch(chatApiClientProvider),
+    profiles: ref.watch(apiProfileRepositoryProvider),
+  ),
 );
 
 /// 表情包仓库（每角色按心情分组的贴纸库）。
@@ -148,52 +156,14 @@ final chatApiClientProvider = Provider<ChatApiClient>(
   (ref) => OpenAiChatApiClient(),
 );
 
-/// Agent 会话仓库（不参与角色聊天与记忆）。
-final agentSessionRepositoryProvider = Provider<AgentSessionRepository>(
-  (ref) => AgentSessionRepository(ref.watch(appDatabaseProvider)),
-);
-
-/// Agent 私有工作区（应用支持目录 / agent_workspace）。
-final agentWorkspaceProvider = FutureProvider<AgentWorkspace>(
-  (ref) => AgentWorkspace.open(),
-);
-
-/// SAF 目录访问网关（Android MethodChannel；测试可覆盖）。
-final safGatewayProvider = Provider<SafGateway>(
-  (ref) => const MethodChannelSafGateway(),
-);
-
-/// 导出到系统「下载」目录（Android MediaStore；测试可覆盖）。
-final downloadGatewayProvider = Provider<DownloadGateway>(
-  (ref) => const MethodChannelDownloadGateway(),
-);
-
-/// 手机控制通道：Shizuku（shell）+ 无障碍（读屏/点击）。
-final deviceGatewayProvider = Provider<DeviceGateway>(
-  (ref) => const MethodChannelDeviceGateway(),
-);
-
-/// Agent 会话流（updatedAt 倒序）。
-final agentSessionsStreamProvider =
-    StreamProvider.autoDispose<List<AgentSession>>(
-  (ref) => ref.watch(agentSessionRepositoryProvider).watchSessions(),
-);
-
-/// 某个 Agent 会话的消息流。
-final agentMessagesStreamProvider = StreamProvider.autoDispose
-    .family<List<AgentMessage>, String>(
-  (ref, sessionId) =>
-      ref.watch(agentSessionRepositoryProvider).watchMessages(sessionId),
-);
-
-/// 跨会话记忆摘要器（ChatController 成功回合后 fire-and-forget 触发）。
-final memorySummarizerProvider = Provider<MemorySummarizer>((ref) =>
-    MemorySummarizer(
-      chatRepo: ref.watch(chatRepositoryProvider),
-      characterRepo: ref.watch(characterRepositoryProvider),
-      profileRepo: ref.watch(apiProfileRepositoryProvider),
-      api: ref.watch(chatApiClientProvider),
-    ));
+/// 跨会话记忆摘要器（每次回复完成后 fire-and-forget 触发）。
+final memorySummarizerProvider = Provider<MemorySummarizer>(
+    (ref) => MemorySummarizer(
+          chatRepo: ref.watch(chatRepositoryProvider),
+          characterRepo: ref.watch(characterRepositoryProvider),
+          profileRepo: ref.watch(apiProfileRepositoryProvider),
+          api: ref.watch(chatApiClientProvider),
+        ));
 
 /// 会话标题优化器（首条回复完成后 fire-and-forget 触发）。
 final titleGeneratorProvider = Provider<TitleGenerator>((ref) => TitleGenerator(

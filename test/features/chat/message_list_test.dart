@@ -308,13 +308,25 @@ void main() {
     await unmount(tester);
   });
 
-  testWidgets('长按消息弹出复制/删除菜单', (tester) async {
+  testWidgets('长按用户消息弹出复制/删除菜单', (tester) async {
     await insert('c1', '你好', role: ChatRole.user);
     await pumpList(tester, 'c1');
     await tester.longPress(find.text('你好'));
     await tester.pumpAndSettle();
     expect(find.text('复制文本'), findsOneWidget);
     expect(find.text('删除这条消息'), findsOneWidget);
+    await unmount(tester);
+  });
+
+  testWidgets('长按助手消息显示重新生成/候选/编辑', (tester) async {
+    await insert('c1', '回复文本');
+    await pumpList(tester, 'c1');
+    await tester.longPress(find.text('回复文本'));
+    await tester.pumpAndSettle();
+    expect(find.text('重新生成'), findsOneWidget);
+    expect(find.text('上一个候选'), findsOneWidget);
+    expect(find.text('下一个候选'), findsOneWidget);
+    expect(find.text('编辑'), findsOneWidget);
     await unmount(tester);
   });
 }

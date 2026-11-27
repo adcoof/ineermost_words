@@ -28,6 +28,51 @@ void main() {
       expect(draft.firstMessage, contains('栏杆'));
       expect(draft.exampleDialogue, contains('{{user}}'));
       expect(draft.pngBytes, isNull);
+      expect(draft.format, 'v1');
+    });
+
+    test('V2 alternate_greetings 解析为字符串列表', () {
+      final card = {
+        ...sample,
+        'alternate_greetings': ['第一次见面。', '雨天的天台。', 123, ''],
+      };
+      final draft =
+          importer.parse(Uint8List.fromList(utf8.encode(jsonEncode(card))));
+      expect(draft.alternateGreetings, ['第一次见面。', '雨天的天台。']);
+    });
+
+    test('character_book 世界书解析为草稿（未启用）', () {
+      final card = {
+        ...sample,
+        'character_book': {
+          'entries': [
+            {
+              'keys': ['天台', '屋顶'],
+              'content': '天台上的风很大。',
+              'position': 0,
+              'depth': 2,
+              'insertion_order': 5,
+            },
+            {
+              'key': ['教室'],
+              'content': '教室里很安静。',
+              'position': 1,
+              'insertion_order': 1,
+            },
+            {'keys': <String>[], 'content': '没有关键词，应跳过'},
+            {'keys': ['空内容'], 'content': ''},
+          ],
+        },
+      };
+      final draft =
+          importer.parse(Uint8List.fromList(utf8.encode(jsonEncode(card))));
+      expect(draft.loreDrafts, hasLength(2));
+      expect(draft.loreDrafts.first.keys, ['天台', '屋顶']);
+      expect(draft.loreDrafts.first.content, '天台上的风很大。');
+      expect(draft.loreDrafts.first.position, 'before');
+      expect(draft.loreDrafts.first.depth, 2);
+      expect(draft.loreDrafts.first.priority, 5);
+      expect(draft.loreDrafts[1].position, 'after');
     });
 
     test('V2 包装：正文在 data 下', () {
@@ -40,6 +85,151 @@ void main() {
           importer.parse(Uint8List.fromList(utf8.encode(jsonEncode(card))));
       expect(draft.name, '林小雨');
       expect(draft.firstMessage, contains('栏杆'));
+      expect(draft.format, 'v2');
+    });
+
+    test('V2 完整字段映射到档案与扩展，未知字段保留', () {
+      final card = {
+        'spec': 'chara_card_v2',
+        'spec_version': '2.0',
+        'data': {
+          ...sample,
+          'nickname': '小雨',
+          'creator': '测试作者',
+          'character_version': '1.2',
+          'creator_notes': '测试备注',
+          'tags': ['校园', '傲娇'],
+          'system_prompt': '保持冷淡',
+          'post_history_instructions': '不要总结',
+          'extensions': {
+            'depth_prompt': {'depth': 4},
+          },
+          'group_only_greetings': ['群聊开场'],
+          'future_field': {'x': 1},
+        },
+      };
+      final draft =
+          importer.parse(Uint8List.fromList(utf8.encode(jsonEncode(card))));
+
+      expect(draft.format, 'v2');
+      expect(draft.profile.basic.nickname, '小雨');
+      expect(draft.profile.creator.author, '测试作者');
+      expect(draft.profile.creator.version, '1.2');
+      expect(draft.profile.creator.notes, '测试备注');
+      expect(draft.profile.creator.tags, ['校园', '傲娇']);
+      expect(draft.profile.runConfig.systemPrompt, '保持冷淡');
+      expect(draft.profile.runConfig.postHistoryInstructions, '不要总结');
+      expect(draft.extensions.stExtensions['depth_prompt'], {'depth': 4});
+      // assets/group_only_greetings 等未映射字段原样保留。
+      expect(draft.extensions.unknownData['group_only_greetings'], ['群聊开场']);
+      expect(draft.extensions.unknownData['future_field'], {'x': 1});
+      expect(draft.preservedKeyCount, 3);
+      expect(
+        draft.warnings,
+        contains('角色卡自带的系统提示 / 历史后置指令已保存'),
+      );
+    });
+
+    test('V3 识别 + 未识别根字段保留', () {
+      final card = {
+        'spec': 'chara_card_v3',
+        'spec_version': '3.0',
+        'data': {
+          ...sample,
+          'assets': [
+            {'type': 'icon', 'uri': 'ccdefault:'},
+          ],
+        },
+        'x_root': 'keep',
+      };
+      final draft =
+          importer.parse(Uint8List.fromList(utf8.encode(jsonEncode(card))));
+      expect(draft.format, 'v3');
+      expect(draft.extensions.unknownData['assets'], [
+        {'type': 'icon', 'uri': 'ccdefault:'},
+      ]);
+      expect(draft.extensions.unknownRoot['x_root'], 'keep');
+    });
+
+    test('世界书书籍元数据与条目原文保留', () {
+      final card = {
+        ...sample,
+        'character_book': {
+          'name': '世界观',
+          'scan_depth': 3,
+          'entries': [
+            {
+              'keys': ['天台'],
+              'secondary_keys': ['夜'],
+              'content': '天台的风很大。',
+              'position': 'after_char',
+              'insertion_order': 5,
+              'extensions': {'x': 1},
+            },
+          ],
+        },
+      };
+      final draft =
+          importer.parse(Uint8List.fromList(utf8.encode(jsonEncode(card))));
+      expect(draft.extensions.bookMeta['name'], '世界观');
+      expect(draft.extensions.bookMeta['scan_depth'], 3);
+      expect(draft.loreDrafts.single.position, 'after');
+      expect(draft.loreDrafts.single.priority, 5);
+
+      final source =
+          jsonDecode(draft.loreDrafts.single.sourceJson) as Map<String, dynamic>;
+      expect(source['secondary_keys'], ['夜']);
+      expect(source['extensions'], {'x': 1});
+      expect(draft.warnings, contains('世界书 1 条待导入，默认禁用'));
+    });
+
+    test('extensions.xinyu.profile 回读扩展档案，ST 字段覆盖非空值', () {
+      final card = {
+        'spec': 'chara_card_v3',
+        'data': {
+          'name': '阿雪',
+          'nickname': '新昵称',
+          'extensions': {
+            'xinyu': {
+              'profile': {
+                'basic': {'nickname': '旧昵称'},
+                'appearance': {'hair': '银白长发'},
+                'background': {'origin': '北境'},
+                'creator': {'author': '旧作者'},
+              },
+            },
+          },
+        },
+      };
+      final draft =
+          importer.parse(Uint8List.fromList(utf8.encode(jsonEncode(card))));
+      expect(draft.profile.basic.nickname, '新昵称');
+      expect(draft.profile.creator.author, '旧作者');
+      expect(draft.profile.appearance.hair, '银白长发');
+      expect(draft.profile.background.origin, '北境');
+      expect(draft.preservedKeyCount, 0); // xinyu 是本应用扩展，不计入
+    });
+
+    test('tags 支持逗号分隔字符串', () {
+      final draft = importer.parse(
+        Uint8List.fromList(
+          utf8.encode(
+            jsonEncode({'name': '小雨', 'tags': '校园, 傲娇，日常'}),
+          ),
+        ),
+      );
+      expect(draft.profile.creator.tags, ['校园', '傲娇', '日常']);
+    });
+
+    test('未知 spec 按包装结构解析并给出提示', () {
+      final card = {
+        'spec': 'chara_card_v9',
+        'data': sample,
+      };
+      final draft =
+          importer.parse(Uint8List.fromList(utf8.encode(jsonEncode(card))));
+      expect(draft.format, 'v2');
+      expect(draft.warnings.first, contains('未知 spec'));
     });
 
     test('PNG 卡：提取 tEXt chara 并保留整图作立绘', () {
@@ -83,6 +273,7 @@ void main() {
       final png = _buildPng({'ccv3': b64});
       final draft = importer.parse(png);
       expect(draft.name, '林小雨');
+      expect(draft.format, 'v3');
     });
 
     test('chara 损坏时回退 ccv3', () {

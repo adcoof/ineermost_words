@@ -20,6 +20,7 @@ import '../../chat/application/emotion_tag_parser.dart' show stripTagMarkup;
 import '../../chat/data/chat_api_client.dart';
 import '../../chat/domain/models.dart';
 import '../domain/character.dart';
+import '../domain/lore_entry.dart';
 import '../domain/memory_fact.dart';
 
 /// 跨会话原文片段（按会话分组），供提示词渲染「【会话：标题】」。
@@ -38,11 +39,20 @@ class PromptUsage {
   /// 记忆：长期摘要 + 对用户的了解（事实记忆在 M3 计入 [factTokens]）。
   final int memoryTokens;
 
-  /// 事实记忆（v1.4 M3 启用；当前为 0）。
+  /// 事实记忆（按需召回）。
   final int factTokens;
+
+  /// 世界书命中条目。
+  final int loreTokens;
 
   /// 跨会话原文片段。
   final int otherSessionTokens;
+
+  /// 角色扩展档案块（v2.1：外貌/背景/关系/语言风格/互动方式）。
+  final int profileTokens;
+
+  /// 角色卡自带的系统提示 + 历史后置指令（v2.1）。
+  final int cardPromptTokens;
 
   /// 本会话历史（含时间锚点）。
   final int historyTokens;
@@ -57,7 +67,10 @@ class PromptUsage {
     this.systemTokens = 0,
     this.memoryTokens = 0,
     this.factTokens = 0,
+    this.loreTokens = 0,
     this.otherSessionTokens = 0,
+    this.profileTokens = 0,
+    this.cardPromptTokens = 0,
     this.historyTokens = 0,
     this.currentInputTokens = 0,
     this.windowTokens = 4096,
@@ -69,7 +82,10 @@ class PromptUsage {
       systemTokens +
       memoryTokens +
       factTokens +
+      loreTokens +
       otherSessionTokens +
+      profileTokens +
+      cardPromptTokens +
       historyTokens +
       currentInputTokens;
 
@@ -130,6 +146,7 @@ class PromptAssembler {
     List<ChatMessage> pastTranscript = const [],
     List<PastSession> pastSessions = const [],
     List<MemoryFact> facts = const [],
+    List<LoreEntry> lore = const [],
     String userSummary = '',
     DateTime? now,
     int tokenBudget = 4096,
@@ -142,6 +159,7 @@ class PromptAssembler {
     pastTranscript: pastTranscript,
     pastSessions: pastSessions,
     facts: facts,
+    lore: lore,
     userSummary: userSummary,
     now: now,
     tokenBudget: tokenBudget,
@@ -157,6 +175,7 @@ class PromptAssembler {
     List<ChatMessage> pastTranscript = const [],
     List<PastSession> pastSessions = const [],
     List<MemoryFact> facts = const [],
+    List<LoreEntry> lore = const [],
     String userSummary = '',
     DateTime? now,
     int tokenBudget = 4096,
@@ -168,6 +187,9 @@ class PromptAssembler {
     var systemTokens = 0;
     var memoryTokens = 0;
     var factTokens = 0;
+    var loreTokens = 0;
+    var profileTokens = 0;
+    var cardPromptTokens = 0;
 
     final persona = StringBuffer('你将扮演以下角色，全程保持角色设定，绝不出戏。\n')
       ..write('名字：${character.name}\n');
@@ -183,6 +205,39 @@ class PromptAssembler {
     );
     system.add(personaMsg);
     systemTokens += _cost(personaMsg.content);
+
+    // 角色扩展档案（v2.1）：只注入运行分区，整体上限窗口 12%，
+    // 至少 300 token、最多 1200 token；超长按 token 截断。
+    final profileText = character.profile.promptText.trim();
+    if (profileText.isNotEmpty) {
+      const header = '【角色档案补充设定】（按设定扮演，不要逐条复述）\n';
+      final cap = math.min(
+        1200,
+        math.max(300, (tokenBudget * 0.12).floor()),
+      );
+      var body = profileText;
+      if (_cost('$header$body') > cap) {
+        final available = math.max(8, cap - _cost(header));
+        body = truncateToTokens(body, available);
+      }
+      final msg = ApiMessage(role: 'system', content: '$header$body');
+      system.add(msg);
+      profileTokens += _cost(msg.content);
+    }
+
+    // 角色卡自带的系统提示（v2.1）：单独成条，限 2000 字符并保留尾部；
+    // 输出格式规范仍是历史前的最后一条 system，不被卡内提示覆盖。
+    final systemPrompt = character.profile.runConfig.systemPrompt.trim();
+    if (systemPrompt.isNotEmpty) {
+      final msg = ApiMessage(
+        role: 'system',
+        content:
+            '【角色卡系统提示】（在不违反输出格式规范的前提下遵循）\n'
+            '${_tailClip(systemPrompt, 2000)}',
+      );
+      system.add(msg);
+      cardPromptTokens += _cost(msg.content);
+    }
 
     // 当前时间（时间感知，v8）：配合历史消息的时间锚点，
     // 角色能推断「那是昨天/3天前的事」而不是顺着"刚刚"。
@@ -318,6 +373,41 @@ class PromptAssembler {
     system.add(tagMsg);
     systemTokens += _cost(tagMsg.content);
 
+    // 世界书（v1.9）：只在关键词命中时注入，预算 ≤ 窗口 15%。
+    final loreBefore = <LoreEntry>[];
+    final loreAfter = <LoreEntry>[];
+    if (lore.isNotEmpty) {
+      final loreBudget = (tokenBudget * 0.15).floor();
+      var used = 0;
+      for (final entry in lore) {
+        final content = entry.content.trim();
+        if (content.isEmpty) continue;
+        final cost = estimateTokens(content);
+        if (used + cost > loreBudget) break;
+        (entry.isBefore ? loreBefore : loreAfter).add(entry);
+        used += cost;
+      }
+    }
+    loreBefore.sort((a, b) => b.depth.compareTo(a.depth));
+    loreAfter.sort((a, b) => a.depth.compareTo(b.depth));
+
+    ApiMessage? loreMessage(List<LoreEntry> entries, String intro) {
+      if (entries.isEmpty) return null;
+      final body = entries.map((e) => e.content.trim()).join('\n');
+      final msg = ApiMessage(role: 'system', content: '$intro\n$body');
+      loreTokens += _cost(msg.content);
+      return msg;
+    }
+
+    final loreBeforeMsg = loreMessage(
+      loreBefore,
+      '以下是本场景的世界书设定（仅作背景事实，不要逐条复述）：',
+    );
+    final loreAfterMsg = loreMessage(
+      loreAfter,
+      '以下是紧邻当前场景的世界书补充设定（不要逐条复述）：',
+    );
+
     final budget = (tokenBudget * 0.9).floor();
     final chosen = _selectHistory(
       history: history,
@@ -334,13 +424,35 @@ class PromptAssembler {
         .where((m) => m.content.contains('【其他对话】'))
         .fold<int>(0, (sum, m) => sum + _cost(m.content));
 
+    // 历史后置指令（v2.1）：放在历史与世界书 after 之后、当前输入之前，
+    // 限 1000 字符并保留尾部。
+    final postHistory =
+        character.profile.runConfig.postHistoryInstructions.trim();
+    ApiMessage? postHistoryMsg;
+    if (postHistory.isNotEmpty) {
+      postHistoryMsg = ApiMessage(
+        role: 'system',
+        content: '【历史后置指令】\n${_tailClip(postHistory, 1000)}',
+      );
+      cardPromptTokens += _cost(postHistoryMsg.content);
+    }
+
     return AssembledPrompt(
-      messages: [...system, ...wire],
+      messages: [
+        ...system,
+        ?loreBeforeMsg,
+        ...wire,
+        ?loreAfterMsg,
+        ?postHistoryMsg,
+      ],
       usage: PromptUsage(
         systemTokens: systemTokens,
         memoryTokens: memoryTokens,
         factTokens: factTokens,
+        loreTokens: loreTokens,
         otherSessionTokens: otherTokens,
+        profileTokens: profileTokens,
+        cardPromptTokens: cardPromptTokens,
         historyTokens: historyTokens,
         currentInputTokens: reservedTokens,
         windowTokens: tokenBudget,
@@ -467,4 +579,10 @@ class PromptAssembler {
   }
 
   int _cost(String text) => 4 + estimateTokens(text);
+
+  /// 保留字符串尾部（指令通常在末尾），避免截掉关键约束。
+  String _tailClip(String text, int maxChars) {
+    if (text.length <= maxChars) return text;
+    return text.substring(text.length - maxChars);
+  }
 }

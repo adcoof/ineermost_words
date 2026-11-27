@@ -41,7 +41,30 @@ void main() {
     expect(find.text('跨会话片段'), findsOneWidget);
     expect(find.text('本会话历史'), findsOneWidget);
     expect(find.text('当前输入'), findsOneWidget);
+    expect(find.text('角色档案'), findsNothing);
+    expect(find.text('卡内提示'), findsNothing);
     expect(find.textContaining('剩余'), findsWidgets);
+  });
+
+  testWidgets('档案与卡内提示分类在用量弹层显示', (tester) async {
+    await tester.pumpWidget(
+      host(
+        const PromptUsage(
+          systemTokens: 100,
+          profileTokens: 50,
+          cardPromptTokens: 30,
+          historyTokens: 100,
+          windowTokens: 4096,
+        ),
+      ),
+    );
+    await tester.tap(find.textContaining('上下文 '));
+    await tester.pumpAndSettle();
+
+    expect(find.text('角色档案'), findsOneWidget);
+    expect(find.text('卡内提示'), findsOneWidget);
+    expect(find.text('50 token'), findsOneWidget);
+    expect(find.text('30 token'), findsOneWidget);
   });
 
   testWidgets('超过 90% 显示红色，70%~90% 显示琥珀色', (tester) async {

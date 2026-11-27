@@ -31,6 +31,12 @@ class Conversations extends Table {
   /// 自定义聊天背景板文件绝对路径（v8）；null=默认主题背景。
   TextColumn get backgroundPath => text().nullable()();
 
+  /// 分支来源会话（v16）：从某条消息 fork 出的新会话。
+  TextColumn get parentConversationId => text().nullable()();
+
+  /// 分支点消息 id（v16）。
+  TextColumn get branchFromMessageId => text().nullable()();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }
@@ -64,7 +70,103 @@ class Messages extends Table {
   /// text | sticker（v8）：sticker 为纯图表情包消息，不进提示词/记忆/标题。
   TextColumn get kind => text().withDefault(const Constant('text'))();
 
+  /// 当前选中的候选回复 id（v14）；null=正文即唯一候选。
+  TextColumn get activeVariantId => text().nullable()();
+
+  /// 群聊中说这句话的角色 id（v16）；null=单角色会话。
+  TextColumn get speakerCharacterId => text().nullable()();
+
   DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// 消息候选回复（v14）：同一 assistant 消息的多次生成/编辑历史。
+@DataClassName('MessageVariantRow')
+class MessageVariants extends Table {
+  TextColumn get id => text()();
+
+  TextColumn get messageId => text()();
+
+  TextColumn get content => text().withDefault(const Constant(''))();
+
+  TextColumn get rawContent => text().withDefault(const Constant(''))();
+
+  /// JSON 数组：情绪/动作事件。
+  TextColumn get emotionEvents => text().withDefault(const Constant('[]'))();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// 群聊会话的参与者（v16）：按 sortOrder 轮流发言。
+@DataClassName('ConversationParticipantRow')
+class ConversationParticipants extends Table {
+  TextColumn get id => text()();
+
+  TextColumn get conversationId => text()();
+
+  TextColumn get characterId => text()();
+
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// 世界书 / Lorebook 条目（v15）：关键词命中后注入提示词。
+@DataClassName('LoreEntryRow')
+class LoreEntries extends Table {
+  TextColumn get id => text()();
+
+  TextColumn get characterId => text()();
+
+  /// JSON 数组：触发关键词。
+  TextColumn get keys => text().withDefault(const Constant('[]'))();
+
+  TextColumn get content => text().withDefault(const Constant(''))();
+
+  /// before|after：相对历史消息的位置。
+  TextColumn get position => text().withDefault(const Constant('before'))();
+
+  /// 0 表示贴近当前消息；数字越大越靠前。
+  IntColumn get depth => integer().withDefault(const Constant(0))();
+
+  IntColumn get priority => integer().withDefault(const Constant(0))();
+
+  BoolColumn get enabled => boolean().withDefault(const Constant(true))();
+
+  /// 导入时的完整条目原文（v17）：导出时合并，保留未映射字段。
+  TextColumn get sourceJson => text().withDefault(const Constant('{}'))();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// 角色版本快照（v17）：只存文本档案，立绘/记忆/世界书不参与回滚。
+@DataClassName('CharacterVersionRow')
+class CharacterVersions extends Table {
+  TextColumn get id => text()();
+
+  TextColumn get characterId => text()();
+
+  /// save | manual | restore | import
+  TextColumn get trigger => text().withDefault(const Constant('save'))();
+
+  TextColumn get label => text().withDefault(const Constant(''))();
+
+  /// 毫秒时间戳：dateTime() 按秒存，同秒保存无法稳定排序。
+  IntColumn get createdAtMs => integer()();
+
+  /// 快照 JSON：核心字段 + 扩展档案 + 第三方扩展 + source。
+  TextColumn get snapshotJson => text().withDefault(const Constant('{}'))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -115,11 +217,21 @@ class Characters extends Table {
 
   TextColumn get exampleDialogue => text().withDefault(const Constant(''))();
 
+  /// 多开场白 JSON 数组（v14）；firstMessage 仍是主开场白。
+  TextColumn get alternateGreetings =>
+      text().withDefault(const Constant('[]'))();
+
   /// 立绘文件绝对路径。
   TextColumn get avatarPath => text().nullable()();
 
-  /// manual | st_v2
+  /// manual | st_v1 | st_v2 | st_v3
   TextColumn get source => text().withDefault(const Constant('manual'))();
+
+  /// 扩展档案 JSON（v17）：外貌/背景/关系/语言风格/创作者/运行配置等。
+  TextColumn get profileJson => text().withDefault(const Constant('{}'))();
+
+  /// 第三方扩展与未识别字段 JSON（v17）：只读保留，导出时合并。
+  TextColumn get extensionsJson => text().withDefault(const Constant('{}'))();
 
   DateTimeColumn get createdAt => dateTime()();
 
@@ -283,56 +395,6 @@ class MemoryFacts extends Table {
   DateTimeColumn get occurredAt => dateTime()();
 
   TextColumn get sourceConversationId => text().nullable()();
-
-  DateTimeColumn get createdAt => dateTime()();
-
-  @override
-  Set<Column<Object>> get primaryKey => {id};
-}
-
-/// Agent 会话（v10）：独立的工具调用对话，不参与角色聊天历史与记忆。
-@DataClassName('AgentSessionRow')
-class AgentSessions extends Table {
-  TextColumn get id => text()();
-
-  TextColumn get title => text().withDefault(const Constant('新 Agent 会话'))();
-
-  DateTimeColumn get createdAt => dateTime()();
-
-  DateTimeColumn get updatedAt => dateTime()();
-
-  /// 会话级审批模式（v11）；null 表示跟随设置页默认。
-  TextColumn get approvalMode => text().nullable()();
-
-  /// 会话级授权文件夹 JSON（v11）；null 表示跟随设置页默认。
-  TextColumn get grantedFoldersJson => text().nullable()();
-
-  @override
-  Set<Column<Object>> get primaryKey => {id};
-}
-
-/// Agent 消息（v10）：role=user/assistant/tool。
-/// assistant 可带 toolCallsJson；tool 行带 toolCallId/toolName 与结果 JSON。
-@DataClassName('AgentMessageRow')
-class AgentMessages extends Table {
-  TextColumn get id => text()();
-
-  TextColumn get sessionId => text()();
-
-  /// user | assistant | tool
-  TextColumn get role => text()();
-
-  TextColumn get content => text().withDefault(const Constant(''))();
-
-  /// assistant 的 tool_calls 数组（OpenAI 形状）；无则 null。
-  TextColumn get toolCallsJson => text().nullable()();
-
-  TextColumn get toolCallId => text().nullable()();
-
-  TextColumn get toolName => text().nullable()();
-
-  /// streaming | done | error
-  TextColumn get status => text().withDefault(const Constant('done'))();
 
   DateTimeColumn get createdAt => dateTime()();
 
