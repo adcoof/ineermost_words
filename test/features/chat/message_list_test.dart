@@ -6,6 +6,7 @@ library;
 
 import 'package:ai_roleplay_chat/app/providers.dart';
 import 'package:ai_roleplay_chat/data/local/app_database.dart';
+import 'package:ai_roleplay_chat/features/characters/data/character_repository.dart';
 import 'package:ai_roleplay_chat/features/chat/data/chat_repository.dart';
 import 'package:ai_roleplay_chat/features/chat/domain/models.dart';
 import 'package:ai_roleplay_chat/features/chat/presentation/message_list.dart';
@@ -91,7 +92,12 @@ void main() {
   Future<void> pumpList(WidgetTester tester, String conversationId) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [chatRepositoryProvider.overrideWithValue(repo)],
+        overrides: [
+          chatRepositoryProvider.overrideWithValue(repo),
+          characterRepositoryProvider.overrideWithValue(
+            CharacterRepository(db),
+          ),
+        ],
         child: MaterialApp(
           home: Scaffold(
             body: SizedBox(
@@ -327,6 +333,45 @@ void main() {
     expect(find.text('上一个候选'), findsOneWidget);
     expect(find.text('下一个候选'), findsOneWidget);
     expect(find.text('编辑'), findsOneWidget);
+    await unmount(tester);
+  });
+
+  testWidgets('私聊/群聊消息显示角色与用户头像', (tester) async {
+    final characterRepo = CharacterRepository(db);
+    final a = characterRepo.blank().copyWith(name: '角色A');
+    final b = characterRepo.blank().copyWith(name: '角色B');
+    await characterRepo.save(a);
+    await characterRepo.save(b);
+
+    final conv = await repo.createConversation(
+      apiProfileId: 'p1',
+      characterId: a.id,
+    );
+    await repo.replaceParticipants(conv.id, [a.id, b.id]);
+    await repo.insertMessage(
+      conversationId: conv.id,
+      role: ChatRole.user,
+      content: '你好',
+    );
+    // 旧私聊消息没有 speakerCharacterId：用会话主角色 A 兜底。
+    await repo.insertMessage(
+      conversationId: conv.id,
+      role: ChatRole.assistant,
+      content: '私聊回复',
+    );
+    // 群聊中 B 的发言：用 B 的头像。
+    await repo.insertMessage(
+      conversationId: conv.id,
+      role: ChatRole.assistant,
+      content: '群聊回复',
+      speakerCharacterId: b.id,
+    );
+
+    await pumpList(tester, conv.id);
+
+    expect(find.byKey(const ValueKey('chat-avatar-user')), findsOneWidget);
+    expect(find.byKey(ValueKey('chat-avatar-${a.id}')), findsOneWidget);
+    expect(find.byKey(ValueKey('chat-avatar-${b.id}')), findsOneWidget);
     await unmount(tester);
   });
 }

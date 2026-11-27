@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
 import '../../../core/widgets/glass.dart';
+import '../../characters/presentation/character_avatar.dart';
 import '../application/emotion_tag_parser.dart';
 import '../data/chat_repository.dart';
 import '../domain/models.dart';
@@ -71,6 +72,23 @@ class _MessageListState extends ConsumerState<MessageList> {
   /// 上一帧末条消息内容（检测流式增长）。
   String _lastContent = '';
 
+  /// 会话主角色：旧消息没有 speakerCharacterId 时用它兜底头像。
+  String? _primaryCharacterId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrimaryCharacter();
+  }
+
+  Future<void> _loadPrimaryCharacter() async {
+    final conversation = await ref
+        .read(chatRepositoryProvider)
+        .getConversation(widget.conversationId);
+    if (!mounted) return;
+    setState(() => _primaryCharacterId = conversation?.characterId);
+  }
+
   @override
   void didUpdateWidget(covariant MessageList oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -79,6 +97,7 @@ class _MessageListState extends ConsumerState<MessageList> {
       _initialDone = false;
       _lastCount = -1;
       _lastContent = '';
+      _loadPrimaryCharacter();
     }
   }
 
@@ -353,7 +372,7 @@ class _MessageListState extends ConsumerState<MessageList> {
   Widget build(BuildContext context) {
     final repo = ref.watch(chatRepositoryProvider);
     final characters = ref.watch(charactersStreamProvider).value ?? const [];
-    final speakerNames = {for (final c in characters) c.id: c.name};
+    final characterById = {for (final c in characters) c.id: c};
     return StreamBuilder<List<ChatMessage>>(
       stream: repo.watchMessages(widget.conversationId),
       builder: (context, snapshot) {
@@ -371,12 +390,18 @@ class _MessageListState extends ConsumerState<MessageList> {
           itemCount: messages.length,
           itemBuilder: (context, index) {
             final m = messages[index];
+            final speakerId = m.speakerCharacterId ??
+                (m.role == ChatRole.assistant
+                    ? _primaryCharacterId
+                    : null);
+            final speaker =
+                speakerId == null ? null : characterById[speakerId];
             final bubble = _MessageBubble(
               message: m,
               isStreaming: m.status == MessageStatus.streaming,
-              speakerName: m.speakerCharacterId == null
-                  ? null
-                  : speakerNames[m.speakerCharacterId],
+              speakerName: speaker?.name,
+              avatarPath: speaker?.avatarPath,
+              avatarKey: speakerId,
               onLongPress: m.status == MessageStatus.streaming
                   ? null
                   : () => _showMessageActions(context, repo, m),
@@ -413,12 +438,16 @@ class _MessageBubble extends StatelessWidget {
   final bool isStreaming;
   final VoidCallback? onLongPress;
   final String? speakerName;
+  final String? avatarPath;
+  final String? avatarKey;
 
   const _MessageBubble({
     required this.message,
     required this.isStreaming,
     this.onLongPress,
     this.speakerName,
+    this.avatarPath,
+    this.avatarKey,
   });
 
   @override
@@ -438,78 +467,116 @@ class _MessageBubble extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
+    final avatar = isUser
+        ? CircleAvatar(
+            key: const ValueKey('chat-avatar-user'),
+            radius: 14,
+            backgroundColor: scheme.primaryContainer,
+            child: Icon(
+              Icons.person_outline,
+              size: 16,
+              color: scheme.onPrimaryContainer,
+            ),
+          )
+        : CharacterAvatar(
+            key: ValueKey('chat-avatar-${avatarKey ?? 'assistant'}'),
+            avatarPath: avatarPath,
+            radius: 14,
+          );
+
     return GestureDetector(
       onLongPress: onLongPress,
-      child: Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.78,
-        ),
-        // 液态玻璃气泡（v8）：半透明 + 渐变描边，滚动列表绝不逐个模糊。
-        decoration: glassBubbleDecoration(base: bg),
-        child: Column(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          mainAxisAlignment:
+              isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (!isUser &&
-                speakerName != null &&
-                speakerName!.trim().isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  speakerName!,
-                  style: TextStyle(
-                    color: fg.withValues(alpha: 0.65),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
+            if (!isUser) ...[avatar, const SizedBox(width: 6)],
+            Flexible(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.sizeOf(context).width * 0.72,
+                ),
+                // 液态玻璃气泡（v8）：半透明 + 渐变描边，滚动列表绝不逐个模糊。
+                decoration: glassBubbleDecoration(base: bg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (!isUser &&
+                        speakerName != null &&
+                        speakerName!.trim().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          speakerName!,
+                          style: TextStyle(
+                            color: fg.withValues(alpha: 0.65),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    if (message.imageFilePaths.isNotEmpty) ...[
+                      _ImageGrid(paths: message.imageFilePaths),
+                      if (text.isNotEmpty || isStreaming)
+                        const SizedBox(height: 6),
+                    ],
+                    if (text.isEmpty && isStreaming)
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: fg,
+                        ),
+                      )
+                    else if (text.isNotEmpty)
+                      Text(
+                        text,
+                        style: TextStyle(
+                          color: fg,
+                          fontSize: 15,
+                          height: 1.4,
+                        ),
+                      ),
+                    if (message.status == MessageStatus.error)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          '生成失败',
+                          style: TextStyle(
+                            color: scheme.error,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    if (isStreaming && text.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          '生成中…',
+                          style: TextStyle(
+                            color: fg.withValues(alpha: 0.6),
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-            if (message.imageFilePaths.isNotEmpty) ...[
-              _ImageGrid(paths: message.imageFilePaths),
-              if (text.isNotEmpty || isStreaming) const SizedBox(height: 6),
-            ],
-            if (text.isEmpty && isStreaming)
-              SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2, color: fg),
-              )
-            else if (text.isNotEmpty)
-              Text(
-                text,
-                style: TextStyle(color: fg, fontSize: 15, height: 1.4),
-              ),
-            if (message.status == MessageStatus.error)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '生成失败',
-                  style: TextStyle(
-                    color: scheme.error,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            if (isStreaming && text.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '生成中…',
-                  style: TextStyle(
-                    color: fg.withValues(alpha: 0.6),
-                    fontSize: 11,
-                  ),
-                ),
-              ),
+            ),
+            if (isUser) ...[const SizedBox(width: 6), avatar],
           ],
         ),
       ),
-    ),
-  );
+    );
   }
 }
 

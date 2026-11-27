@@ -24,6 +24,7 @@
 ## Features
 
 ### 💬 Conversations
+- **Message avatars**: private and group chats show character/user avatars beside each bubble; group replies use the speaking character's avatar (the user avatar is currently a generic placeholder)
 - Streaming typewriter replies (SSE) with instant stop/interrupt
 - Full chat history stored locally in SQLite — nothing lost on restart
 - **Multi-bubble replies**: one turn is split into up to 4 short messages that appear one after another, so it reads like a real person typing; if the model still writes one big block, the client falls back to splitting it automatically
