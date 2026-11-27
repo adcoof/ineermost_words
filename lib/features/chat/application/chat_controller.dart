@@ -42,12 +42,16 @@ class ChatUiState {
   /// 最近一次组装提示词的分类用量（聊天页 chip/sheet）。
   final PromptUsage? contextUsage;
 
+  /// 群聊强制发言：下一条消息由该角色回复；null=按轮转。
+  final String? forcedSpeakerId;
+
   const ChatUiState({
     this.conversationId,
     this.isStreaming = false,
     this.streamingMessageId,
     this.errorText,
     this.contextUsage,
+    this.forcedSpeakerId,
   });
 
   ChatUiState copyWith({
@@ -56,9 +60,11 @@ class ChatUiState {
     String? streamingMessageId,
     String? errorText,
     PromptUsage? contextUsage,
+    String? forcedSpeakerId,
     bool clearError = false,
     bool clearStreaming = false,
     bool clearContextUsage = false,
+    bool clearForcedSpeaker = false,
   }) => ChatUiState(
     conversationId: conversationId ?? this.conversationId,
     isStreaming: isStreaming ?? this.isStreaming,
@@ -69,6 +75,9 @@ class ChatUiState {
     contextUsage: clearContextUsage
         ? null
         : (contextUsage ?? this.contextUsage),
+    forcedSpeakerId: clearForcedSpeaker
+        ? null
+        : (forcedSpeakerId ?? this.forcedSpeakerId),
   );
 }
 
@@ -100,6 +109,13 @@ class ChatController extends Notifier<ChatUiState> {
     state = ChatUiState(conversationId: conversationId);
   }
 
+  /// 群聊：让指定成员回复下一条消息；传 null 取消强制。
+  void forceSpeaker(String? characterId) {
+    state = characterId == null
+        ? state.copyWith(clearForcedSpeaker: true)
+        : state.copyWith(forcedSpeakerId: characterId);
+  }
+
   /// 打开会话时预计算一次上下文用量（当前输入按 0 计）。
   ///
   /// 与 send 复用同一套组装逻辑；send / 切换会话会递增 [_sendSeq]，
@@ -126,6 +142,7 @@ class ChatController extends Notifier<ChatUiState> {
         history: history,
         participants: participants,
         participantCharacters: participantCharacters,
+        forcedSpeakerId: state.forcedSpeakerId,
       );
       final promptHistory = _transformGroupHistory(
         history,
@@ -152,27 +169,34 @@ class ChatController extends Notifier<ChatUiState> {
     required List<ChatMessage> history,
     required List<ConversationParticipant> participants,
     required Map<String, Character> participantCharacters,
+    String? forcedSpeakerId,
   }) async {
+    // 强制发言优先，且不受静音影响。
+    if (forcedSpeakerId != null &&
+        participantCharacters.containsKey(forcedSpeakerId)) {
+      return participantCharacters[forcedSpeakerId];
+    }
     String? speakerId;
     if (participants.isNotEmpty) {
+      // 静音成员不参与自动轮转；全部静音时退回全体，避免死锁。
+      final enabled = participants.where((p) => p.enabled).toList();
+      final pool = enabled.isEmpty ? participants : enabled;
       final reversedAssistants = history.reversed.where(
         (m) =>
             m.role == ChatRole.assistant &&
             m.speakerCharacterId != null &&
-            participantCharacters.containsKey(m.speakerCharacterId),
+            pool.any((p) => p.characterId == m.speakerCharacterId),
       );
       final lastAssistant = reversedAssistants.isEmpty
           ? null
           : reversedAssistants.first;
       final prevIndex = lastAssistant == null
           ? -1
-          : participants.indexWhere(
+          : pool.indexWhere(
               (p) => p.characterId == lastAssistant.speakerCharacterId,
             );
-      final nextIndex = prevIndex < 0
-          ? 0
-          : (prevIndex + 1) % participants.length;
-      speakerId = participants[nextIndex].characterId;
+      final nextIndex = prevIndex < 0 ? 0 : (prevIndex + 1) % pool.length;
+      speakerId = pool[nextIndex].characterId;
     }
     if (speakerId != null) return participantCharacters[speakerId];
     final characterId = conv.characterId;
@@ -407,6 +431,11 @@ class ChatController extends Notifier<ChatUiState> {
       final c = await characterRepo.getById(p.characterId);
       if (c != null) participantCharacters[c.id] = c;
     }
+    final forcedSpeakerId = state.forcedSpeakerId;
+    if (forcedSpeakerId != null) {
+      // 强制只作用于下一轮；先清掉 UI 标记，再解析本轮发言者。
+      state = state.copyWith(clearForcedSpeaker: true);
+    }
     final Character? character = conv == null
         ? null
         : await _resolveSpeaker(
@@ -414,6 +443,7 @@ class ChatController extends Notifier<ChatUiState> {
             history: history,
             participants: participants,
             participantCharacters: participantCharacters,
+            forcedSpeakerId: forcedSpeakerId,
           );
     final assistant = await chatRepo.insertMessage(
       conversationId: activeConvId,
@@ -604,6 +634,7 @@ class ChatController extends Notifier<ChatUiState> {
         content: '',
         rawContent: '',
         status: MessageStatus.streaming,
+        speakerCharacterId: character?.id,
       );
       segId = next.id;
       segmentCount++;
@@ -785,6 +816,7 @@ class ChatController extends Notifier<ChatUiState> {
               role: ChatRole.assistant,
               content: parts[i],
               rawContent: parts[i],
+              speakerCharacterId: character?.id,
               createdAt: base.add(Duration(milliseconds: i)),
             );
           }
@@ -833,6 +865,7 @@ class ChatController extends Notifier<ChatUiState> {
               imagePaths: [path],
               imageSummary: '表情包',
               kind: MessageKind.sticker,
+              speakerCharacterId: charId,
             );
           })().catchError((_) {}),
         );

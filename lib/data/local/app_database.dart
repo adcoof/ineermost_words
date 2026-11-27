@@ -35,7 +35,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -137,6 +137,16 @@ class AppDatabase extends _$AppDatabase {
         }
         await m.createTable(characterVersions);
         await _createCharacterVersionIndexes();
+      }
+      // v18：群聊成员静音/启用。表在 v16 建立；from<16 时 createTable
+      // 已按当前定义带 enabled，不能再 addColumn。
+      if (from < 18) {
+        if (from >= 16) {
+          await m.addColumn(
+            conversationParticipants,
+            conversationParticipants.enabled,
+          );
+        }
       }
     },
   );

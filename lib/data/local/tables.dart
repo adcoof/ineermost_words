@@ -113,6 +113,9 @@ class ConversationParticipants extends Table {
 
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
 
+  /// 是否参与自动轮转（v18）。静音成员仍可被“让 TA 回复”强制发言。
+  BoolColumn get enabled => boolean().withDefault(const Constant(true))();
+
   DateTimeColumn get createdAt => dateTime()();
 
   @override

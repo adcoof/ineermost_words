@@ -7470,6 +7470,21 @@ class $ConversationParticipantsTable extends ConversationParticipants
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _enabledMeta = const VerificationMeta(
+    'enabled',
+  );
+  @override
+  late final GeneratedColumn<bool> enabled = GeneratedColumn<bool>(
+    'enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -7487,6 +7502,7 @@ class $ConversationParticipantsTable extends ConversationParticipants
     conversationId,
     characterId,
     sortOrder,
+    enabled,
     createdAt,
   ];
   @override
@@ -7534,6 +7550,12 @@ class $ConversationParticipantsTable extends ConversationParticipants
         sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
       );
     }
+    if (data.containsKey('enabled')) {
+      context.handle(
+        _enabledMeta,
+        enabled.isAcceptableOrUnknown(data['enabled']!, _enabledMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -7570,6 +7592,10 @@ class $ConversationParticipantsTable extends ConversationParticipants
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
       )!,
+      enabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}enabled'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -7589,12 +7615,16 @@ class ConversationParticipantRow extends DataClass
   final String conversationId;
   final String characterId;
   final int sortOrder;
+
+  /// 是否参与自动轮转（v18）。静音成员仍可被“让 TA 回复”强制发言。
+  final bool enabled;
   final DateTime createdAt;
   const ConversationParticipantRow({
     required this.id,
     required this.conversationId,
     required this.characterId,
     required this.sortOrder,
+    required this.enabled,
     required this.createdAt,
   });
   @override
@@ -7604,6 +7634,7 @@ class ConversationParticipantRow extends DataClass
     map['conversation_id'] = Variable<String>(conversationId);
     map['character_id'] = Variable<String>(characterId);
     map['sort_order'] = Variable<int>(sortOrder);
+    map['enabled'] = Variable<bool>(enabled);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -7614,6 +7645,7 @@ class ConversationParticipantRow extends DataClass
       conversationId: Value(conversationId),
       characterId: Value(characterId),
       sortOrder: Value(sortOrder),
+      enabled: Value(enabled),
       createdAt: Value(createdAt),
     );
   }
@@ -7628,6 +7660,7 @@ class ConversationParticipantRow extends DataClass
       conversationId: serializer.fromJson<String>(json['conversationId']),
       characterId: serializer.fromJson<String>(json['characterId']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      enabled: serializer.fromJson<bool>(json['enabled']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -7639,6 +7672,7 @@ class ConversationParticipantRow extends DataClass
       'conversationId': serializer.toJson<String>(conversationId),
       'characterId': serializer.toJson<String>(characterId),
       'sortOrder': serializer.toJson<int>(sortOrder),
+      'enabled': serializer.toJson<bool>(enabled),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -7648,12 +7682,14 @@ class ConversationParticipantRow extends DataClass
     String? conversationId,
     String? characterId,
     int? sortOrder,
+    bool? enabled,
     DateTime? createdAt,
   }) => ConversationParticipantRow(
     id: id ?? this.id,
     conversationId: conversationId ?? this.conversationId,
     characterId: characterId ?? this.characterId,
     sortOrder: sortOrder ?? this.sortOrder,
+    enabled: enabled ?? this.enabled,
     createdAt: createdAt ?? this.createdAt,
   );
   ConversationParticipantRow copyWithCompanion(
@@ -7668,6 +7704,7 @@ class ConversationParticipantRow extends DataClass
           ? data.characterId.value
           : this.characterId,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      enabled: data.enabled.present ? data.enabled.value : this.enabled,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -7679,14 +7716,21 @@ class ConversationParticipantRow extends DataClass
           ..write('conversationId: $conversationId, ')
           ..write('characterId: $characterId, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('enabled: $enabled, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, conversationId, characterId, sortOrder, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    conversationId,
+    characterId,
+    sortOrder,
+    enabled,
+    createdAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -7695,6 +7739,7 @@ class ConversationParticipantRow extends DataClass
           other.conversationId == this.conversationId &&
           other.characterId == this.characterId &&
           other.sortOrder == this.sortOrder &&
+          other.enabled == this.enabled &&
           other.createdAt == this.createdAt);
 }
 
@@ -7704,6 +7749,7 @@ class ConversationParticipantsCompanion
   final Value<String> conversationId;
   final Value<String> characterId;
   final Value<int> sortOrder;
+  final Value<bool> enabled;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const ConversationParticipantsCompanion({
@@ -7711,6 +7757,7 @@ class ConversationParticipantsCompanion
     this.conversationId = const Value.absent(),
     this.characterId = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.enabled = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -7719,6 +7766,7 @@ class ConversationParticipantsCompanion
     required String conversationId,
     required String characterId,
     this.sortOrder = const Value.absent(),
+    this.enabled = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -7730,6 +7778,7 @@ class ConversationParticipantsCompanion
     Expression<String>? conversationId,
     Expression<String>? characterId,
     Expression<int>? sortOrder,
+    Expression<bool>? enabled,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -7738,6 +7787,7 @@ class ConversationParticipantsCompanion
       if (conversationId != null) 'conversation_id': conversationId,
       if (characterId != null) 'character_id': characterId,
       if (sortOrder != null) 'sort_order': sortOrder,
+      if (enabled != null) 'enabled': enabled,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -7748,6 +7798,7 @@ class ConversationParticipantsCompanion
     Value<String>? conversationId,
     Value<String>? characterId,
     Value<int>? sortOrder,
+    Value<bool>? enabled,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -7756,6 +7807,7 @@ class ConversationParticipantsCompanion
       conversationId: conversationId ?? this.conversationId,
       characterId: characterId ?? this.characterId,
       sortOrder: sortOrder ?? this.sortOrder,
+      enabled: enabled ?? this.enabled,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -7776,6 +7828,9 @@ class ConversationParticipantsCompanion
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
     }
+    if (enabled.present) {
+      map['enabled'] = Variable<bool>(enabled.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -7792,6 +7847,7 @@ class ConversationParticipantsCompanion
           ..write('conversationId: $conversationId, ')
           ..write('characterId: $characterId, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('enabled: $enabled, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -12094,6 +12150,7 @@ typedef $$ConversationParticipantsTableCreateCompanionBuilder =
       required String conversationId,
       required String characterId,
       Value<int> sortOrder,
+      Value<bool> enabled,
       required DateTime createdAt,
       Value<int> rowid,
     });
@@ -12103,6 +12160,7 @@ typedef $$ConversationParticipantsTableUpdateCompanionBuilder =
       Value<String> conversationId,
       Value<String> characterId,
       Value<int> sortOrder,
+      Value<bool> enabled,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -12133,6 +12191,11 @@ class $$ConversationParticipantsTableFilterComposer
 
   ColumnFilters<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get enabled => $composableBuilder(
+    column: $table.enabled,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -12171,6 +12234,11 @@ class $$ConversationParticipantsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get enabled => $composableBuilder(
+    column: $table.enabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -12201,6 +12269,9 @@ class $$ConversationParticipantsTableAnnotationComposer
 
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<bool> get enabled =>
+      $composableBuilder(column: $table.enabled, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -12256,6 +12327,7 @@ class $$ConversationParticipantsTableTableManager
                 Value<String> conversationId = const Value.absent(),
                 Value<String> characterId = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
+                Value<bool> enabled = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ConversationParticipantsCompanion(
@@ -12263,6 +12335,7 @@ class $$ConversationParticipantsTableTableManager
                 conversationId: conversationId,
                 characterId: characterId,
                 sortOrder: sortOrder,
+                enabled: enabled,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -12272,6 +12345,7 @@ class $$ConversationParticipantsTableTableManager
                 required String conversationId,
                 required String characterId,
                 Value<int> sortOrder = const Value.absent(),
+                Value<bool> enabled = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => ConversationParticipantsCompanion.insert(
@@ -12279,6 +12353,7 @@ class $$ConversationParticipantsTableTableManager
                 conversationId: conversationId,
                 characterId: characterId,
                 sortOrder: sortOrder,
+                enabled: enabled,
                 createdAt: createdAt,
                 rowid: rowid,
               ),

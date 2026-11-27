@@ -15,6 +15,7 @@ import '../../../app/providers.dart';
 import '../../../core/utils/image_utils.dart';
 import '../../../core/widgets/glass.dart';
 import '../../characters/domain/character.dart';
+import '../../characters/presentation/character_avatar.dart';
 import '../../characters/presentation/character_memory_page.dart';
 import '../../characters/presentation/image_crop_page.dart';
 import '../../pet/domain/pet_model.dart';
@@ -23,6 +24,7 @@ import '../../voice/application/voice_orchestrator.dart';
 import '../domain/models.dart';
 import 'chat_input_bar.dart';
 import 'context_usage_chip.dart';
+import 'group_roster_sheet.dart';
 import 'message_list.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
@@ -39,6 +41,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   /// initState 缓存的语音编排器：dispose 时 widget 已 unmount，
   /// Riverpod 3 禁止再用 ref.read（会抛 Bad state），必须用缓存引用。
   late final VoiceOrchestrator _voice;
+
+  /// 群成员变更后递增，强制 _ChatTitle 重建并重新读参与者。
+  int _groupRevision = 0;
 
   @override
   void initState() {
@@ -122,7 +127,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 boxShadow: null,
               ),
             ),
-            title: _ChatTitle(conversationId: conversationId),
+            title: _ChatTitle(
+              key: ValueKey('chat-title-$_groupRevision'),
+              conversationId: conversationId,
+              onOpenRoster: conversationId == null
+                  ? null
+                  : () => _openRoster(conversationId),
+            ),
             actions: [
               ContextUsageChip(usage: ui.contextUsage),
               _VoiceToggle(conversationId: conversationId),
@@ -208,6 +219,27 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         ),
       ],
     );
+  }
+
+  Future<void> _openRoster(String conversationId) async {
+    final changed = await showGroupRosterSheet(
+      context,
+      conversationId: conversationId,
+      onForceSpeaker: (characterId) {
+        ref.read(chatControllerProvider.notifier).forceSpeaker(characterId);
+        if (characterId != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('下一条消息将由所选群成员回复')),
+          );
+        }
+      },
+    );
+    if (changed == true && mounted) {
+      setState(() => _groupRevision++);
+      unawaited(
+        ref.read(chatControllerProvider.notifier).refreshContextUsage(),
+      );
+    }
   }
 
   Future<void> _cycleGreeting() async {
@@ -473,8 +505,13 @@ class _VoiceToggleState extends ConsumerState<_VoiceToggle> {
 /// 每次重建重开订阅/重查库会造成无谓抖动与首屏「聊天」闪变。
 class _ChatTitle extends ConsumerStatefulWidget {
   final String? conversationId;
+  final VoidCallback? onOpenRoster;
 
-  const _ChatTitle({this.conversationId});
+  const _ChatTitle({
+    super.key,
+    this.conversationId,
+    this.onOpenRoster,
+  });
 
   @override
   ConsumerState<_ChatTitle> createState() => _ChatTitleState();
@@ -485,6 +522,15 @@ class _ChatTitleState extends ConsumerState<_ChatTitle> {
   String? _boundConvId;
   Character? _character;
   String? _loadedCharacterId;
+  List<ConversationParticipant> _participants = const [];
+
+  Future<void> _loadParticipants(String id) async {
+    final participants = await ref
+        .read(chatRepositoryProvider)
+        .listParticipants(id);
+    if (!mounted || _boundConvId != id) return;
+    setState(() => _participants = participants);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -495,12 +541,61 @@ class _ChatTitleState extends ConsumerState<_ChatTitle> {
       _convStream = ref.read(chatRepositoryProvider).watchConversation(id);
       _character = null;
       _loadedCharacterId = null;
+      _participants = const [];
+      _loadParticipants(id);
     }
+    final characters =
+        ref.watch(charactersStreamProvider).value ?? const <Character>[];
+    final charactersById = {for (final c in characters) c.id: c};
     return StreamBuilder<Conversation?>(
       stream: _convStream,
       builder: (context, snapshot) {
         final characterId = snapshot.data?.characterId;
         if (characterId == null) return const Text('聊天');
+        if (_participants.length > 1) {
+          final members = [
+            for (final p in _participants) charactersById[p.characterId],
+          ];
+          final avatars = members.take(3).toList();
+          // 360dp 顶栏还要放上下文/语音/菜单；群名用固定「群聊」，
+          // 成员姓名从头像与点击后的成员面板查看。
+          const label = '群聊';
+          return GestureDetector(
+            onTap: widget.onOpenRoster,
+            behavior: HitTestBehavior.opaque,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 24 + (avatars.length - 1) * 12,
+                  height: 28,
+                  child: Stack(
+                    children: [
+                      for (var i = 0; i < avatars.length; i++)
+                        Positioned(
+                          left: i * 12,
+                          child: CharacterAvatar(
+                            avatarPath: avatars[i]?.avatarPath,
+                            radius: 10,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                const Icon(Icons.expand_more, size: 16),
+              ],
+            ),
+          );
+        }
         if (characterId != _loadedCharacterId) {
           _loadedCharacterId = characterId;
           final repo = ref.read(characterRepositoryProvider);

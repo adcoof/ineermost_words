@@ -211,6 +211,10 @@ class ConversationParticipant {
   final String conversationId;
   final String characterId;
   final int sortOrder;
+
+  /// 是否参与自动轮转；静音成员仍可被强制发言。
+  final bool enabled;
+
   final DateTime createdAt;
 
   const ConversationParticipant({
@@ -218,6 +222,7 @@ class ConversationParticipant {
     required this.conversationId,
     required this.characterId,
     required this.sortOrder,
+    this.enabled = true,
     required this.createdAt,
   });
 }

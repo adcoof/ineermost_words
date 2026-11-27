@@ -116,13 +116,111 @@ class ChatRepository {
     String? title,
   }) async {
     final ids = characterIds.toSet().toList();
+    if (ids.length < 2) {
+      throw ArgumentError('群聊至少需要两个角色');
+    }
+    if (ids.length > 3) {
+      throw ArgumentError('群聊最多三位角色');
+    }
     final conv = await createConversation(
       apiProfileId: apiProfileId,
-      characterId: ids.isEmpty ? null : ids.first,
+      characterId: ids.first,
       title: title ?? '群聊',
     );
     await replaceParticipants(conv.id, ids);
     return conv;
+  }
+
+  /// 静音/启用群聊成员（只影响自动轮转，不影响强制发言）。
+  Future<void> setParticipantEnabled(
+    String conversationId,
+    String characterId,
+    bool enabled,
+  ) async {
+    await (db.update(db.conversationParticipants)
+          ..where(
+            (t) =>
+                t.conversationId.equals(conversationId) &
+                t.characterId.equals(characterId),
+          ))
+        .write(ConversationParticipantsCompanion(enabled: Value(enabled)));
+  }
+
+  /// 添加群聊成员（最多 3 人）；自动排到末尾。
+  Future<void> addParticipant(
+    String conversationId,
+    String characterId,
+  ) async {
+    final existing = await listParticipants(conversationId);
+    if (existing.any((p) => p.characterId == characterId)) return;
+    if (existing.length >= 3) {
+      throw StateError('群聊最多三位角色');
+    }
+    final nextOrder = existing.isEmpty ? 0 : existing.last.sortOrder + 1;
+    await db.into(db.conversationParticipants).insert(
+      ConversationParticipantsCompanion.insert(
+        id: newId(),
+        conversationId: conversationId,
+        characterId: characterId,
+        sortOrder: Value(nextOrder),
+        createdAt: DateTime.now(),
+      ),
+    );
+    await _setPrimaryCharacter(
+      conversationId,
+      existing.isEmpty ? characterId : existing.first.characterId,
+    );
+  }
+
+  /// 移除群聊成员；主角色会同步为剩余第一位。
+  Future<void> removeParticipant(
+    String conversationId,
+    String characterId,
+  ) async {
+    await (db.delete(db.conversationParticipants)
+          ..where(
+            (t) =>
+                t.conversationId.equals(conversationId) &
+                t.characterId.equals(characterId),
+          ))
+        .go();
+    final remaining = await listParticipants(conversationId);
+    await _setPrimaryCharacter(
+      conversationId,
+      remaining.isEmpty ? null : remaining.first.characterId,
+    );
+  }
+
+  /// 按给定顺序重排群聊成员；主角色同步为第一位。
+  Future<void> reorderParticipants(
+    String conversationId,
+    List<String> characterIds,
+  ) async {
+    final participants = await listParticipants(conversationId);
+    final byId = {for (final p in participants) p.characterId: p};
+    await db.transaction(() async {
+      for (var i = 0; i < characterIds.length; i++) {
+        final participant = byId[characterIds[i]];
+        if (participant == null) continue;
+        await (db.update(db.conversationParticipants)
+              ..where((t) => t.id.equals(participant.id)))
+            .write(ConversationParticipantsCompanion(sortOrder: Value(i)));
+      }
+    });
+    final ordered = await listParticipants(conversationId);
+    await _setPrimaryCharacter(
+      conversationId,
+      ordered.isEmpty ? null : ordered.first.characterId,
+    );
+  }
+
+  Future<void> _setPrimaryCharacter(
+    String conversationId,
+    String? characterId,
+  ) async {
+    await (db.update(db.conversations)
+          ..where((t) => t.id.equals(conversationId)))
+        .write(ConversationsCompanion(characterId: Value(characterId)));
   }
 
   /// 从某条消息分支：复制该消息及之前的全部消息到新会话。
@@ -178,6 +276,7 @@ class ChatRepository {
             conversationId: branch.id,
             characterId: participants[i].characterId,
             sortOrder: Value(participants[i].sortOrder),
+            enabled: Value(participants[i].enabled),
             createdAt: DateTime.now(),
           ),
         );
@@ -604,6 +703,7 @@ class ChatRepository {
     conversationId: row.conversationId,
     characterId: row.characterId,
     sortOrder: row.sortOrder,
+    enabled: row.enabled,
     createdAt: row.createdAt,
   );
 }

@@ -103,15 +103,13 @@ certbot certonly --webroot -w /var/www/ineermostwords -d ineermostwords.sigborn.
 
 ## 版本号与下载链接
 
-页面里 v1.7.0 与 APK 直链出现在以下位置，发新版时全局替换即可：
+当前版本 **v2.1.0**（约 79 MB）。页面里所有下载按钮都指向站内 `/dl/github`、`/dl/gitee`，由服务器 nginx 302 到对应仓库的 release 直链；页面本身不写带版本号的 APK 直链。发新版时改以下位置：
 
-- `index.html` 顶部：`<title>`、`description`、`og:*`、`canonical`
-- hero 主按钮：`releases/download/v1.7.0/app-release.apk`（GitHub）与同路径的 Gitee
-- hero 徽标：`约 80 MB`（APK 大小变了记得改）
-- `#download`：两张源卡片的版本徽标、`发行版说明`、`查看源码`
-- `#changelog`：标题、日期、条目、`全部版本`
-- 结尾 CTA：`v1.7.0 · 约 80 MB · Android 7.0+`
-- `/dl/github` 与 `/dl/gitee` 的 302 目标在服务器 nginx 配置里（仓库副本：`tool/deploy/ineermostwords.conf`），发版时两处一起改
+- **服务器 nginx**：`/dl/github` 与 `/dl/gitee` 的 302 目标 tag（仓库副本：`tool/deploy/ineermostwords.conf`）。这一步不改，页面显示新版但下载到的还是旧包。
+- `index.html`：全局替换版本号 `v2.1.0` / `2.1.0`，共出现在 hero 主按钮、`#download` 小标题与两张源卡片徽标、`#changelog` 标题、结尾 CTA。
+- `index.html` hero 徽标、两张源卡片、结尾 CTA、FAQ「我的手机能用吗」里的 `约 79 MB`（APK 大小变了记得改）。
+- `index.html` `#changelog`：日期、条目、测试数。
+- `<title>`、`description`、`og:*` 只在卖点变化时才需要动，不含版本号。
 
 下载地址模板：
 
@@ -119,6 +117,8 @@ certbot certonly --webroot -w /var/www/ineermostwords -d ineermostwords.sigborn.
 https://github.com/adcoof/ineermost_words/releases/download/vX.Y.Z/app-release.apk
 https://gitee.com/phantexdream/ineermost_words/releases/download/vX.Y.Z/app-release.apk
 ```
+
+发版顺序：先在 GitHub / Gitee 都发布好 release 并确认两边 APK 都能下载 → 改 nginx 跳转并 `nginx -t && systemctl reload nginx` → 再推 `website/`，避免页面先显示新版而包还没传完。
 
 ## 图标 / 分享图重新生成
 

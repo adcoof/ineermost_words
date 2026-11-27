@@ -461,6 +461,75 @@ void main() {
       expect(assistants.map((m) => m.speakerCharacterId), ['a', 'b']);
     });
 
+    test('静音成员跳过自动轮转', () async {
+      await seedChar('a', '角色A');
+      await seedChar('b', '角色B');
+      final conv = await chatRepo.createGroupConversation(
+        apiProfileId: 'p1',
+        characterIds: ['a', 'b'],
+      );
+      await chatRepo.setParticipantEnabled(conv.id, 'a', false);
+      controller.bindConversation(conv.id);
+      api.responses = [text('from B'), text('from B again')];
+
+      await controller.send('hi');
+      await controller.send('again');
+
+      final assistants = await assistantMessages();
+      expect(assistants.map((m) => m.speakerCharacterId), ['b', 'b']);
+    });
+
+    test('Force Talk 指定下一位，只生效一轮且可覆盖静音', () async {
+      await seedChar('a', '角色A');
+      await seedChar('b', '角色B');
+      final conv = await chatRepo.createGroupConversation(
+        apiProfileId: 'p1',
+        characterIds: ['a', 'b'],
+      );
+      await chatRepo.setParticipantEnabled(conv.id, 'b', false);
+      controller.bindConversation(conv.id);
+      controller.forceSpeaker('b');
+      api.responses = [text('forced B'), text('next A')];
+
+      await controller.send('hi');
+      var assistants = await assistantMessages();
+      expect(assistants.single.speakerCharacterId, 'b');
+      // 强制标记在发送后清空。
+      expect(
+        container.read(chatControllerProvider).forcedSpeakerId,
+        isNull,
+      );
+
+      await controller.send('again');
+      assistants = await assistantMessages();
+      // B 被静音，强制只作用一轮；下一轮自动轮转回到 A。
+      expect(
+        assistants.map((m) => m.speakerCharacterId).toList(),
+        ['b', 'a'],
+      );
+    });
+
+    test('群聊分段回复的每一段都带当前 speaker', () async {
+      await seedChar('a', '角色A');
+      await seedChar('b', '角色B');
+      final conv = await chatRepo.createGroupConversation(
+        apiProfileId: 'p1',
+        characterIds: ['a', 'b'],
+      );
+      controller.bindConversation(conv.id);
+      controller.forceSpeaker('b');
+      api.responses = [text('第一段\n[P]\n第二段')];
+
+      await controller.send('hi');
+
+      final assistants = await assistantMessages();
+      expect(assistants, hasLength(2));
+      expect(
+        assistants.map((m) => m.speakerCharacterId).toList(),
+        ['b', 'b'],
+      );
+    });
+
     test('群聊历史把其他角色发言转成带名字的 user', () async {
       await seedChar('a', '角色A');
       await seedChar('b', '角色B');

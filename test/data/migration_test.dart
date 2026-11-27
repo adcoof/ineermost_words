@@ -546,6 +546,15 @@ void main() {
         '"created_at" INTEGER NOT NULL, '
         'PRIMARY KEY ("id"))',
       );
+      // v16 已存在群聊参与者表（尚无 v18 的 enabled 列）。
+      db.execute(
+        'CREATE TABLE "conversation_participants" ('
+        '"id" TEXT NOT NULL, "conversation_id" TEXT NOT NULL, '
+        '"character_id" TEXT NOT NULL, '
+        '"sort_order" INTEGER NOT NULL DEFAULT 0, '
+        '"created_at" INTEGER NOT NULL, '
+        'PRIMARY KEY ("id"))',
+      );
       db.execute('PRAGMA user_version = 16');
       db.execute(
           "INSERT INTO characters (id, name, memory_summary, created_at, updated_at) "
@@ -553,6 +562,9 @@ void main() {
       db.execute(
           "INSERT INTO lore_entries (id, character_id, keys, content, created_at) "
           "VALUES ('lore1', 'ch1', '[\"天台\"]', '天台设定', 1700000000000)");
+      db.execute(
+          "INSERT INTO conversation_participants (id, conversation_id, character_id, sort_order, created_at) "
+          "VALUES ('part1', 'conv1', 'ch1', 0, 1700000000000)");
     });
 
     final db = AppDatabase.forTesting(executor);
@@ -566,6 +578,11 @@ void main() {
     final lore = await db.select(db.loreEntries).getSingle();
     expect(lore.content, '天台设定');
     expect(lore.sourceJson, '{}');
+
+    // v18：存量群成员默认启用。
+    final participant =
+        await db.select(db.conversationParticipants).getSingle();
+    expect(participant.enabled, isTrue);
 
     expect(await db.select(db.characterVersions).get(), isEmpty);
     await db.into(db.characterVersions).insert(
@@ -587,8 +604,43 @@ void main() {
     expect(versionIndex, hasLength(1));
 
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data.values.single, db.schemaVersion); // 17
+    expect(version.data.values.single, db.schemaVersion); // 18
 
+    await db.close();
+  });
+
+  test('v17 → v18：群聊参与者补 enabled 列，存量行默认启用', () async {
+    final executor = NativeDatabase.memory(setup: (db) {
+      db.execute(
+        'CREATE TABLE "conversation_participants" ('
+        '"id" TEXT NOT NULL, "conversation_id" TEXT NOT NULL, '
+        '"character_id" TEXT NOT NULL, '
+        '"sort_order" INTEGER NOT NULL DEFAULT 0, '
+        '"created_at" INTEGER NOT NULL, '
+        'PRIMARY KEY ("id"))',
+      );
+      db.execute('PRAGMA user_version = 17');
+      db.execute(
+          "INSERT INTO conversation_participants (id, conversation_id, character_id, sort_order, created_at) "
+          "VALUES ('part1', 'conv1', 'ch1', 0, 1700000000000)");
+    });
+
+    final db = AppDatabase.forTesting(executor);
+    final participant =
+        await db.select(db.conversationParticipants).getSingle();
+    expect(participant.characterId, 'ch1');
+    expect(participant.enabled, isTrue);
+
+    await (db.update(db.conversationParticipants)
+          ..where((t) => t.id.equals('part1')))
+        .write(const ConversationParticipantsCompanion(enabled: Value(false)));
+    expect(
+      (await db.select(db.conversationParticipants).getSingle()).enabled,
+      isFalse,
+    );
+
+    final version = await db.customSelect('PRAGMA user_version').getSingle();
+    expect(version.data.values.single, db.schemaVersion); // 18
     await db.close();
   });
 

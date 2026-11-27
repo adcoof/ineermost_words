@@ -59,6 +59,13 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('聊天'),
+        actions: [
+          IconButton(
+            tooltip: '创建群聊',
+            icon: const Icon(Icons.groups_outlined),
+            onPressed: () => _startGroupChat(context, ref),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -118,7 +125,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
   /// 群聊：选择 2–3 个角色，按选择顺序轮换发言。
   Future<void> _startGroupChat(BuildContext context, WidgetRef ref) async {
     final characterRepo = ref.read(characterRepositoryProvider);
-    final characters = await characterRepo.watchCharacters().first;
+    final characters = await characterRepo.listCharacters();
     if (!context.mounted) return;
     if (characters.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -274,7 +281,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     }
 
     // choice == 'pick'
-    final characters = await characterRepo.watchCharacters().first;
+    final characters = await characterRepo.listCharacters();
     if (!context.mounted) return;
     if (characters.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(

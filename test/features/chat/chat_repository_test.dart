@@ -547,9 +547,46 @@ void main() {
       expect(ps.map((p) => p.sortOrder), [0, 1]);
     });
 
+    test('createGroupConversation 至少需要两位角色', () async {
+      await expectLater(
+        repo.createGroupConversation(
+          apiProfileId: 'p1',
+          characterIds: ['a'],
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('群成员启停/重排/增删，主角色同步', () async {
+      final c = await repo.createGroupConversation(
+        apiProfileId: 'p1',
+        characterIds: ['a', 'b'],
+      );
+      await repo.setParticipantEnabled(c.id, 'a', false);
+      var ps = await repo.listParticipants(c.id);
+      expect(ps.firstWhere((p) => p.characterId == 'a').enabled, isFalse);
+
+      await repo.reorderParticipants(c.id, ['b', 'a']);
+      ps = await repo.listParticipants(c.id);
+      expect(ps.map((p) => p.characterId), ['b', 'a']);
+      // 重排保留静音状态，并同步会话主角色。
+      expect(ps.firstWhere((p) => p.characterId == 'a').enabled, isFalse);
+      expect((await repo.getConversation(c.id))!.characterId, 'b');
+
+      await repo.addParticipant(c.id, 'c');
+      ps = await repo.listParticipants(c.id);
+      expect(ps.map((p) => p.characterId), ['b', 'a', 'c']);
+
+      await repo.removeParticipant(c.id, 'b');
+      ps = await repo.listParticipants(c.id);
+      expect(ps.map((p) => p.characterId), ['a', 'c']);
+      expect((await repo.getConversation(c.id))!.characterId, 'a');
+    });
+
     test('branchConversation 只复制目标及之前消息，并复制参与者', () async {
       final c = await newConv(characterId: 'a', id: 'src');
       await repo.replaceParticipants(c.id, ['a', 'b']);
+      await repo.setParticipantEnabled(c.id, 'a', false);
       final t = DateTime(2026, 1, 1, 10);
       await insertMsg(id: 's1', conversationId: c.id, content: 'one', createdAt: t);
       await insertMsg(
@@ -571,6 +608,8 @@ void main() {
       expect(msgs.map((m) => m.content), ['one', 'two']);
       final ps = await repo.listParticipants(branch.id);
       expect(ps.map((p) => p.characterId), ['a', 'b']);
+      // 静音状态随分支复制。
+      expect(ps.firstWhere((p) => p.characterId == 'a').enabled, isFalse);
     });
 
     test('deleteConversation 级联删除参与者', () async {
