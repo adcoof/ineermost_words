@@ -61,6 +61,6 @@
 - `flutter analyze --no-pub`：0 issue。
 - `flutter test --no-pub`：466 项全部通过。
 - 新增测试覆盖：档案/扩展编解码、版本快照与恢复、V1/V2/V3 导入、未知字段保留、世界书原文、提示词预算与注入顺序、PNG tEXt 与导出往返、编辑器三页签、四栏导航与资产页。
-- 发布包：`build/app/outputs/flutter-apk/app-release.apk`，**78.7 MB**（82,566,727 bytes），2026-11-27 构建。
-- SHA-256：`52A681CB8F8F7287279BB9776FB6DE16B06B28AA5BF879AAB3B3A54BB4D9E417`。
+- 发布包：`build/app/outputs/flutter-apk/app-release.apk`，**78.7 MB**（82,566,475 bytes），2026-11-27 构建（含 360dp 顶栏/桌宠修复）。
+- SHA-256：`ED46D00089F1B41AF88F6A0CCB5A51B2139AC38A56CC62D1EEE8C1DA12772E27`。
 - 真机验收状态：**待执行**（构建时无连接的 adb 设备）；需覆盖 v16→v17 迁移、真实 V3 卡导入、档案编辑、聊天注入、PNG 导出后重新导入、四栏导航与资产页。
