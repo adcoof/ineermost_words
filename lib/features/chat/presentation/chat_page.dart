@@ -64,6 +64,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Widget build(BuildContext context) {
     final ui = ref.watch(chatControllerProvider);
     final conversationId = ui.conversationId;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    // 360dp 窄屏下固定 300dp 宽的桌宠会盖住大半消息区；按屏宽缩放。
+    final petWidth = screenWidth < 420 ? screenWidth * 0.62 : 300.0;
+    final petHeight = petWidth * 380 / 300;
 
     ref.listen(chatControllerProvider, (prev, next) {
       if (next.errorText != null && next.errorText != prev?.errorText) {
@@ -117,44 +121,46 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             actions: [
               ContextUsageChip(usage: ui.contextUsage),
               _VoiceToggle(conversationId: conversationId),
-              IconButton(
-                tooltip: '换开场白',
-                icon: const Icon(Icons.style_outlined),
-                onPressed: conversationId == null
-                    ? null
-                    : () async {
-                        final ok = await ref
-                            .read(chatControllerProvider.notifier)
-                            .cycleAlternateGreeting();
-                        if (!ok && context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('当前没有更多开场白（仅首条角色消息可切换）'),
-                            ),
-                          );
-                        }
-                      },
-              ),
-              IconButton(
-                tooltip: '背景板',
-                icon: const Icon(Icons.wallpaper_outlined),
-                onPressed: conversationId == null
-                    ? null
-                    : () => _pickBackground(ref, conversationId),
-              ),
-              IconButton(
-                tooltip: '桌宠',
-                icon: const Icon(Icons.pets_outlined),
-                onPressed: conversationId == null
-                    ? null
-                    : () => _pickPetModel(context, ref, conversationId),
+              // 窄屏（360dp）下顶栏放不下 5 个动作：换开场白/背景板/桌宠收进更多菜单。
+              PopupMenuButton<String>(
+                tooltip: '更多',
+                onSelected: (value) async {
+                  switch (value) {
+                    case 'greeting':
+                      await _cycleGreeting();
+                      break;
+                    case 'background':
+                      await _pickBackground(ref, conversationId!);
+                      break;
+                    case 'pet':
+                      await _pickPetModel(context, ref, conversationId!);
+                      break;
+                  }
+                },
+                itemBuilder: (_) => [
+                  PopupMenuItem(
+                    value: 'greeting',
+                    enabled: conversationId != null,
+                    child: const Text('换开场白'),
+                  ),
+                  PopupMenuItem(
+                    value: 'background',
+                    enabled: conversationId != null,
+                    child: const Text('背景板'),
+                  ),
+                  PopupMenuItem(
+                    value: 'pet',
+                    enabled: conversationId != null,
+                    child: const Text('桌宠'),
+                  ),
+                ],
               ),
               if (ui.isStreaming)
-                TextButton.icon(
+                IconButton(
+                  tooltip: '停止',
+                  icon: const Icon(Icons.stop_circle_outlined),
                   onPressed: () =>
                       ref.read(chatControllerProvider.notifier).stop(),
-                  icon: const Icon(Icons.stop_circle_outlined),
-                  label: const Text('停止'),
                 ),
             ],
           ),
@@ -188,8 +194,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 Positioned(
                   right: 0,
                   bottom: 76,
-                  width: 300,
-                  height: 380,
+                  width: petWidth,
+                  height: petHeight,
                   child: _PetLayer(conversationId: conversationId),
                 ),
             ],
@@ -197,6 +203,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         ),
       ],
     );
+  }
+
+  Future<void> _cycleGreeting() async {
+    final ok = await ref
+        .read(chatControllerProvider.notifier)
+        .cycleAlternateGreeting();
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('当前没有更多开场白（仅首条角色消息可切换）'),
+        ),
+      );
+    }
   }
 
   /// 选择/清除本会话背景板（v8）：选图 → 裁剪 → 落盘 → 写列。
@@ -494,6 +513,8 @@ class _ChatTitleState extends ConsumerState<_ChatTitle> {
         final path = character.avatarPath;
         final hasAvatar =
             path != null && path.isNotEmpty && File(path).existsSync();
+        // 360dp 窄屏顶栏还要放上下文/语音/更多，头像会挤掉名字；窄屏只留名字。
+        final showAvatar = MediaQuery.sizeOf(context).width >= 400;
         return GestureDetector(
           // 点头像/名字 → 角色记忆与用户画像（v8）。
           onTap: () => Navigator.of(context).push(
@@ -508,19 +529,24 @@ class _ChatTitleState extends ConsumerState<_ChatTitle> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                backgroundImage: hasAvatar ? FileImage(File(path)) : null,
-                child: hasAvatar
-                    ? null
-                    : const Icon(Icons.person_outline, size: 16),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                character.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              if (showAvatar) ...[
+                CircleAvatar(
+                  radius: 14,
+                  backgroundColor:
+                      Theme.of(context).colorScheme.primaryContainer,
+                  backgroundImage: hasAvatar ? FileImage(File(path)) : null,
+                  child: hasAvatar
+                      ? null
+                      : const Icon(Icons.person_outline, size: 16),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Flexible(
+                child: Text(
+                  character.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
