@@ -78,6 +78,7 @@
 - Anime-tech styling with multiple switchable full themes (including one light theme)
 - **Liquid glass**: the bottom navigation, chat app bar and input bar use real background blur with translucent gradient borders; chat bubbles use translucent fills (the scrolling list is never blurred per-item, keeping it smooth)
 - **Narrow-screen layout**: at 360dp the chat bar moves secondary actions into a menu, keeps the context usage chip visible, prioritizes the character name in the title, and scales the pet overlay to reduce occlusion
+- **Instant context usage**: opening a conversation pre-computes the context usage chip instead of waiting for the next send
 - Splash transition page: icon + tagline + studio credit
 - Bottom navigation: Chats / Workshop / Assets / Settings; pet models, artwork, stickers and voices live under Assets
 

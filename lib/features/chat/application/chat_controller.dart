@@ -100,6 +100,190 @@ class ChatController extends Notifier<ChatUiState> {
     state = ChatUiState(conversationId: conversationId);
   }
 
+  /// 打开会话时预计算一次上下文用量（当前输入按 0 计）。
+  ///
+  /// 与 send 复用同一套组装逻辑；send / 切换会话会递增 [_sendSeq]，
+  /// 旧结果直接丢弃，避免覆盖新会话或新回合的用量。
+  Future<void> refreshContextUsage({String? conversationId, int? seq}) async {
+    final convId = conversationId ?? state.conversationId;
+    if (convId == null) return;
+    final token = seq ?? _sendSeq;
+    try {
+      final chatRepo = ref.read(chatRepositoryProvider);
+      final conv = await chatRepo.getConversation(convId);
+      if (conv == null) return;
+      final history = await chatRepo.watchMessages(convId).first;
+      final participants = await chatRepo.listParticipants(convId);
+      final participantCharacters = <String, Character>{};
+      for (final participant in participants) {
+        final character = await ref
+            .read(characterRepositoryProvider)
+            .getById(participant.characterId);
+        if (character != null) participantCharacters[character.id] = character;
+      }
+      final character = await _resolveSpeaker(
+        conv: conv,
+        history: history,
+        participants: participants,
+        participantCharacters: participantCharacters,
+      );
+      final promptHistory = _transformGroupHistory(
+        history,
+        participants: participants,
+        character: character,
+        participantCharacters: participantCharacters,
+      );
+      final assembled = await _assemblePrompt(
+        conversationId: convId,
+        character: character,
+        history: promptHistory,
+        currentInput: '',
+        reservedTokens: 0,
+      );
+      if (_sendSeq != token || state.conversationId != convId) return;
+      state = state.copyWith(contextUsage: assembled.usage);
+    } catch (_) {
+      // 预计算失败不影响聊天；chip 保持 --。
+    }
+  }
+
+  Future<Character?> _resolveSpeaker({
+    required Conversation conv,
+    required List<ChatMessage> history,
+    required List<ConversationParticipant> participants,
+    required Map<String, Character> participantCharacters,
+  }) async {
+    String? speakerId;
+    if (participants.isNotEmpty) {
+      final reversedAssistants = history.reversed.where(
+        (m) =>
+            m.role == ChatRole.assistant &&
+            m.speakerCharacterId != null &&
+            participantCharacters.containsKey(m.speakerCharacterId),
+      );
+      final lastAssistant = reversedAssistants.isEmpty
+          ? null
+          : reversedAssistants.first;
+      final prevIndex = lastAssistant == null
+          ? -1
+          : participants.indexWhere(
+              (p) => p.characterId == lastAssistant.speakerCharacterId,
+            );
+      final nextIndex = prevIndex < 0
+          ? 0
+          : (prevIndex + 1) % participants.length;
+      speakerId = participants[nextIndex].characterId;
+    }
+    if (speakerId != null) return participantCharacters[speakerId];
+    final characterId = conv.characterId;
+    if (characterId == null) return null;
+    return ref.read(characterRepositoryProvider).getById(characterId);
+  }
+
+  List<ChatMessage> _transformGroupHistory(
+    List<ChatMessage> history, {
+    required List<ConversationParticipant> participants,
+    required Character? character,
+    required Map<String, Character> participantCharacters,
+  }) {
+    if (participants.length <= 1 || character == null) return history;
+    return [
+      for (final m in history)
+        if (m.role == ChatRole.assistant &&
+            m.speakerCharacterId != null &&
+            m.speakerCharacterId != character.id)
+          ChatMessage(
+            id: m.id,
+            conversationId: m.conversationId,
+            role: ChatRole.user,
+            content:
+                '【${participantCharacters[m.speakerCharacterId]?.name ?? '角色'}】${m.content}',
+            rawContent: m.rawContent,
+            emotionEvents: m.emotionEvents,
+            imagePaths: m.imagePaths,
+            imageSummary: m.imageSummary,
+            status: m.status,
+            kind: m.kind,
+            speakerCharacterId: m.speakerCharacterId,
+            createdAt: m.createdAt,
+          )
+        else
+          m,
+    ];
+  }
+
+  /// 按当前会话/角色/历史组装提示词，返回消息与分类用量。
+  ///
+  /// [currentInput] 只在 send 时传入；打开会话预计算时传空串。
+  Future<({List<ApiMessage> messages, PromptUsage usage})> _assemblePrompt({
+    required String conversationId,
+    required Character? character,
+    required List<ChatMessage> history,
+    required String currentInput,
+    required int reservedTokens,
+  }) async {
+    final settings = ref.read(appSettingsRepositoryProvider);
+    final windowTokens = await settings.contextWindowTokens();
+    final otherTokens = await settings.contextWindowOtherTokens();
+    if (character == null) {
+      final assembled = PromptAssembler().assembleBare(
+        history: history,
+        tokenBudget: windowTokens,
+        reservedTokens: reservedTokens,
+      );
+      return (messages: assembled.messages, usage: assembled.usage);
+    }
+
+    final chatRepo = ref.read(chatRepositoryProvider);
+    var memorySummary = '';
+    var userSummary = '';
+    final pastSessions = <PastSession>[];
+    var facts = const <MemoryFact>[];
+    final recallQuery = [
+      currentInput,
+      ...history.reversed.take(4).map((m) => m.contentWithImageNote),
+    ].where((s) => s.trim().isNotEmpty).join('\n');
+    if (await settings.memoryEnabled()) {
+      final characterRepo = ref.read(characterRepositoryProvider);
+      final memory = await characterRepo.getMemory(character.id);
+      memorySummary = memory.summary;
+      userSummary = memory.userSummary;
+      facts = recallMemoryFacts(
+        facts: await characterRepo.getMemoryFacts(character.id),
+        query: recallQuery,
+      );
+      // 跨会话片段按会话分组、每会话独立配额，纯图 + 图片摘要也纳入。
+      final groups = await chatRepo.getCrossSessionDigest(
+        characterId: character.id,
+        excludeConversationId: conversationId,
+      );
+      for (final g in groups) {
+        pastSessions.add(
+          PastSession(title: g.conversation.title, messages: g.messages),
+        );
+      }
+    }
+    final lore = matchLoreEntries(
+      entries: await ref
+          .read(loreRepositoryProvider)
+          .listForCharacter(character.id, enabledOnly: true),
+      query: recallQuery,
+    );
+    final assembled = PromptAssembler().assembleDetailed(
+      character: character,
+      history: history,
+      memorySummary: memorySummary,
+      pastSessions: pastSessions,
+      facts: facts,
+      lore: lore,
+      userSummary: userSummary,
+      tokenBudget: windowTokens,
+      otherTokenBudget: otherTokens,
+      reservedTokens: reservedTokens,
+    );
+    return (messages: assembled.messages, usage: assembled.usage);
+  }
+
   /// 重试上一条失败的用户消息：删除该轮用户消息与其后的错误/空回复，再重新发送。
   ///
   /// 仅在最后一条是未完成的 assistant 消息时执行，避免对已成功回复重复发送。
@@ -223,32 +407,14 @@ class ChatController extends Notifier<ChatUiState> {
       final c = await characterRepo.getById(p.characterId);
       if (c != null) participantCharacters[c.id] = c;
     }
-    String? speakerId;
-    if (participants.isNotEmpty) {
-      final reversedAssistants = history.reversed.where(
-        (m) =>
-            m.role == ChatRole.assistant &&
-            m.speakerCharacterId != null &&
-            participantCharacters.containsKey(m.speakerCharacterId),
-      );
-      final lastAssistant = reversedAssistants.isEmpty
-          ? null
-          : reversedAssistants.first;
-      final prevIndex = lastAssistant == null
-          ? -1
-          : participants.indexWhere(
-              (p) => p.characterId == lastAssistant.speakerCharacterId,
-            );
-      final nextIndex = prevIndex < 0
-          ? 0
-          : (prevIndex + 1) % participants.length;
-      speakerId = participants[nextIndex].characterId;
-    }
-    final Character? character = speakerId != null
-        ? participantCharacters[speakerId]
-        : conv?.characterId == null
+    final Character? character = conv == null
         ? null
-        : await characterRepo.getById(conv!.characterId!);
+        : await _resolveSpeaker(
+            conv: conv,
+            history: history,
+            participants: participants,
+            participantCharacters: participantCharacters,
+          );
     final assistant = await chatRepo.insertMessage(
       conversationId: activeConvId,
       role: ChatRole.assistant,
@@ -257,101 +423,22 @@ class ChatController extends Notifier<ChatUiState> {
       status: MessageStatus.streaming,
       speakerCharacterId: character?.id,
     );
-    final rawHistoryExceptCurrent = history
-        .where((m) => m.id != userMsg.id)
-        .toList();
-    final historyExceptCurrent = participants.length <= 1 || character == null
-        ? rawHistoryExceptCurrent
-        : [
-            for (final m in rawHistoryExceptCurrent)
-              if (m.role == ChatRole.assistant &&
-                  m.speakerCharacterId != null &&
-                  m.speakerCharacterId != character.id)
-                ChatMessage(
-                  id: m.id,
-                  conversationId: m.conversationId,
-                  role: ChatRole.user,
-                  content:
-                      '【${participantCharacters[m.speakerCharacterId]?.name ?? '角色'}】${m.content}',
-                  rawContent: m.rawContent,
-                  emotionEvents: m.emotionEvents,
-                  imagePaths: m.imagePaths,
-                  imageSummary: m.imageSummary,
-                  status: m.status,
-                  kind: m.kind,
-                  speakerCharacterId: m.speakerCharacterId,
-                  createdAt: m.createdAt,
-                )
-              else
-                m,
-          ];
-    final settings = ref.read(appSettingsRepositoryProvider);
-    final windowTokens = await settings.contextWindowTokens();
-    final otherTokens = await settings.contextWindowOtherTokens();
+    final historyExceptCurrent = _transformGroupHistory(
+      history.where((m) => m.id != userMsg.id).toList(),
+      participants: participants,
+      character: character,
+      participantCharacters: participantCharacters,
+    );
     final reservedTokens = 4 + estimateTokens(trimmed);
-    final List<ApiMessage> apiMessages;
-    final PromptUsage usage;
-    if (character == null) {
-      final assembled = PromptAssembler().assembleBare(
-        history: historyExceptCurrent,
-        tokenBudget: windowTokens,
-        reservedTokens: reservedTokens,
-      );
-      apiMessages = assembled.messages;
-      usage = assembled.usage;
-    } else {
-      var memorySummary = '';
-      var userSummary = '';
-      final pastSessions = <PastSession>[];
-      var facts = const <MemoryFact>[];
-      final recallQuery = [
-        trimmed,
-        ...historyExceptCurrent.reversed.take(4).map((m) => m.contentWithImageNote),
-      ].join('\n');
-      if (await settings.memoryEnabled()) {
-        final characterRepo = ref.read(characterRepositoryProvider);
-        final memory = await characterRepo.getMemory(character.id);
-        memorySummary = memory.summary;
-        userSummary = memory.userSummary;
-        facts = recallMemoryFacts(
-          facts: await characterRepo.getMemoryFacts(character.id),
-          query: recallQuery,
-        );
-        // 跨会话片段按会话分组、每会话独立配额，纯图 + 图片摘要也纳入。
-        final groups = await chatRepo.getCrossSessionDigest(
-          characterId: character.id,
-          excludeConversationId: activeConvId,
-        );
-        for (final g in groups) {
-          pastSessions.add(
-            PastSession(
-              title: g.conversation.title,
-              messages: g.messages,
-            ),
-          );
-        }
-      }
-      final lore = matchLoreEntries(
-        entries: await ref
-            .read(loreRepositoryProvider)
-            .listForCharacter(character.id, enabledOnly: true),
-        query: recallQuery,
-      );
-      final assembled = PromptAssembler().assembleDetailed(
-        character: character,
-        history: historyExceptCurrent,
-        memorySummary: memorySummary,
-        pastSessions: pastSessions,
-        facts: facts,
-        lore: lore,
-        userSummary: userSummary,
-        tokenBudget: windowTokens,
-        otherTokenBudget: otherTokens,
-        reservedTokens: reservedTokens,
-      );
-      apiMessages = assembled.messages;
-      usage = assembled.usage;
-    }
+    final assembled = await _assemblePrompt(
+      conversationId: activeConvId,
+      character: character,
+      history: historyExceptCurrent,
+      currentInput: trimmed,
+      reservedTokens: reservedTokens,
+    );
+    final apiMessages = assembled.messages;
+    final usage = assembled.usage;
     if (_sendSeq == seq) {
       state = state.copyWith(contextUsage: usage);
     }

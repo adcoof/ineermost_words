@@ -1,6 +1,7 @@
 /// 聊天页：消息流 + 输入栏 + 流式状态 + 会话背景板。
 library;
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -47,9 +48,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _voice.attachChatPage();
     // 始终绑定（包括 null=新会话），避免全局控制器残留上一次的会话 id。
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref
-          .read(chatControllerProvider.notifier)
-          .bindConversation(widget.conversationId);
+      final notifier = ref.read(chatControllerProvider.notifier);
+      notifier.bindConversation(widget.conversationId);
+      final conversationId = widget.conversationId;
+      if (conversationId != null) {
+        // 打开会话即预计算上下文用量，chip 不再等到发送后才显示。
+        unawaited(notifier.refreshContextUsage(conversationId: conversationId));
+      }
     });
   }
 

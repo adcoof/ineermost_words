@@ -168,6 +168,23 @@ void main() {
     expect(container.read(chatControllerProvider).isStreaming, isFalse);
   });
 
+  test('打开会话预计算上下文用量', () async {
+    final conv = await chatRepo.createConversation(apiProfileId: 'p1');
+    await chatRepo.insertMessage(
+      conversationId: conv.id,
+      role: ChatRole.user,
+      content: '你好，今天天气不错',
+      rawContent: '你好，今天天气不错',
+    );
+    controller.bindConversation(conv.id);
+    await controller.refreshContextUsage(conversationId: conv.id);
+
+    final usage = container.read(chatControllerProvider).contextUsage;
+    expect(usage, isNotNull);
+    expect(usage!.usedTokens, greaterThan(0));
+    expect(usage.historyTokens, greaterThan(0));
+  });
+
   test('旧会话 pin 的供应商不存在时回退默认配置', () async {
     final conv = await chatRepo.createConversation(apiProfileId: 'ghost');
     controller.bindConversation(conv.id);
