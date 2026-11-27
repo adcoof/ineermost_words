@@ -164,6 +164,243 @@ class ChatController extends Notifier<ChatUiState> {
     }
   }
 
+  /// 群聊「角色之间对话」：不插入用户消息，按轮转连续生成 [rounds] 条回复。
+  ///
+  /// 最近一条消息来自其他角色时，[ _transformGroupHistory ] 会把它转成带
+  /// 名字的 user 消息；再追加群聊指令，要求当前角色只回应对方。
+  Future<void> continueGroup({int rounds = 2}) async {
+    if (state.isStreaming) return;
+    final conversationId = state.conversationId;
+    if (conversationId == null) return;
+    final total = rounds.clamp(1, 8).toInt();
+    final seq = ++_sendSeq;
+    final chatRepo = ref.read(chatRepositoryProvider);
+    final api = ref.read(chatApiClientProvider);
+    final profileRepo = ref.read(apiProfileRepositoryProvider);
+
+    for (var round = 0; round < total; round++) {
+      if (_sendSeq != seq) return;
+      final conv = await chatRepo.getConversation(conversationId);
+      if (conv == null) return;
+      final history = await chatRepo.watchMessages(conversationId).first;
+      final participants = await chatRepo.listParticipants(conversationId);
+      if (participants.length <= 1) return;
+      final participantCharacters = <String, Character>{};
+      for (final participant in participants) {
+        final character = await ref
+            .read(characterRepositoryProvider)
+            .getById(participant.characterId);
+        if (character != null) participantCharacters[character.id] = character;
+      }
+      final forced = round == 0 ? state.forcedSpeakerId : null;
+      if (forced != null) state = state.copyWith(clearForcedSpeaker: true);
+      final character = await _resolveSpeaker(
+        conv: conv,
+        history: history,
+        participants: participants,
+        participantCharacters: participantCharacters,
+        forcedSpeakerId: forced,
+      );
+      if (character == null) return;
+
+      final promptHistory = _transformGroupHistory(
+        history,
+        participants: participants,
+        character: character,
+        participantCharacters: participantCharacters,
+      );
+      final assembled = await _assemblePrompt(
+        conversationId: conversationId,
+        character: character,
+        history: promptHistory,
+        currentInput: '',
+        reservedTokens: 0,
+      );
+      final lastSpeakerMessages = history.reversed
+          .where(
+            (m) =>
+                m.role == ChatRole.assistant &&
+                m.speakerCharacterId != null &&
+                participantCharacters.containsKey(m.speakerCharacterId),
+          )
+          .toList();
+      final lastSpeaker = lastSpeakerMessages.isEmpty
+          ? null
+          : participantCharacters[lastSpeakerMessages.first.speakerCharacterId]
+                ?.name;
+      final roster = [
+        for (final p in participants)
+          participantCharacters[p.characterId]?.name ?? '角色',
+      ].join('、');
+      final instruction =
+          '你正在一个多人聊天中。你是【${character.name}】，群成员：$roster。'
+          '${lastSpeaker == null ? '' : '最近一条消息来自【$lastSpeaker】。'}'
+          '请只以【${character.name}】的身份自然回应对方，推动对话；'
+          '不要替其他角色说话，不要复述，不要写旁白总结。';
+
+      var profile = conv.apiProfileId.isEmpty
+          ? null
+          : await profileRepo.getById(conv.apiProfileId);
+      if (profile == null || profile.apiKey.trim().isEmpty) {
+        profile = await profileRepo.getDefault();
+      }
+      if (profile == null || profile.apiKey.trim().isEmpty) {
+        if (_sendSeq == seq) {
+          state = state.copyWith(
+            errorText: '请先在设置中添加 API 供应商配置',
+            clearStreaming: true,
+          );
+        }
+        return;
+      }
+      if (_sendSeq != seq) return;
+
+      state = state.copyWith(
+        isStreaming: true,
+        clearError: true,
+        contextUsage: assembled.usage,
+      );
+      final assistant = await chatRepo.insertMessage(
+        conversationId: conversationId,
+        role: ChatRole.assistant,
+        content: '',
+        rawContent: '',
+        status: MessageStatus.streaming,
+        speakerCharacterId: character.id,
+      );
+      state = state.copyWith(streamingMessageId: assistant.id);
+
+      final cancelToken = CancelToken();
+      _cancelToken = cancelToken;
+      final raw = StringBuffer();
+      var lastFlush = DateTime.fromMillisecondsSinceEpoch(0);
+      try {
+        final messages = [
+          ...assembled.messages,
+          ApiMessage(role: 'system', content: instruction),
+        ];
+        await for (final delta in api.streamChat(
+          profile: profile,
+          messages: messages,
+          cancelToken: cancelToken,
+        )) {
+          final text = delta.content;
+          if (text == null || text.isEmpty) continue;
+          raw.write(text);
+          final now = DateTime.now();
+          if (now.difference(lastFlush) >=
+              const Duration(milliseconds: 150)) {
+            lastFlush = now;
+            await chatRepo.updateMessage(
+              assistant.id,
+              content: stripTagMarkup(raw.toString()),
+              rawContent: raw.toString(),
+            );
+          }
+        }
+        final rawText = raw.toString().trim();
+        if (rawText.isEmpty) {
+          await chatRepo.deleteMessage(assistant.id);
+          if (_sendSeq == seq) {
+            state = state.copyWith(
+              errorText: '群聊自动回复为空，请重试',
+              isStreaming: false,
+              clearStreaming: true,
+            );
+          }
+          return;
+        }
+        final parts = _splitGroupReply(rawText);
+        await chatRepo.updateMessage(
+          assistant.id,
+          content: stripTagMarkup(parts.first),
+          rawContent: parts.first,
+          status: MessageStatus.done,
+        );
+        for (var i = 1; i < parts.length; i++) {
+          await chatRepo.insertMessage(
+            conversationId: conversationId,
+            role: ChatRole.assistant,
+            content: stripTagMarkup(parts[i]),
+            rawContent: parts[i],
+            status: MessageStatus.done,
+            speakerCharacterId: character.id,
+            createdAt: DateTime.now().add(Duration(milliseconds: i)),
+          );
+        }
+        unawaited(
+          ref
+              .read(memorySummarizerProvider)
+              .maybeUpdateMemory(
+                conversationId: conversationId,
+                characterId: character.id,
+              )
+              .catchError((_) {}),
+        );
+      } catch (e) {
+        final rawText = raw.toString().trim();
+        if (rawText.isEmpty) {
+          await chatRepo.deleteMessage(assistant.id);
+        } else {
+          await chatRepo.updateMessage(
+            assistant.id,
+            content: stripTagMarkup(rawText),
+            rawContent: rawText,
+            status: MessageStatus.error,
+          );
+        }
+        if (_sendSeq == seq) {
+          state = state.copyWith(
+            errorText: e is AppException ? e.message : '群聊自动回复失败：$e',
+            isStreaming: false,
+            clearStreaming: true,
+          );
+        }
+        return;
+      } finally {
+        if (identical(_cancelToken, cancelToken)) _cancelToken = null;
+        if (_sendSeq == seq) {
+          state = state.copyWith(isStreaming: false, clearStreaming: true);
+        }
+      }
+    }
+  }
+
+  /// 用户发送成功后：群聊开启「全员回复」时，补齐首轮其余成员并自动拌嘴。
+  ///
+  /// 首条回复已由 send 生成；这里只补 (启用人数-1) + 拌嘴轮数 条。
+  Future<void> maybeAutoContinueGroup() async {
+    if (state.isStreaming) return;
+    final conversationId = state.conversationId;
+    if (conversationId == null) return;
+    final chatRepo = ref.read(chatRepositoryProvider);
+    final conv = await chatRepo.getConversation(conversationId);
+    if (conv == null || !conv.groupAutoReply) return;
+    final participants = await chatRepo.listParticipants(conversationId);
+    final enabled = participants.where((p) => p.enabled).length;
+    if (participants.length <= 1 || enabled <= 0) return;
+    final messages = await chatRepo.watchMessages(conversationId).first;
+    if (messages.isEmpty) return;
+    final last = messages.last;
+    if (last.role != ChatRole.assistant ||
+        last.status != MessageStatus.done) {
+      return;
+    }
+    final extra = (enabled - 1) + conv.groupBanterRounds.clamp(0, 3);
+    if (extra <= 0) return;
+    await continueGroup(rounds: extra);
+  }
+
+  List<String> _splitGroupReply(String raw) {
+    final parts = raw
+        .split(RegExp(r'\n\s*\[P\]\s*\n'))
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .take(4)
+        .toList();
+    return parts.isEmpty ? [raw] : parts;
+  }
+
   Future<Character?> _resolveSpeaker({
     required Conversation conv,
     required List<ChatMessage> history,

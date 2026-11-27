@@ -146,6 +146,33 @@ class $ConversationsTable extends Conversations
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _groupAutoReplyMeta = const VerificationMeta(
+    'groupAutoReply',
+  );
+  @override
+  late final GeneratedColumn<bool> groupAutoReply = GeneratedColumn<bool>(
+    'group_auto_reply',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("group_auto_reply" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _groupBanterRoundsMeta = const VerificationMeta(
+    'groupBanterRounds',
+  );
+  @override
+  late final GeneratedColumn<int> groupBanterRounds = GeneratedColumn<int>(
+    'group_banter_rounds',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(2),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -160,6 +187,8 @@ class $ConversationsTable extends Conversations
     backgroundPath,
     parentConversationId,
     branchFromMessageId,
+    groupAutoReply,
+    groupBanterRounds,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -271,6 +300,24 @@ class $ConversationsTable extends Conversations
         ),
       );
     }
+    if (data.containsKey('group_auto_reply')) {
+      context.handle(
+        _groupAutoReplyMeta,
+        groupAutoReply.isAcceptableOrUnknown(
+          data['group_auto_reply']!,
+          _groupAutoReplyMeta,
+        ),
+      );
+    }
+    if (data.containsKey('group_banter_rounds')) {
+      context.handle(
+        _groupBanterRoundsMeta,
+        groupBanterRounds.isAcceptableOrUnknown(
+          data['group_banter_rounds']!,
+          _groupBanterRoundsMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -328,6 +375,14 @@ class $ConversationsTable extends Conversations
         DriftSqlType.string,
         data['${effectivePrefix}branch_from_message_id'],
       ),
+      groupAutoReply: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}group_auto_reply'],
+      )!,
+      groupBanterRounds: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}group_banter_rounds'],
+      )!,
     );
   }
 
@@ -364,6 +419,12 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
 
   /// 分支点消息 id（v16）。
   final String? branchFromMessageId;
+
+  /// 群聊：用户发言后是否让全部启用成员依次回复（v19）。
+  final bool groupAutoReply;
+
+  /// 群聊：角色之间自动拌嘴的额外轮数（v19，0–3）。
+  final int groupBanterRounds;
   const ConversationRow({
     required this.id,
     required this.title,
@@ -377,6 +438,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     this.backgroundPath,
     this.parentConversationId,
     this.branchFromMessageId,
+    required this.groupAutoReply,
+    required this.groupBanterRounds,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -403,6 +466,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     if (!nullToAbsent || branchFromMessageId != null) {
       map['branch_from_message_id'] = Variable<String>(branchFromMessageId);
     }
+    map['group_auto_reply'] = Variable<bool>(groupAutoReply);
+    map['group_banter_rounds'] = Variable<int>(groupBanterRounds);
     return map;
   }
 
@@ -430,6 +495,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
       branchFromMessageId: branchFromMessageId == null && nullToAbsent
           ? const Value.absent()
           : Value(branchFromMessageId),
+      groupAutoReply: Value(groupAutoReply),
+      groupBanterRounds: Value(groupBanterRounds),
     );
   }
 
@@ -455,6 +522,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
       branchFromMessageId: serializer.fromJson<String?>(
         json['branchFromMessageId'],
       ),
+      groupAutoReply: serializer.fromJson<bool>(json['groupAutoReply']),
+      groupBanterRounds: serializer.fromJson<int>(json['groupBanterRounds']),
     );
   }
   @override
@@ -473,6 +542,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
       'backgroundPath': serializer.toJson<String?>(backgroundPath),
       'parentConversationId': serializer.toJson<String?>(parentConversationId),
       'branchFromMessageId': serializer.toJson<String?>(branchFromMessageId),
+      'groupAutoReply': serializer.toJson<bool>(groupAutoReply),
+      'groupBanterRounds': serializer.toJson<int>(groupBanterRounds),
     };
   }
 
@@ -489,6 +560,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     Value<String?> backgroundPath = const Value.absent(),
     Value<String?> parentConversationId = const Value.absent(),
     Value<String?> branchFromMessageId = const Value.absent(),
+    bool? groupAutoReply,
+    int? groupBanterRounds,
   }) => ConversationRow(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -508,6 +581,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     branchFromMessageId: branchFromMessageId.present
         ? branchFromMessageId.value
         : this.branchFromMessageId,
+    groupAutoReply: groupAutoReply ?? this.groupAutoReply,
+    groupBanterRounds: groupBanterRounds ?? this.groupBanterRounds,
   );
   ConversationRow copyWithCompanion(ConversationsCompanion data) {
     return ConversationRow(
@@ -537,6 +612,12 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
       branchFromMessageId: data.branchFromMessageId.present
           ? data.branchFromMessageId.value
           : this.branchFromMessageId,
+      groupAutoReply: data.groupAutoReply.present
+          ? data.groupAutoReply.value
+          : this.groupAutoReply,
+      groupBanterRounds: data.groupBanterRounds.present
+          ? data.groupBanterRounds.value
+          : this.groupBanterRounds,
     );
   }
 
@@ -554,7 +635,9 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
           ..write('voiceEnabled: $voiceEnabled, ')
           ..write('backgroundPath: $backgroundPath, ')
           ..write('parentConversationId: $parentConversationId, ')
-          ..write('branchFromMessageId: $branchFromMessageId')
+          ..write('branchFromMessageId: $branchFromMessageId, ')
+          ..write('groupAutoReply: $groupAutoReply, ')
+          ..write('groupBanterRounds: $groupBanterRounds')
           ..write(')'))
         .toString();
   }
@@ -573,6 +656,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     backgroundPath,
     parentConversationId,
     branchFromMessageId,
+    groupAutoReply,
+    groupBanterRounds,
   );
   @override
   bool operator ==(Object other) =>
@@ -589,7 +674,9 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
           other.voiceEnabled == this.voiceEnabled &&
           other.backgroundPath == this.backgroundPath &&
           other.parentConversationId == this.parentConversationId &&
-          other.branchFromMessageId == this.branchFromMessageId);
+          other.branchFromMessageId == this.branchFromMessageId &&
+          other.groupAutoReply == this.groupAutoReply &&
+          other.groupBanterRounds == this.groupBanterRounds);
 }
 
 class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
@@ -605,6 +692,8 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
   final Value<String?> backgroundPath;
   final Value<String?> parentConversationId;
   final Value<String?> branchFromMessageId;
+  final Value<bool> groupAutoReply;
+  final Value<int> groupBanterRounds;
   final Value<int> rowid;
   const ConversationsCompanion({
     this.id = const Value.absent(),
@@ -619,6 +708,8 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     this.backgroundPath = const Value.absent(),
     this.parentConversationId = const Value.absent(),
     this.branchFromMessageId = const Value.absent(),
+    this.groupAutoReply = const Value.absent(),
+    this.groupBanterRounds = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ConversationsCompanion.insert({
@@ -634,6 +725,8 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     this.backgroundPath = const Value.absent(),
     this.parentConversationId = const Value.absent(),
     this.branchFromMessageId = const Value.absent(),
+    this.groupAutoReply = const Value.absent(),
+    this.groupBanterRounds = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        apiProfileId = Value(apiProfileId),
@@ -652,6 +745,8 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     Expression<String>? backgroundPath,
     Expression<String>? parentConversationId,
     Expression<String>? branchFromMessageId,
+    Expression<bool>? groupAutoReply,
+    Expression<int>? groupBanterRounds,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -669,6 +764,8 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
         'parent_conversation_id': parentConversationId,
       if (branchFromMessageId != null)
         'branch_from_message_id': branchFromMessageId,
+      if (groupAutoReply != null) 'group_auto_reply': groupAutoReply,
+      if (groupBanterRounds != null) 'group_banter_rounds': groupBanterRounds,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -686,6 +783,8 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     Value<String?>? backgroundPath,
     Value<String?>? parentConversationId,
     Value<String?>? branchFromMessageId,
+    Value<bool>? groupAutoReply,
+    Value<int>? groupBanterRounds,
     Value<int>? rowid,
   }) {
     return ConversationsCompanion(
@@ -701,6 +800,8 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
       backgroundPath: backgroundPath ?? this.backgroundPath,
       parentConversationId: parentConversationId ?? this.parentConversationId,
       branchFromMessageId: branchFromMessageId ?? this.branchFromMessageId,
+      groupAutoReply: groupAutoReply ?? this.groupAutoReply,
+      groupBanterRounds: groupBanterRounds ?? this.groupBanterRounds,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -748,6 +849,12 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
         branchFromMessageId.value,
       );
     }
+    if (groupAutoReply.present) {
+      map['group_auto_reply'] = Variable<bool>(groupAutoReply.value);
+    }
+    if (groupBanterRounds.present) {
+      map['group_banter_rounds'] = Variable<int>(groupBanterRounds.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -769,6 +876,8 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
           ..write('backgroundPath: $backgroundPath, ')
           ..write('parentConversationId: $parentConversationId, ')
           ..write('branchFromMessageId: $branchFromMessageId, ')
+          ..write('groupAutoReply: $groupAutoReply, ')
+          ..write('groupBanterRounds: $groupBanterRounds, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8342,6 +8451,8 @@ typedef $$ConversationsTableCreateCompanionBuilder =
       Value<String?> backgroundPath,
       Value<String?> parentConversationId,
       Value<String?> branchFromMessageId,
+      Value<bool> groupAutoReply,
+      Value<int> groupBanterRounds,
       Value<int> rowid,
     });
 typedef $$ConversationsTableUpdateCompanionBuilder =
@@ -8358,6 +8469,8 @@ typedef $$ConversationsTableUpdateCompanionBuilder =
       Value<String?> backgroundPath,
       Value<String?> parentConversationId,
       Value<String?> branchFromMessageId,
+      Value<bool> groupAutoReply,
+      Value<int> groupBanterRounds,
       Value<int> rowid,
     });
 
@@ -8427,6 +8540,16 @@ class $$ConversationsTableFilterComposer
 
   ColumnFilters<String> get branchFromMessageId => $composableBuilder(
     column: $table.branchFromMessageId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get groupAutoReply => $composableBuilder(
+    column: $table.groupAutoReply,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get groupBanterRounds => $composableBuilder(
+    column: $table.groupBanterRounds,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -8499,6 +8622,16 @@ class $$ConversationsTableOrderingComposer
     column: $table.branchFromMessageId,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get groupAutoReply => $composableBuilder(
+    column: $table.groupAutoReply,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get groupBanterRounds => $composableBuilder(
+    column: $table.groupBanterRounds,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ConversationsTableAnnotationComposer
@@ -8559,6 +8692,16 @@ class $$ConversationsTableAnnotationComposer
     column: $table.branchFromMessageId,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get groupAutoReply => $composableBuilder(
+    column: $table.groupAutoReply,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get groupBanterRounds => $composableBuilder(
+    column: $table.groupBanterRounds,
+    builder: (column) => column,
+  );
 }
 
 class $$ConversationsTableTableManager
@@ -8604,6 +8747,8 @@ class $$ConversationsTableTableManager
                 Value<String?> backgroundPath = const Value.absent(),
                 Value<String?> parentConversationId = const Value.absent(),
                 Value<String?> branchFromMessageId = const Value.absent(),
+                Value<bool> groupAutoReply = const Value.absent(),
+                Value<int> groupBanterRounds = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ConversationsCompanion(
                 id: id,
@@ -8618,6 +8763,8 @@ class $$ConversationsTableTableManager
                 backgroundPath: backgroundPath,
                 parentConversationId: parentConversationId,
                 branchFromMessageId: branchFromMessageId,
+                groupAutoReply: groupAutoReply,
+                groupBanterRounds: groupBanterRounds,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -8634,6 +8781,8 @@ class $$ConversationsTableTableManager
                 Value<String?> backgroundPath = const Value.absent(),
                 Value<String?> parentConversationId = const Value.absent(),
                 Value<String?> branchFromMessageId = const Value.absent(),
+                Value<bool> groupAutoReply = const Value.absent(),
+                Value<int> groupBanterRounds = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ConversationsCompanion.insert(
                 id: id,
@@ -8648,6 +8797,8 @@ class $$ConversationsTableTableManager
                 backgroundPath: backgroundPath,
                 parentConversationId: parentConversationId,
                 branchFromMessageId: branchFromMessageId,
+                groupAutoReply: groupAutoReply,
+                groupBanterRounds: groupBanterRounds,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

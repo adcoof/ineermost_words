@@ -86,7 +86,7 @@
 
 ## Recent Updates
 
-- **v2.2 (in development)**: group member panel (mute / reorder / add / remove), Force Talk (tap a member to reply to the next message), group header avatars, and speaker attribution for split replies; schema v18; 478 tests
+- **v2.2 (in development)**: group member panel (mute / reorder / add / remove), Force Talk, all enabled members replying to one user message with configurable 0–3 auto-banter turns, group header avatars, and speaker attribution for split replies; schema v19; 483 tests
 - **v2.1**: full character profiles, SillyTavern V1/V2/V3 import and V2/V3/PNG export with unknown-field preservation, automatic version snapshots, three-tab editor, alternate greetings, tags, profile token estimate, four-tab navigation and asset hub, 360dp narrow-screen layout, instant context usage on open, independent TTS/ASR API providers, and message avatars; schema v17; 471 tests
 - **v2.0**: multi-character group chats (one speaker per turn, speaker names in bubbles) and chat branching (copy a message prefix into a new conversation, keeping participants and parent pointers); schema v16; 416 tests
 - **v1.9**: keyword-triggered lorebook injection and on-demand long-term memory recall; lorebook import from SillyTavern `character_book`
@@ -150,7 +150,7 @@ assets/
 
 ```bash
 flutter analyze   # static checks
-flutter test      # 478 cases: SSE/tag parsing, splitting and fallback, prompt budgets, sticker mapping, voice queue, auto-scroll, migrations, memory summarizer, lorebook recall, character profiles and versions, card import/export, PNG tEXt, voice providers, message avatars, group roster, …
+flutter test      # 483 cases: SSE/tag parsing, splitting and fallback, prompt budgets, sticker mapping, voice queue, auto-scroll, migrations, memory summarizer, lorebook recall, character profiles and versions, card import/export, PNG tEXt, voice providers, message avatars, group roster, auto-banter, …
 ```
 
 ## Acknowledgments & Copyright

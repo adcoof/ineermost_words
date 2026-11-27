@@ -69,7 +69,12 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     _controller.clear();
     final images = List<Uint8List>.of(_images);
     _images.clear();
-    ref.read(chatControllerProvider.notifier).send(text, images: images);
+    final notifier = ref.read(chatControllerProvider.notifier);
+    unawaited(
+      notifier
+          .send(text, images: images)
+          .then((_) => notifier.maybeAutoContinueGroup()),
+    );
     setState(() {});
     _focusNode.requestFocus();
   }
@@ -138,7 +143,12 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     _finalText = '';
     _controller.clear();
     if (text.isNotEmpty) {
-      ref.read(chatControllerProvider.notifier).send(text);
+      final notifier = ref.read(chatControllerProvider.notifier);
+      unawaited(
+        notifier
+            .send(text)
+            .then((_) => notifier.maybeAutoContinueGroup()),
+      );
     }
   }
 

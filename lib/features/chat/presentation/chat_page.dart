@@ -233,6 +233,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           );
         }
       },
+      onContinueGroup: (rounds) {
+        unawaited(
+          ref
+              .read(chatControllerProvider.notifier)
+              .continueGroup(rounds: rounds),
+        );
+      },
     );
     if (changed == true && mounted) {
       setState(() => _groupRevision++);

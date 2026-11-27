@@ -250,6 +250,11 @@ class ChatRepository {
               )
               ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
             .get();
+    await setGroupSettings(
+      branch.id,
+      autoReply: source.groupAutoReply,
+      banterRounds: source.groupBanterRounds,
+    );
     await db.transaction(() async {
       for (final row in rows) {
         final msg = _msgFromRow(row);
@@ -285,6 +290,23 @@ class ChatRepository {
     return branch;
   }
 
+
+  /// 群聊行为：用户发言后是否全员回复、自动拌嘴轮数。
+  Future<void> setGroupSettings(
+    String conversationId, {
+    bool? autoReply,
+    int? banterRounds,
+  }) async {
+    await (db.update(db.conversations)
+          ..where((t) => t.id.equals(conversationId)))
+        .write(ConversationsCompanion(
+      groupAutoReply:
+          autoReply == null ? const Value.absent() : Value(autoReply),
+      groupBanterRounds: banterRounds == null
+          ? const Value.absent()
+          : Value(banterRounds.clamp(0, 3)),
+    ));
+  }
 
   Future<void> setConversationPetModel(String id, String? petModelId) async {
     await (db.update(db.conversations)..where((t) => t.id.equals(id))).write(
@@ -647,6 +669,8 @@ class ChatRepository {
     backgroundPath: row.backgroundPath,
     parentConversationId: row.parentConversationId,
     branchFromMessageId: row.branchFromMessageId,
+    groupAutoReply: row.groupAutoReply,
+    groupBanterRounds: row.groupBanterRounds,
   );
 
   ConversationsCompanion _convToRow(Conversation c) => ConversationsCompanion(
@@ -662,6 +686,8 @@ class ChatRepository {
     backgroundPath: Value(c.backgroundPath),
     parentConversationId: Value(c.parentConversationId),
     branchFromMessageId: Value(c.branchFromMessageId),
+    groupAutoReply: Value(c.groupAutoReply),
+    groupBanterRounds: Value(c.groupBanterRounds),
   );
 
   ChatMessage _msgFromRow(MessageRow row) => ChatMessage(

@@ -37,6 +37,14 @@ class Conversations extends Table {
   /// 分支点消息 id（v16）。
   TextColumn get branchFromMessageId => text().nullable()();
 
+  /// 群聊：用户发言后是否让全部启用成员依次回复（v19）。
+  BoolColumn get groupAutoReply =>
+      boolean().withDefault(const Constant(true))();
+
+  /// 群聊：角色之间自动拌嘴的额外轮数（v19，0–3）。
+  IntColumn get groupBanterRounds =>
+      integer().withDefault(const Constant(2))();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }

@@ -587,6 +587,11 @@ void main() {
       final c = await newConv(characterId: 'a', id: 'src');
       await repo.replaceParticipants(c.id, ['a', 'b']);
       await repo.setParticipantEnabled(c.id, 'a', false);
+      await repo.setGroupSettings(
+        c.id,
+        autoReply: false,
+        banterRounds: 1,
+      );
       final t = DateTime(2026, 1, 1, 10);
       await insertMsg(id: 's1', conversationId: c.id, content: 'one', createdAt: t);
       await insertMsg(
@@ -610,6 +615,10 @@ void main() {
       expect(ps.map((p) => p.characterId), ['a', 'b']);
       // 静音状态随分支复制。
       expect(ps.firstWhere((p) => p.characterId == 'a').enabled, isFalse);
+      // 群聊行为设置也随分支复制。
+      final branchConv = await repo.getConversation(branch.id);
+      expect(branchConv!.groupAutoReply, isFalse);
+      expect(branchConv.groupBanterRounds, 1);
     });
 
     test('deleteConversation 级联删除参与者', () async {

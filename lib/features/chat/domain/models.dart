@@ -171,6 +171,12 @@ class Conversation {
   /// 分支点消息 id（v16）。
   final String? branchFromMessageId;
 
+  /// 群聊：用户发言后是否让全部启用成员依次回复（v19）。
+  final bool groupAutoReply;
+
+  /// 群聊：角色之间自动拌嘴的额外轮数（v19，0–3）。
+  final int groupBanterRounds;
+
   const Conversation({
     required this.id,
     required this.title,
@@ -184,6 +190,8 @@ class Conversation {
     this.backgroundPath,
     this.parentConversationId,
     this.branchFromMessageId,
+    this.groupAutoReply = true,
+    this.groupBanterRounds = 2,
   });
 }
 /// 一条 assistant 消息的候选回复（v14）。

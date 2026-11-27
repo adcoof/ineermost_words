@@ -55,7 +55,9 @@ void main() {
     expect(find.text('角色B'), findsOneWidget);
 
     // 关闭 A 的自动轮转（B 仍启用，允许关闭）。
-    await tester.tap(find.byType(Switch).first);
+    await tester.tap(
+      find.byKey(ValueKey('group-member-switch-${a.id}')),
+    );
     await tester.pumpAndSettle();
     final participants = await chatRepo.listParticipants(conv.id);
     expect(

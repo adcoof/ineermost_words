@@ -35,7 +35,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -147,6 +147,11 @@ class AppDatabase extends _$AppDatabase {
             conversationParticipants.enabled,
           );
         }
+      }
+      // v19：群聊自动全员回复与拌嘴轮数（conversations 从 v1 起存在）。
+      if (from < 19) {
+        await m.addColumn(conversations, conversations.groupAutoReply);
+        await m.addColumn(conversations, conversations.groupBanterRounds);
       }
     },
   );

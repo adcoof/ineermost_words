@@ -530,6 +530,108 @@ void main() {
       );
     });
 
+    test('maybeAutoContinueGroup：用户一句后补齐全员回复 + 拌嘴轮数', () async {
+      await seedChar('a', '角色A');
+      await seedChar('b', '角色B');
+      final conv = await chatRepo.createGroupConversation(
+        apiProfileId: 'p1',
+        characterIds: ['a', 'b'],
+      );
+      controller.bindConversation(conv.id);
+      api.responses = [
+        text('A 首条'),
+        text('B 回复'),
+        text('A 拌嘴'),
+        text('B 拌嘴'),
+      ];
+
+      await controller.send('hi');
+      await controller.maybeAutoContinueGroup();
+
+      final all = await chatRepo.watchMessages(conv.id).first;
+      final assistants =
+          all.where((m) => m.role == ChatRole.assistant).toList();
+      expect(
+        assistants.map((m) => m.speakerCharacterId).toList(),
+        ['a', 'b', 'a', 'b'],
+      );
+      expect(all.where((m) => m.role == ChatRole.user), hasLength(1));
+    });
+
+    test('关闭全员回复时 maybeAutoContinueGroup 不追加', () async {
+      await seedChar('a', '角色A');
+      await seedChar('b', '角色B');
+      final conv = await chatRepo.createGroupConversation(
+        apiProfileId: 'p1',
+        characterIds: ['a', 'b'],
+      );
+      await chatRepo.setGroupSettings(conv.id, autoReply: false);
+      controller.bindConversation(conv.id);
+      api.responses = [text('A only')];
+
+      await controller.send('hi');
+      await controller.maybeAutoContinueGroup();
+
+      final assistants = await assistantMessages();
+      expect(assistants, hasLength(1));
+    });
+
+    test('continueGroup：不插用户消息，角色之间连续对话', () async {
+      await seedChar('a', '角色A');
+      await seedChar('b', '角色B');
+      final conv = await chatRepo.createGroupConversation(
+        apiProfileId: 'p1',
+        characterIds: ['a', 'b'],
+      );
+      controller.bindConversation(conv.id);
+      api.responses = [text('A 对 B 说'), text('B 回 A')];
+
+      await controller.continueGroup(rounds: 2);
+
+      final all = await chatRepo.watchMessages(conv.id).first;
+      expect(all.where((m) => m.role == ChatRole.user), isEmpty);
+      final assistants =
+          all.where((m) => m.role == ChatRole.assistant).toList();
+      expect(
+        assistants.map((m) => m.speakerCharacterId).toList(),
+        ['a', 'b'],
+      );
+      // 第二次请求带群聊指令，并要求回应上一角色。
+      final secondPrompt = api.sentMessages[1];
+      expect(
+        secondPrompt.any(
+          (m) => m.role == 'system' && m.content.contains('多人聊天'),
+        ),
+        isTrue,
+      );
+      expect(
+        secondPrompt.any(
+          (m) => m.role == 'system' && m.content.contains('最近一条消息来自【角色A】'),
+        ),
+        isTrue,
+      );
+    });
+
+    test('continueGroup 分段回复的每一段都带当前 speaker', () async {
+      await seedChar('a', '角色A');
+      await seedChar('b', '角色B');
+      final conv = await chatRepo.createGroupConversation(
+        apiProfileId: 'p1',
+        characterIds: ['a', 'b'],
+      );
+      controller.bindConversation(conv.id);
+      api.responses = [text('第一段\n[P]\n第二段')];
+
+      await controller.continueGroup(rounds: 1);
+
+      final assistants = await assistantMessages();
+      expect(assistants, hasLength(2));
+      expect(
+        assistants.map((m) => m.speakerCharacterId).toList(),
+        ['a', 'a'],
+      );
+    });
+
     test('群聊历史把其他角色发言转成带名字的 user', () async {
       await seedChar('a', '角色A');
       await seedChar('b', '角色B');

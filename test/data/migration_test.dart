@@ -555,6 +555,10 @@ void main() {
         '"created_at" INTEGER NOT NULL, '
         'PRIMARY KEY ("id"))',
       );
+      // v19 会向 conversations 补群聊设置列；此测试只关心其他表，建最小表即可。
+      db.execute(
+        'CREATE TABLE "conversations" ("id" TEXT NOT NULL, PRIMARY KEY ("id"))',
+      );
       db.execute('PRAGMA user_version = 16');
       db.execute(
           "INSERT INTO characters (id, name, memory_summary, created_at, updated_at) "
@@ -604,12 +608,12 @@ void main() {
     expect(versionIndex, hasLength(1));
 
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data.values.single, db.schemaVersion); // 18
+    expect(version.data.values.single, db.schemaVersion); // 19
 
     await db.close();
   });
 
-  test('v17 → v18：群聊参与者补 enabled 列，存量行默认启用', () async {
+  test('v17 → 当前版本：群聊参与者 enabled + 群聊设置列', () async {
     final executor = NativeDatabase.memory(setup: (db) {
       db.execute(
         'CREATE TABLE "conversation_participants" ('
@@ -618,6 +622,9 @@ void main() {
         '"sort_order" INTEGER NOT NULL DEFAULT 0, '
         '"created_at" INTEGER NOT NULL, '
         'PRIMARY KEY ("id"))',
+      );
+      db.execute(
+        'CREATE TABLE "conversations" ("id" TEXT NOT NULL, PRIMARY KEY ("id"))',
       );
       db.execute('PRAGMA user_version = 17');
       db.execute(
@@ -640,7 +647,45 @@ void main() {
     );
 
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data.values.single, db.schemaVersion); // 18
+    expect(version.data.values.single, db.schemaVersion); // 19
+    await db.close();
+  });
+
+  test('v18 → v19：会话补群聊设置列，默认全员回复 + 2 轮拌嘴', () async {
+    final executor = NativeDatabase.memory(setup: (db) {
+      db.execute(
+        'CREATE TABLE "conversations" ("id" TEXT NOT NULL, PRIMARY KEY ("id"))',
+      );
+      db.execute('PRAGMA user_version = 18');
+      db.execute("INSERT INTO conversations (id) VALUES ('c1')");
+    });
+
+    final db = AppDatabase.forTesting(executor);
+    final row = await db
+        .customSelect(
+          'SELECT group_auto_reply, group_banter_rounds FROM conversations '
+          "WHERE id = 'c1'",
+        )
+        .getSingle();
+    expect(row.data['group_auto_reply'], 1);
+    expect(row.data['group_banter_rounds'], 2);
+
+    await (db.update(db.conversations)..where((t) => t.id.equals('c1')))
+        .write(const ConversationsCompanion(
+      groupAutoReply: Value(false),
+      groupBanterRounds: Value(3),
+    ));
+    final updated = await db
+        .customSelect(
+          'SELECT group_auto_reply, group_banter_rounds FROM conversations '
+          "WHERE id = 'c1'",
+        )
+        .getSingle();
+    expect(updated.data['group_auto_reply'], 0);
+    expect(updated.data['group_banter_rounds'], 3);
+
+    final version = await db.customSelect('PRAGMA user_version').getSingle();
+    expect(version.data.values.single, db.schemaVersion); // 19
     await db.close();
   });
 

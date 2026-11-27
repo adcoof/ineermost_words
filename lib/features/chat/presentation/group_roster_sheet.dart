@@ -3,6 +3,8 @@
 /// P0 策略：默认按成员顺序轮转；点成员 = Force Talk，只作用于下一条消息。
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -15,6 +17,7 @@ Future<bool> showGroupRosterSheet(
   BuildContext context, {
   required String conversationId,
   required ValueChanged<String?> onForceSpeaker,
+  ValueChanged<int>? onContinueGroup,
 }) async {
   final changed = await showModalBottomSheet<bool>(
     context: context,
@@ -23,6 +26,7 @@ Future<bool> showGroupRosterSheet(
     builder: (_) => GroupRosterSheet(
       conversationId: conversationId,
       onForceSpeaker: onForceSpeaker,
+      onContinueGroup: onContinueGroup,
     ),
   );
   return changed == true;
@@ -31,11 +35,13 @@ Future<bool> showGroupRosterSheet(
 class GroupRosterSheet extends ConsumerStatefulWidget {
   final String conversationId;
   final ValueChanged<String?> onForceSpeaker;
+  final ValueChanged<int>? onContinueGroup;
 
   const GroupRosterSheet({
     super.key,
     required this.conversationId,
     required this.onForceSpeaker,
+    this.onContinueGroup,
   });
 
   @override
@@ -45,6 +51,8 @@ class GroupRosterSheet extends ConsumerStatefulWidget {
 class _GroupRosterSheetState extends ConsumerState<GroupRosterSheet> {
   List<ConversationParticipant> _participants = const [];
   Map<String, Character> _characters = const {};
+  bool _autoReply = true;
+  int _banterRounds = 2;
   bool _loading = true;
   bool _busy = false;
   bool _changed = false;
@@ -56,15 +64,38 @@ class _GroupRosterSheetState extends ConsumerState<GroupRosterSheet> {
   }
 
   Future<void> _load() async {
-    final participants = await ref
-        .read(chatRepositoryProvider)
-        .listParticipants(widget.conversationId);
+    final chatRepo = ref.read(chatRepositoryProvider);
+    final participants = await chatRepo.listParticipants(widget.conversationId);
+    final conversation =
+        await chatRepo.getConversation(widget.conversationId);
     final all = await ref.read(characterRepositoryProvider).listCharacters();
     if (!mounted) return;
     setState(() {
       _participants = participants;
       _characters = {for (final c in all) c.id: c};
+      _autoReply = conversation?.groupAutoReply ?? true;
+      _banterRounds = conversation?.groupBanterRounds ?? 2;
       _loading = false;
+    });
+  }
+
+  Future<void> _setAutoReply(bool value) async {
+    await _run(() async {
+      await ref
+          .read(chatRepositoryProvider)
+          .setGroupSettings(widget.conversationId, autoReply: value);
+      _changed = true;
+      if (mounted) setState(() => _autoReply = value);
+    });
+  }
+
+  Future<void> _setBanterRounds(int value) async {
+    await _run(() async {
+      await ref
+          .read(chatRepositoryProvider)
+          .setGroupSettings(widget.conversationId, banterRounds: value);
+      _changed = true;
+      if (mounted) setState(() => _banterRounds = value);
     });
   }
 
@@ -247,6 +278,35 @@ class _GroupRosterSheetState extends ConsumerState<GroupRosterSheet> {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('用户发言后全员回复'),
+              subtitle: const Text('每位启用成员依次回应用户；关闭后只轮转一位'),
+              value: _autoReply,
+              onChanged: _busy
+                  ? null
+                  : (value) => unawaited(_setAutoReply(value)),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('自动拌嘴轮数'),
+              subtitle: const Text('全员回复后，角色之间再互动 N 轮（0–3）'),
+              trailing: DropdownButton<int>(
+                value: _banterRounds,
+                items: [
+                  for (var i = 0; i <= 3; i++)
+                    DropdownMenuItem(value: i, child: Text('$i 轮')),
+                ],
+                onChanged: _busy
+                    ? null
+                    : (value) {
+                        if (value != null) {
+                          unawaited(_setBanterRounds(value));
+                        }
+                      },
+              ),
+            ),
+            const Divider(height: 1),
             const SizedBox(height: 8),
             if (_loading)
               const Padding(
@@ -285,6 +345,9 @@ class _GroupRosterSheetState extends ConsumerState<GroupRosterSheet> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Switch(
+                            key: ValueKey(
+                              'group-member-switch-${participant.characterId}',
+                            ),
                             value: participant.enabled,
                             onChanged: _busy
                                 ? null
@@ -322,6 +385,25 @@ class _GroupRosterSheetState extends ConsumerState<GroupRosterSheet> {
                 ),
               ),
             const SizedBox(height: 12),
+            if (widget.onContinueGroup != null) ...[
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _busy
+                      ? null
+                      : () {
+                          final rounds = _banterRounds == 0 ? 1 : _banterRounds;
+                          widget.onContinueGroup?.call(rounds);
+                          Navigator.pop(context, true);
+                        },
+                  icon: const Icon(Icons.forum_outlined, size: 18),
+                  label: Text(
+                    '让 TA 们聊 ${_banterRounds == 0 ? 1 : _banterRounds} 轮',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
             SizedBox(
               width: double.infinity,
               child: FilledButton(
