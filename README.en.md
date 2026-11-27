@@ -62,7 +62,8 @@
 
 - Hold to talk; release to recognize and send directly; tap the mic during playback to interrupt
 - **Voice Workshop**: design a custom voice from a one-line description (e.g. "a sweet, gentle young female voice") via MiMo `voicedesign` — preview, store multiple voices, and pick them alongside the built-in ones
-- **Per-engine API config**: the OpenAI TTS option and the ASR "custom endpoint" option each have their own base URL / key / model fields (blank falls back to the chat API profile); MiMo always reuses the chat config
+- **Separate chat / TTS / ASR providers**: pick a different API profile for voice than for text chat — e.g. DeepSeek for chat and MiMo for TTS/ASR
+- **Per-engine API config**: the OpenAI TTS option and the ASR "custom endpoint" option each have their own base URL / key / model fields; the MiMo option can use a dedicated API profile (or follow the chat default)
 - TTS input automatically strips `<tags>` — markup is never spoken
 - Pipelined synthesis queue (sentence N+1 is synthesized while sentence N plays) for near-seamless continuity
 - 9 MiMo voices plus custom workshop voices, speech rate 0.5–2.0×

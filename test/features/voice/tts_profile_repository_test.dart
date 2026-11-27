@@ -25,6 +25,25 @@ void main() {
     expect(await repo.asrEngine(), 'system');
   });
 
+  test('TTS/ASR 语音 API 供应商 id 缺省为空，可独立设置', () async {
+    expect(await repo.ttsApiProfileId(), isEmpty);
+    expect(await repo.asrApiProfileId(), isEmpty);
+
+    await repo.setTtsApiProfileId('p-mimo');
+    await repo.setAsrApiProfileId('p-mimo');
+    expect(await repo.ttsApiProfileId(), 'p-mimo');
+    expect(await repo.asrApiProfileId(), 'p-mimo');
+
+    await repo.setTtsApiProfileId('p-deepseek');
+    expect(await repo.ttsApiProfileId(), 'p-deepseek');
+    expect(await repo.asrApiProfileId(), 'p-mimo');
+
+    await repo.setTtsApiProfileId(' ');
+    await repo.setAsrApiProfileId(' ');
+    expect(await repo.ttsApiProfileId(), isEmpty);
+    expect(await repo.asrApiProfileId(), isEmpty);
+  });
+
   test('asrCustomConfig 缺省全空，setAsrCustomConfig 往返与覆盖', () async {
     final empty = await repo.asrCustomConfig();
     expect(empty.baseUrl, isEmpty);

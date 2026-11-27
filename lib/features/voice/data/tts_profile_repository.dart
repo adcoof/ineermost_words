@@ -224,6 +224,31 @@ class TtsProfileRepository {
     ));
   }
 
+  /// TTS MiMo 使用的 API 供应商 id；空=跟随聊天默认。
+  Future<String> ttsApiProfileId() => _settingValue('tts_api_profile_id');
+
+  Future<void> setTtsApiProfileId(String id) =>
+      _setSettingValue('tts_api_profile_id', id);
+
+  /// ASR MiMo 使用的 API 供应商 id；空=跟随聊天默认。
+  Future<String> asrApiProfileId() => _settingValue('asr_api_profile_id');
+
+  Future<void> setAsrApiProfileId(String id) =>
+      _setSettingValue('asr_api_profile_id', id);
+
+  Future<String> _settingValue(String key) async {
+    final q = db.select(db.settings)..where((t) => t.key.equals(key));
+    final row = await q.getSingleOrNull();
+    return row?.value ?? '';
+  }
+
+  Future<void> _setSettingValue(String key, String value) async {
+    await db.into(db.settings).insertOnConflictUpdate(SettingsCompanion(
+      key: Value(key),
+      value: Value(value.trim()),
+    ));
+  }
+
   /// 新 id（编辑页新建用）。
   String newProfileId() => newId();
 

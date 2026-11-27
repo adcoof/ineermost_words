@@ -12,6 +12,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
+import '../../settings/domain/api_profile.dart';
+import '../../settings/presentation/api_profiles_page.dart';
 import '../data/edge_tts_provider.dart';
 import '../data/mimo_tts_provider.dart';
 import '../data/openai_tts_provider.dart';
@@ -49,6 +51,11 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
   late final TextEditingController _asrUrlController;
   late final TextEditingController _asrKeyController;
   late final TextEditingController _asrModelController;
+
+  /// TTS/ASR 各自选择的 API 供应商（空=跟随聊天默认）。
+  List<ApiProfile> _apiProfiles = const [];
+  String _ttsApiProfileId = '';
+  String _asrApiProfileId = '';
 
   @override
   void initState() {
@@ -108,6 +115,10 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
     final asrEngine = await repo.asrEngine();
     final asrLocale = await repo.asrLocale();
     final asrCustom = await repo.asrCustomConfig();
+    final apiProfiles = await ref.read(apiProfileRepositoryProvider).getAll();
+    final ttsApiProfileId = await repo.ttsApiProfileId();
+    final asrApiProfileId = await repo.asrApiProfileId();
+    final ids = apiProfiles.map((p) => p.id).toSet();
     if (!mounted) return;
     setState(() {
       _enabled = enabled;
@@ -128,8 +139,23 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
       _asrUrlController.text = asrCustom.baseUrl;
       _asrKeyController.text = asrCustom.apiKey;
       _asrModelController.text = asrCustom.model;
+      _apiProfiles = apiProfiles;
+      _ttsApiProfileId = ids.contains(ttsApiProfileId) ? ttsApiProfileId : '';
+      _asrApiProfileId = ids.contains(asrApiProfileId) ? asrApiProfileId : '';
       _voices = voices;
       _loaded = true;
+    });
+  }
+
+  /// 从 API 供应商页返回后只刷新选择列表，保留本页未保存的语音编辑。
+  Future<void> _refreshApiProfiles() async {
+    final profiles = await ref.read(apiProfileRepositoryProvider).getAll();
+    if (!mounted) return;
+    final ids = profiles.map((p) => p.id).toSet();
+    setState(() {
+      _apiProfiles = profiles;
+      if (!ids.contains(_ttsApiProfileId)) _ttsApiProfileId = '';
+      if (!ids.contains(_asrApiProfileId)) _asrApiProfileId = '';
     });
   }
 
@@ -189,6 +215,8 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
     await repo.setVoiceSpeed(_speed);
     await repo.setAsrEngine(_asrEngine);
     await repo.setAsrLocale(_asrLocale);
+    await repo.setTtsApiProfileId(_ttsApiProfileId);
+    await repo.setAsrApiProfileId(_asrApiProfileId);
     await repo.setAsrCustomConfig(
       baseUrl: _asrUrlController.text,
       apiKey: _asrKeyController.text,
@@ -198,6 +226,55 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('语音设置已保存')));
     }
+  }
+
+  Widget _apiProfilePicker({
+    required String label,
+    required String helper,
+    required String value,
+    required ValueChanged<String> onChanged,
+  }) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label),
+                const SizedBox(height: 2),
+                Text(helper, style: theme.textTheme.bodySmall),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 150,
+            child: DropdownButton<String>(
+              isExpanded: true,
+              value: value,
+              items: [
+                const DropdownMenuItem(
+                  value: '',
+                  child: Text('跟随聊天默认'),
+                ),
+                for (final profile in _apiProfiles)
+                  DropdownMenuItem(
+                    value: profile.id,
+                    child: Text(
+                      profile.name,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (v) => onChanged(v ?? ''),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _preview() async {
@@ -256,7 +333,7 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
             child: Text(
               switch (_provider) {
                 'mimo' =>
-                  '小米 MiMo 云端语音（chat/completions + audio），Key/地址复用聊天配置，推荐',
+                  '小米 MiMo 云端语音（chat/completions + audio），使用独立选择的 API 供应商，推荐',
                 'openai' => '走中转站或官方 /audio/speech 接口，可配独立 API（留空回落聊天配置）',
                 'system' => '离线兜底，依赖设备自带 TTS 引擎',
                 _ => '微软神经语音，免费，需联网',
@@ -264,17 +341,24 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
-          if (_provider == 'mimo')
+          if (_provider == 'mimo') ...[
             ListTile(
               title: TextField(
                 decoration: const InputDecoration(
-                  labelText: 'MiMo 模型（默认 mimo-v2.5-tts，API Key 走默认供应商配置）',
+                  labelText: 'MiMo 模型（默认 mimo-v2.5-tts）',
                   border: OutlineInputBorder(),
                 ),
                 controller: _modelController,
                 maxLines: 1,
               ),
             ),
+            _apiProfilePicker(
+              label: '语音接口供应商',
+              helper: 'MiMo 语音使用该供应商的地址与 Key；DeepSeek 不支持语音',
+              value: _ttsApiProfileId,
+              onChanged: (v) => setState(() => _ttsApiProfileId = v),
+            ),
+          ],
           if (_provider == 'openai') ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -363,11 +447,18 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
               switch (_asrEngine) {
                 'custom' => '识别走下方独立的接口配置，失败自动回退本机',
                 'system' => '系统识别依赖设备自带服务',
-                _ => '云端识别复用「API 供应商」里的默认配置，失败自动回退本机',
+                _ => '云端识别使用选择的 API 供应商（默认跟随聊天配置），失败自动回退本机',
               },
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
+          if (_asrEngine == 'mimo')
+            _apiProfilePicker(
+              label: '识别接口供应商',
+              helper: 'MiMo ASR 使用该供应商的地址与 Key；DeepSeek 不支持识别',
+              value: _asrApiProfileId,
+              onChanged: (v) => setState(() => _asrApiProfileId = v),
+            ),
           if (_asrEngine == 'custom') ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -416,6 +507,19 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
               ],
               onChanged: (v) => setState(() => _asrLocale = v ?? 'zh_CN'),
             ),
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.cloud_outlined),
+            title: const Text('管理 API 供应商'),
+            subtitle: const Text('聊天、TTS、ASR 可以分别选择不同供应商'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ApiProfilesPage()),
+              );
+              await _refreshApiProfiles();
+            },
           ),
           const SizedBox(height: 12),
           FilledButton.icon(

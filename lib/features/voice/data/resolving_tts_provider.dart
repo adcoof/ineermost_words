@@ -12,6 +12,7 @@ import 'package:dio/dio.dart';
 
 import '../../../core/errors/app_exception.dart';
 import '../../settings/data/api_profile_repository.dart';
+import '../../settings/domain/api_profile.dart';
 import '../domain/tts_provider.dart';
 import 'custom_voice_repository.dart';
 import 'edge_tts_provider.dart';
@@ -33,7 +34,15 @@ class ResolvingTtsProvider implements TtsProvider {
 
   bool _ensured = false;
 
-  Future<TtsProvider> _primary() async {
+  /// 解析 TTS 使用的 API 供应商：优先「语音 API 供应商」，空则跟聊天默认。
+  Future<ApiProfile?> resolveVoiceProfile() async {
+    final id = await profiles.ttsApiProfileId();
+    if (id.isEmpty) return chatProfiles.getDefault();
+    final selected = await chatProfiles.getById(id);
+    return selected ?? await chatProfiles.getDefault();
+  }
+
+  Future<({TtsProvider primary, ApiProfile? voice})> _primaryWithVoice() async {
     // 一次性 MiMo 默认迁移（幂等，避免每句都写库）。
     if (!_ensured) {
       _ensured = true;
@@ -45,28 +54,27 @@ class ResolvingTtsProvider implements TtsProvider {
         ((await chatProfiles.getDefault()) != null
             ? profiles.builtinMimo()
             : profiles.builtinEdge());
-    switch (profile.provider) {
-      case 'mimo':
-        return MimoTtsProvider(
+    final voice = await resolveVoiceProfile();
+    final TtsProvider primary = switch (profile.provider) {
+      'mimo' => MimoTtsProvider(
+          baseUrl: voice?.baseUrl ?? '',
+          apiKey: voice?.apiKey ?? '',
+          model: profile.model,
+          chatProfilesRepo: chatProfiles,
+        ),
+      'openai' => OpenAiTtsProvider(
           baseUrl: profile.baseUrl,
           apiKey: profile.apiKey,
           model: profile.model,
           chatProfilesRepo: chatProfiles,
-        );
-      case 'openai':
-        return OpenAiTtsProvider(
-          baseUrl: profile.baseUrl,
-          apiKey: profile.apiKey,
-          model: profile.model,
-          chatProfilesRepo: chatProfiles,
-        );
-      case 'system':
-        return SystemTtsProvider();
-      case 'edge':
-      default:
-        return EdgeTtsProvider();
-    }
+        ),
+      'system' => SystemTtsProvider(),
+      _ => EdgeTtsProvider(),
+    };
+    return (primary: primary, voice: voice);
   }
+
+  Future<TtsProvider> _primary() async => (await _primaryWithVoice()).primary;
 
   @override
   String get providerId => 'resolving';
@@ -79,11 +87,17 @@ class ResolvingTtsProvider implements TtsProvider {
     // 失败自动降级链：首选 → MiMo（云端兜底）→ Edge（免费在线）→ 系统（离线）。
     // MiMo 放在第二位：免费引擎失败时用云端兜底；无聊天配置时它会快速抛
     // AuthException 自动跳过。任何一环成功即返回；全失败抛统一错误（应用层会弹提示）。
-    final primary = await _primary();
+    final resolved = await _primaryWithVoice();
+    final primary = resolved.primary;
+    final voice = resolved.voice;
     final legs = <TtsProvider>[
       primary,
       MimoTtsProvider(
-          baseUrl: '', apiKey: '', model: '', chatProfilesRepo: chatProfiles),
+        baseUrl: voice?.baseUrl ?? '',
+        apiKey: voice?.apiKey ?? '',
+        model: '',
+        chatProfilesRepo: chatProfiles,
+      ),
       EdgeTtsProvider(),
       SystemTtsProvider(),
     ];

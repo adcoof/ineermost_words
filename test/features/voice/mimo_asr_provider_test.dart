@@ -118,6 +118,43 @@ void main() {
       expect(jsonEncode(body), isNot(contains('"text"')));
     });
 
+    test('选择的 API 供应商优先，ASR 模型仍用 mimo-v2.5-asr', () async {
+      final adapter = _FakeAdapter(utf8.encode(jsonEncode({
+        'choices': [
+          {
+            'message': {'content': '收到'}
+          }
+        ],
+      })));
+      final dio = Dio()..httpClientAdapter = adapter;
+      final provider = MimoAsrProvider(
+        baseUrl: '',
+        apiKey: '',
+        model: '',
+        chatProfilesRepo: repo,
+        apiProfileGet: () async => const ApiProfile(
+          id: 'p-mimo',
+          name: 'MiMo',
+          baseUrl: 'https://mimo.example.com/v1',
+          apiKey: 'sk-mimo',
+          model: 'mimo-v2.6-flash',
+          temperature: 1.0,
+          extraHeaders: '{}',
+          isDefault: false,
+        ),
+        dio: dio,
+      );
+
+      expect(await provider.transcribe([0x00]), '收到');
+      final req = adapter.lastRequest!;
+      expect(
+        req.uri.toString(),
+        'https://mimo.example.com/v1/chat/completions',
+      );
+      expect(req.headers['Authorization'], 'Bearer sk-mimo');
+      expect((req.data as Map)['model'], 'mimo-v2.5-asr');
+    });
+
     test('content 为字符串时原样返回', () async {
       final adapter = _FakeAdapter(utf8.encode(jsonEncode({
         'choices': [

@@ -126,8 +126,9 @@ final speechSinkProvider = Provider<AssistantSpeechSink>(
   (ref) => ref.watch(voiceOrchestratorProvider),
 );
 
-/// ASR：按设置选引擎（'mimo' 复用聊天 / 'custom' 独立配置 / 'system' 本机），
-/// 启动失败自动回退。custom 档注入独立配置（settings KV），未配时回落聊天配置。
+/// ASR：按设置选引擎（'mimo' 使用选择的语音 API 供应商 / 'custom' 独立配置 /
+/// 'system' 本机），启动失败自动回退。mimo 档未选择供应商时回落聊天默认；
+/// custom 档注入独立配置（settings KV）。
 final asrProviderProvider = Provider<AsrProvider>((ref) {
   final ttsProfiles = ref.read(ttsProfileRepositoryProvider);
   return ResolvingAsrProvider(
@@ -137,6 +138,11 @@ final asrProviderProvider = Provider<AsrProvider>((ref) {
       apiKey: '',
       model: '',
       chatProfilesRepo: ref.read(apiProfileRepositoryProvider),
+      apiProfileGet: () async {
+        final id = await ttsProfiles.asrApiProfileId();
+        if (id.isEmpty) return null;
+        return ref.read(apiProfileRepositoryProvider).getById(id);
+      },
     ),
     custom: MimoAsrProvider(
       baseUrl: '',

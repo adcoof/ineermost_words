@@ -36,9 +36,12 @@ class MimoAsrProvider implements AsrProvider {
   final ApiProfileRepository chatProfilesRepo;
 
   /// 独立配置（语音界面「独立配置」档）：非空时优先于聊天配置。
-  /// mimo 档实例不注入（永远回落聊天配置），custom 档实例注入。
+  /// custom 档实例注入；mimo 档不注入。
   final Future<({String baseUrl, String apiKey, String model})?> Function()?
       customConfigGet;
+
+  /// 「语音 API 供应商」选择（mimo 档注入）：非空时优先于聊天默认。
+  final Future<ApiProfile?> Function()? apiProfileGet;
 
   AsrCallbacks? _callbacks;
   bool _recording = false;
@@ -50,6 +53,7 @@ class MimoAsrProvider implements AsrProvider {
     required this.model,
     required this.chatProfilesRepo,
     this.customConfigGet,
+    this.apiProfileGet,
     Dio? dio,
     AudioRecorder? recorder,
   })  : _dio = dio ??
@@ -93,6 +97,8 @@ class MimoAsrProvider implements AsrProvider {
     }
     final custom = await _customEndpoint();
     if (custom != null) return custom;
+    final selected = await apiProfileGet?.call();
+    if (selected != null) return selected;
     final chat = await chatProfilesRepo.getDefault();
     if (chat == null) {
       throw const AuthException('请先在设置中添加 API 供应商配置');
@@ -105,6 +111,7 @@ class MimoAsrProvider implements AsrProvider {
   Future<bool> canUse() async {
     if (baseUrl.trim().isNotEmpty) return true;
     if (await _customEndpoint() != null) return true;
+    if (await apiProfileGet?.call() != null) return true;
     return (await chatProfilesRepo.getDefault()) != null;
   }
 
