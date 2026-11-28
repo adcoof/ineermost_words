@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>心语 · 宣传海报（方版）</title>
+<style>
+  @page { margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --accent: #8E7CFF;
+    --accent-2: #4DC9FF;
+    --ink: #EDEBFF;
+    --muted: #9A94C0;
+  }
+  html, body { background: #050409; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    color: var(--ink);
+  }
+
+  .poster {
+    position: relative;
+    width: 1080px;
+    height: 1080px;
+    overflow: hidden;
+    background:
+      radial-gradient(58% 46% at 8% 2%, rgba(122, 92, 255, 0.34), transparent 72%),
+      radial-gradient(46% 40% at 98% 22%, rgba(56, 186, 255, 0.18), transparent 74%),
+      radial-gradient(62% 46% at 40% 112%, rgba(255, 118, 178, 0.16), transparent 72%),
+      linear-gradient(158deg, #0C0A1B 0%, #07060F 46%, #090714 100%);
+    isolation: isolate;
+  }
+  .poster::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 50px 50px;
+    mask-image: radial-gradient(76% 66% at 46% 36%, #000 18%, transparent 92%);
+    z-index: 0;
+  }
+  .poster::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='160' height='160' filter='url(%23n)' opacity='0.5'/></svg>");
+    opacity: 0.14;
+    mix-blend-mode: overlay;
+    z-index: 1;
+    pointer-events: none;
+  }
+  .layer { position: absolute; inset: 0; z-index: 2; }
+
+  .head {
+    position: absolute;
+    top: 36px;
+    left: 56px;
+    right: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+  }
+  .head__left { display: flex; align-items: center; gap: 10px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+  .head__left b { color: #C9C2EE; font-weight: 700; letter-spacing: 0.16em; }
+  .head__right { display: flex; align-items: center; gap: 10px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 6px 13px; border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 12px; letter-spacing: 0.06em; color: #CFC8F2;
+  }
+  .pill--violet { border-color: rgba(142, 124, 255, 0.45); background: rgba(142, 124, 255, 0.14); color: #D9D2FF; }
+
+  /* 主视觉 */
+  .logo { position: absolute; left: 56px; top: 118px; width: 252px; height: 252px; }
+  .logo__ring { position: absolute; border-radius: 50%; border: 1px dashed rgba(233, 229, 255, 0.16); }
+  .logo__ring--1 { inset: -20px; }
+  .logo__ring--2 { inset: -44px; border-style: solid; border-color: rgba(142, 124, 255, 0.16); }
+  .logo__glow {
+    position: absolute; inset: -34px; border-radius: 50%;
+    background: radial-gradient(circle at 50% 45%, rgba(142, 124, 255, 0.55), rgba(77, 201, 255, 0.18) 55%, transparent 72%);
+    filter: blur(18px);
+  }
+  .logo img { position: relative; width: 100%; height: 100%; border-radius: 50%; display: block; }
+
+  .brand { position: absolute; left: 352px; top: 128px; width: 672px; }
+  .brand h1 {
+    font-size: 116px; line-height: 0.94; font-weight: 900;
+    background: linear-gradient(103deg, #FFFFFF 6%, #D7CDFF 46%, #8E7CFF 96%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .brand__en { margin-top: 4px; font-size: 13px; letter-spacing: 0.5em; color: #B7AEE4; }
+  .brand__tag { margin-top: 24px; font-size: 30px; font-weight: 800; color: #F5F2FF; }
+  .brand__tag em { font-style: normal; color: var(--accent-2); }
+  .brand__sub { margin-top: 12px; font-size: 16px; line-height: 1.65; color: var(--muted); }
+
+  /* 功能 */
+  .feats {
+    position: absolute; left: 56px; right: 56px; top: 404px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+  }
+  .feat {
+    display: flex; gap: 12px;
+    padding: 18px 18px;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.085);
+    background: linear-gradient(158deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.018));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+  .feat__icon {
+    flex: none; width: 38px; height: 38px; border-radius: 11px;
+    display: grid; place-items: center;
+    background: linear-gradient(150deg, rgba(142, 124, 255, 0.32), rgba(77, 201, 255, 0.14));
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: #E4DEFF;
+  }
+  .feat__icon svg { width: 20px; height: 20px; fill: currentColor; }
+  .feat h3 { font-size: 20px; font-weight: 800; }
+  .feat p { margin-top: 5px; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+
+  /* 下载 */
+  .cta {
+    position: absolute; left: 56px; right: 56px; top: 668px; height: 246px;
+    border-radius: 28px; padding: 24px 30px;
+    display: flex; align-items: center; justify-content: space-between; gap: 26px;
+    border: 1px solid rgba(142, 124, 255, 0.32);
+    background:
+      radial-gradient(120% 130% at 8% 0%, rgba(142, 124, 255, 0.26), transparent 62%),
+      linear-gradient(150deg, rgba(28, 22, 58, 0.92), rgba(12, 10, 26, 0.94));
+    box-shadow: 0 26px 60px -40px rgba(142, 124, 255, 0.8);
+  }
+  .cta__label { font-size: 12px; letter-spacing: 0.3em; color: #A79FE0; }
+  .cta__title { margin-top: 8px; font-size: 30px; font-weight: 800; }
+  .cta__meta { margin-top: 8px; font-size: 14px; color: var(--muted); }
+  .cta__btns { display: flex; gap: 10px; margin-top: 16px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    height: 46px; padding: 0 20px; border-radius: 999px;
+    font-size: 15px; font-weight: 700;
+  }
+  .btn svg { width: 17px; height: 17px; fill: currentColor; }
+  .btn--main {
+    color: #120C26;
+    background: linear-gradient(96deg, #C9BFFF, #8E7CFF 55%, #4DC9FF);
+    box-shadow: 0 12px 30px -14px rgba(142, 124, 255, 0.9);
+  }
+  .btn--ghost { color: #E6E1FF; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.05); }
+
+  .qr { flex: none; display: flex; align-items: center; gap: 14px; }
+  .qr__card { width: 150px; height: 150px; padding: 10px; border-radius: 18px; background: #fff; box-shadow: 0 16px 34px -20px rgba(0, 0, 0, 0.9); }
+  .qr__card img { width: 100%; height: 100%; display: block; }
+  .qr__text { width: 138px; }
+  .qr__text b { display: block; font-size: 15px; }
+  .qr__text span { display: block; margin-top: 6px; font-size: 12px; line-height: 1.55; color: var(--muted); }
+
+  .foot {
+    position: absolute; left: 56px; right: 56px; bottom: 34px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 13px; color: #8C86B4; letter-spacing: 0.04em;
+  }
+  .foot__l { display: flex; align-items: center; gap: 10px; }
+  .foot__l img { width: 30px; height: 30px; border-radius: 8px; background: #fff; padding: 3px; }
+  .foot__l b { color: #CFC8F2; font-weight: 700; letter-spacing: 0.1em; }
+  .foot__r { display: flex; align-items: center; gap: 14px; }
+  .foot__r i { font-style: normal; width: 1px; height: 12px; background: rgba(255, 255, 255, 0.18); }
+</style>
+</head>
+<body>
+<div class="poster">
+  <div class="layer">
+    <div class="head">
+      <div class="head__left">
+        <span class="dot"></span>
+        <b>奇点重现工作室</b>
+        <span>· 开源安卓应用</span>
+      </div>
+      <div class="head__right">
+        <span class="pill">Android 7.0+</span>
+        <span class="pill pill--violet">v2.1.0</span>
+      </div>
+    </div>
+
+    <div class="logo">
+      <div class="logo__glow"></div>
+      <div class="logo__ring logo__ring--1"></div>
+      <div class="logo__ring logo__ring--2"></div>
+      <img src="../website/assets/img/icon-512.png" alt="心语">
+    </div>
+
+    <div class="brand">
+      <h1>心语</h1>
+      <div class="brand__en">INEERMOST_WORDS</div>
+      <div class="brand__tag">让每一次对话，都<em>怦然心动。</em></div>
+      <div class="brand__sub">自带 API 的 AI 角色扮演应用 · 数据只在本机</div>
+    </div>
+
+    <div class="feats">
+      <div class="feat">
+        <div class="feat__icon"><svg viewBox="0 0 24 24"><use href="#i-brain"/></svg></div>
+        <div><h3>跨会话记忆</h3><p>换一个会话，关系不会重置</p></div>
+      </div>
+      <div class="feat">
+        <div class="feat__icon"><svg viewBox="0 0 24 24"><use href="#i-paw"/></svg></div>
+        <div><h3>Live2D 桌宠</h3><p>情绪与动作实时驱动</p></div>
+      </div>
+      <div class="feat">
+        <div class="feat__icon"><svg viewBox="0 0 24 24"><use href="#i-mic"/></svg></div>
+        <div><h3>双向语音</h3><p>按住说话，逐句朗读</p></div>
+      </div>
+      <div class="feat">
+        <div class="feat__icon"><svg viewBox="0 0 24 24"><use href="#i-sticker"/></svg></div>
+        <div><h3>角色卡导入</h3><p>SillyTavern V2 一键导入</p></div>
+      </div>
+      <div class="feat">
+        <div class="feat__icon"><svg viewBox="0 0 24 24"><use href="#i-palette"/></svg></div>
+        <div><h3>五套主题</h3><p>深空紫 / 樱夜粉 / 青岚蓝…</p></div>
+      </div>
+      <div class="feat">
+        <div class="feat__icon"><svg viewBox="0 0 24 24"><use href="#i-shield"/></svg></div>
+        <div><h3>数据本地</h3><p>SQLite 存储，不上传</p></div>
+      </div>
+    </div>
+
+    <div class="cta">
+      <div>
+        <div class="cta__label">免费下载 · 开源</div>
+        <div class="cta__title">今晚，和一个会记得你的人说说话</div>
+        <div class="cta__meta">v2.1.0 · 约 79 MB · Android 7.0 及以上 · 木兰 PSL v2</div>
+        <div class="cta__btns">
+          <span class="btn btn--main"><svg viewBox="0 0 24 24"><use href="#i-download"/></svg>Gitee 下载</span>
+          <span class="btn btn--ghost"><svg viewBox="0 0 24 24"><use href="#i-download"/></svg>GitHub</span>
+        </div>
+      </div>
+      <div class="qr">
+        <div class="qr__card"><img src="assets/qr.png" alt="扫码下载"></div>
+        <div class="qr__text">
+          <b>扫码下载</b>
+          <span>ineermostwords<br>.sigborn.xyz</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <div class="foot__l">
+        <img src="../website/assets/img/studio-logo.png" alt="奇点重现工作室">
+        <b>奇点重现工作室</b>
+        <span>sigborn.xyz</span>
+      </div>
+      <div class="foot__r">
+        <span>ineermostwords.sigborn.xyz</span>
+        <i></i>
+        <span>开源免费</span>
+        <i></i>
+        <span>Powered by Live2D</span>
+      </div>
+    </div>
+  </div>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-brain" viewBox="0 0 24 24"><path d="M9.2 3.2A3.4 3.4 0 0 0 5.8 6.6c-1.6.5-2.8 2-2.8 3.8 0 1 .4 1.9 1 2.6a3.9 3.9 0 0 0 1.5 5.7 3.5 3.5 0 0 0 6.2 1.7V5.1a3.4 3.4 0 0 0-2.5-1.9Zm5.6 0a3.4 3.4 0 0 1 3.4 3.4c1.6.5 2.8 2 2.8 3.8 0 1-.4 1.9-1 2.6a3.9 3.9 0 0 1-1.5 5.7 3.5 3.5 0 0 1-6.2 1.7V5.1a3.4 3.4 0 0 1 2.5-1.9Z"/></symbol>
+    <symbol id="i-paw" viewBox="0 0 24 24"><path d="M7.2 4.6a2.1 2.1 0 0 1 3 .5c.5.7.7 1.6.5 2.4-.2.9-.8 1.6-1.6 1.9a2.1 2.1 0 0 1-2.6-1.3c-.4-1.3.1-2.6.7-3.5Zm9.6 0c.6.9 1.1 2.2.7 3.5a2.1 2.1 0 0 1-2.6 1.3 2.5 2.5 0 0 1-1.6-1.9c-.2-.8 0-1.7.5-2.4a2.1 2.1 0 0 1 3-.5ZM3.9 9.9A2 2 0 0 1 6.5 11c.5 1.3-.2 2.6-1.4 3a2 2 0 0 1-2.5-1.5c-.3-1.2.3-2.2 1.3-2.6Zm16.2 0c1 .4 1.6 1.4 1.3 2.6a2 2 0 0 1-2.5 1.5c-1.2-.4-1.9-1.7-1.4-3a2 2 0 0 1 2.6-1.1ZM12 12.4c2.7 0 5.3 2.4 5.3 4.9 0 1.8-1.3 3-3.2 3-1 0-1.5-.4-2.1-.4s-1.1.4-2.1.4c-1.9 0-3.2-1.2-3.2-3 0-2.5 2.6-4.9 5.3-4.9Z"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 2.5a3.6 3.6 0 0 1 3.6 3.6v5.2a3.6 3.6 0 1 1-7.2 0V6.1A3.6 3.6 0 0 1 12 2.5Zm7 8.7a1 1 0 0 1 1 1 8 8 0 0 1-7 7.94V21.5h2.5a1 1 0 1 1 0 2h-7a1 1 0 1 1 0-2H11v-1.36a8 8 0 0 1-7-7.94 1 1 0 1 1 2 0 6 6 0 0 0 12 0 1 1 0 0 1 1-1Z"/></symbol>
+    <symbol id="i-sticker" viewBox="0 0 24 24"><path d="M13.4 2.1a10 10 0 1 0 8.5 8.5h-5.8a3 3 0 0 1-3-3V2.4c.1-.1.2-.2.3-.3ZM15.4 2v5.6a1 1 0 0 0 1 1h5.6a10 10 0 0 0-6.6-6.6Z"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 2.4a9.6 9.6 0 0 0 0 19.2c1.5 0 2.4-.9 2.4-2.1 0-.6-.2-1-.5-1.5-.3-.5-.5-.9-.5-1.4 0-1.2.9-2 2.2-2h1.7c2.5 0 4.3-1.9 4.3-4.4 0-4.3-4.3-7.8-9.6-7.8Zm-5.2 9.3a1.6 1.6 0 1 1 0-3.2 1.6 1.6 0 0 1 0 3.2Zm3.4-4.6a1.6 1.6 0 1 1 0-3.2 1.6 1.6 0 0 1 0 3.2Zm5 0a1.6 1.6 0 1 1 0-3.2 1.6 1.6 0 0 1 0 3.2Zm3.2 3.6a1.6 1.6 0 1 1 0-3.2 1.6 1.6 0 0 1 0 3.2Z"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2.2 4.6 5a1.4 1.4 0 0 0-.9 1.3v5.5c0 5 3.3 8.5 7.8 10.1.3.1.7.1 1 0 4.5-1.6 7.8-5.1 7.8-10.1V6.3a1.4 1.4 0 0 0-.9-1.3L12 2.2Zm4 6.9-5 5a1 1 0 0 1-1.4 0l-2.2-2.2a1 1 0 1 1 1.4-1.4l1.5 1.5 4.3-4.3a1 1 0 1 1 1.4 1.4Z"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 2.6a1.15 1.15 0 0 1 1.15 1.15v9.2l2.9-2.9a1.15 1.15 0 1 1 1.63 1.63l-4.86 4.86a1.15 1.15 0 0 1-1.63 0L6.33 11.7a1.15 1.15 0 1 1 1.63-1.63l2.9 2.9v-9.2A1.15 1.15 0 0 1 12 2.6ZM4.2 19a1.15 1.15 0 0 1 1.15 1.15v.1h13.3v-.1a1.15 1.15 0 1 1 2.3 0v1.25c0 .64-.52 1.15-1.15 1.15H3.05a1.15 1.15 0 0 1-1.15-1.15V20.15A1.15 1.15 0 0 1 4.2 19Z"/></symbol>
+  </svg>
+</div>
+</body>
+</html>
