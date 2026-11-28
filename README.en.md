@@ -63,8 +63,8 @@
 
 - Hold to talk; release to recognize and send directly; tap the mic during playback to interrupt
 - **Voice Workshop**: design a custom voice from a one-line description (e.g. "a sweet, gentle young female voice") via MiMo `voicedesign` — preview, store multiple voices, and pick them alongside the built-in ones
-- **Separate chat / TTS / ASR providers**: pick a different API profile for voice than for text chat — e.g. DeepSeek for chat and MiMo for TTS/ASR
-- **Per-engine API config**: the OpenAI TTS option and the ASR "custom endpoint" option each have their own base URL / key / model fields; the MiMo option can use a dedicated API profile (or follow the chat default)
+- **Separate chat / TTS / ASR providers**: pick a different API profile for voice than for text chat — with DeepSeek for chat, TTS/ASR default to MiMo automatically and never send voice requests to a text-only provider
+- **Per-engine API config**: the OpenAI TTS option and the ASR "custom endpoint" option each have their own base URL / key / model fields; the MiMo option can use a dedicated API profile (or auto-pick a MiMo profile)
 - TTS input automatically strips `<tags>` — markup is never spoken
 - Pipelined synthesis queue (sentence N+1 is synthesized while sentence N plays) for near-seamless continuity
 - 9 MiMo voices plus custom workshop voices, speech rate 0.5–2.0×
@@ -86,7 +86,7 @@
 
 ## Recent Updates
 
-- **v2.2 (in development)**: group member panel (mute / reorder / add / remove), Force Talk, all enabled members replying to one user message with configurable 0–3 auto-banter turns, a per-member API provider/model picker (multiple models in one group), group header avatars, and speaker attribution for split replies; schema v20; 484 tests
+- **v2.2 (in development)**: group member panel (mute / reorder / add / remove), Force Talk, all enabled members replying to one user message with configurable 0–3 auto-banter turns, a per-member API provider/model picker (multiple models in one group), group header avatars, and speaker attribution for split replies; schema v20; 486 tests
 - **v2.1**: full character profiles, SillyTavern V1/V2/V3 import and V2/V3/PNG export with unknown-field preservation, automatic version snapshots, three-tab editor, alternate greetings, tags, profile token estimate, four-tab navigation and asset hub, 360dp narrow-screen layout, instant context usage on open, independent TTS/ASR API providers, and message avatars; schema v17; 471 tests
 - **v2.0**: multi-character group chats (one speaker per turn, speaker names in bubbles) and chat branching (copy a message prefix into a new conversation, keeping participants and parent pointers); schema v16; 416 tests
 - **v1.9**: keyword-triggered lorebook injection and on-demand long-term memory recall; lorebook import from SillyTavern `character_book`
@@ -117,7 +117,7 @@ flutter build apk --release
 ## Configuration
 
 1. **Add an API provider**: Settings → API Providers → enter the base URL (e.g. `https://api.xxx.com/v1`, without `/chat/completions`) and key; connection test available
-2. **Voice works out of the box**: TTS/ASR default to MiMo Cloud, reusing the default chat API profile; switch engines and voices in Settings → Voice, or fill in dedicated endpoints for OpenAI TTS / custom ASR
+2. **Voice works out of the box**: TTS/ASR default to MiMo Cloud using a MiMo API profile automatically (decoupled from the chat model); switch engines and voices in Settings → Voice, or fill in dedicated endpoints for OpenAI TTS / custom ASR
 3. MiMo platform notes (verified in practice):
    - Keys only work on `https://token-plan-cn.xiaomimimo.com/v1` (`api.xiaomimimo.com` returns 401)
    - TTS uses `chat/completions` with an `audio` parameter (**not** `/audio/speech`); exactly 9 voices are available
@@ -150,7 +150,7 @@ assets/
 
 ```bash
 flutter analyze   # static checks
-flutter test      # 484 cases: SSE/tag parsing, splitting and fallback, prompt budgets, sticker mapping, voice queue, auto-scroll, migrations, memory summarizer, lorebook recall, character profiles and versions, card import/export, PNG tEXt, voice providers, message avatars, group roster, auto-banter, per-member providers, …
+flutter test      # 486 cases: SSE/tag parsing, splitting and fallback, prompt budgets, sticker mapping, voice queue, auto-scroll, migrations, memory summarizer, lorebook recall, character profiles and versions, card import/export, PNG tEXt, voice providers, message avatars, group roster, auto-banter, per-member providers, …
 ```
 
 ## Acknowledgments & Copyright

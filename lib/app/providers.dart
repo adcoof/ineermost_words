@@ -29,6 +29,7 @@ import '../features/voice/data/resolving_asr_provider.dart';
 import '../features/voice/data/resolving_tts_provider.dart';
 import '../features/voice/data/speech_to_text_asr_provider.dart';
 import '../features/voice/data/tts_profile_repository.dart';
+import '../features/voice/data/voice_profile_resolution.dart';
 import '../features/voice/domain/asr_provider.dart';
 import 'theme.dart' show ThemePalette, themePaletteOf;
 
@@ -75,10 +76,10 @@ final appSettingsRepositoryProvider = Provider<AppSettingsRepository>(
 ///
 /// autoDispose：页面卸载即退订 drift watch（否则 ProviderScope 常驻
 /// 订阅，测试里 db.close() 会等不到完成而挂死）。
-final conversationsStreamProvider = StreamProvider.autoDispose<
-    List<Conversation>>(
-  (ref) => ref.watch(chatRepositoryProvider).watchConversations(),
-);
+final conversationsStreamProvider =
+    StreamProvider.autoDispose<List<Conversation>>(
+      (ref) => ref.watch(chatRepositoryProvider).watchConversations(),
+    );
 
 /// 角色流（updatedAt 倒序），会话列表页头像条消费。
 final charactersStreamProvider = StreamProvider.autoDispose<List<Character>>(
@@ -126,29 +127,27 @@ final speechSinkProvider = Provider<AssistantSpeechSink>(
   (ref) => ref.watch(voiceOrchestratorProvider),
 );
 
-/// ASR：按设置选引擎（'mimo' 使用选择的语音 API 供应商 / 'custom' 独立配置 /
-/// 'system' 本机），启动失败自动回退。mimo 档未选择供应商时回落聊天默认；
-/// custom 档注入独立配置（settings KV）。
+/// ASR：按设置选引擎（'mimo' 使用语音供应商 / 'custom' 独立配置 /
+/// 'system' 本机），启动失败自动回退。mimo 档显式选择或自动挑 MiMo，
+/// 与文本聊天模型解耦；custom 档注入独立配置（settings KV）。
 final asrProviderProvider = Provider<AsrProvider>((ref) {
   final ttsProfiles = ref.read(ttsProfileRepositoryProvider);
+  final apiProfiles = ref.read(apiProfileRepositoryProvider);
   return ResolvingAsrProvider(
     engineGet: () => ttsProfiles.asrEngine(),
     mimo: MimoAsrProvider(
       baseUrl: '',
       apiKey: '',
       model: '',
-      chatProfilesRepo: ref.read(apiProfileRepositoryProvider),
       apiProfileGet: () async {
         final id = await ttsProfiles.asrApiProfileId();
-        if (id.isEmpty) return null;
-        return ref.read(apiProfileRepositoryProvider).getById(id);
+        return resolveVoiceApiProfile(repo: apiProfiles, selectedId: id);
       },
     ),
     custom: MimoAsrProvider(
       baseUrl: '',
       apiKey: '',
       model: '',
-      chatProfilesRepo: ref.read(apiProfileRepositoryProvider),
       customConfigGet: () async {
         final c = await ttsProfiles.asrCustomConfig();
         return (baseUrl: c.baseUrl, apiKey: c.apiKey, model: c.model);
@@ -164,27 +163,31 @@ final chatApiClientProvider = Provider<ChatApiClient>(
 
 /// 跨会话记忆摘要器（每次回复完成后 fire-and-forget 触发）。
 final memorySummarizerProvider = Provider<MemorySummarizer>(
-    (ref) => MemorySummarizer(
-          chatRepo: ref.watch(chatRepositoryProvider),
-          characterRepo: ref.watch(characterRepositoryProvider),
-          profileRepo: ref.watch(apiProfileRepositoryProvider),
-          api: ref.watch(chatApiClientProvider),
-        ));
+  (ref) => MemorySummarizer(
+    chatRepo: ref.watch(chatRepositoryProvider),
+    characterRepo: ref.watch(characterRepositoryProvider),
+    profileRepo: ref.watch(apiProfileRepositoryProvider),
+    api: ref.watch(chatApiClientProvider),
+  ),
+);
 
 /// 会话标题优化器（首条回复完成后 fire-and-forget 触发）。
-final titleGeneratorProvider = Provider<TitleGenerator>((ref) => TitleGenerator(
-      chatRepo: ref.watch(chatRepositoryProvider),
-      profileRepo: ref.watch(apiProfileRepositoryProvider),
-      api: ref.watch(chatApiClientProvider),
-    ));
+final titleGeneratorProvider = Provider<TitleGenerator>(
+  (ref) => TitleGenerator(
+    chatRepo: ref.watch(chatRepositoryProvider),
+    profileRepo: ref.watch(apiProfileRepositoryProvider),
+    api: ref.watch(chatApiClientProvider),
+  ),
+);
 
 /// 图片消息概括器（带图消息入库后 fire-and-forget 与回复并行触发）。
 final imageCaptionServiceProvider = Provider<ImageCaptionService>(
-    (ref) => ImageCaptionService(
-          chatRepo: ref.watch(chatRepositoryProvider),
-          profileRepo: ref.watch(apiProfileRepositoryProvider),
-          api: ref.watch(chatApiClientProvider),
-        ));
+  (ref) => ImageCaptionService(
+    chatRepo: ref.watch(chatRepositoryProvider),
+    profileRepo: ref.watch(apiProfileRepositoryProvider),
+    api: ref.watch(chatApiClientProvider),
+  ),
+);
 
 /// 当前主题调色板（设置页切换后 invalidate 即全局生效）。
 final themePaletteProvider = FutureProvider<ThemePalette>((ref) async {
@@ -192,5 +195,6 @@ final themePaletteProvider = FutureProvider<ThemePalette>((ref) async {
   return themePaletteOf(await repo.themeKey());
 });
 
-final chatControllerProvider =
-    NotifierProvider<ChatController, ChatUiState>(ChatController.new);
+final chatControllerProvider = NotifierProvider<ChatController, ChatUiState>(
+  ChatController.new,
+);

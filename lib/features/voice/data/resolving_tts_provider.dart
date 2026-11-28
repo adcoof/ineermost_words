@@ -20,6 +20,7 @@ import 'mimo_tts_provider.dart';
 import 'openai_tts_provider.dart';
 import 'system_tts_provider.dart';
 import 'tts_profile_repository.dart';
+import 'voice_profile_resolution.dart';
 
 class ResolvingTtsProvider implements TtsProvider {
   final TtsProfileRepository profiles;
@@ -34,12 +35,10 @@ class ResolvingTtsProvider implements TtsProvider {
 
   bool _ensured = false;
 
-  /// 解析 TTS 使用的 API 供应商：优先「语音 API 供应商」，空则跟聊天默认。
+  /// 解析 TTS 使用的 API 供应商：显式选择 > 自动挑 MiMo；不回落聊天供应商。
   Future<ApiProfile?> resolveVoiceProfile() async {
     final id = await profiles.ttsApiProfileId();
-    if (id.isEmpty) return chatProfiles.getDefault();
-    final selected = await chatProfiles.getById(id);
-    return selected ?? await chatProfiles.getDefault();
+    return resolveVoiceApiProfile(repo: chatProfiles, selectedId: id);
   }
 
   Future<({TtsProvider primary, ApiProfile? voice})> _primaryWithVoice() async {
@@ -47,9 +46,11 @@ class ResolvingTtsProvider implements TtsProvider {
     if (!_ensured) {
       _ensured = true;
       await profiles.ensureMimoDefault(
-          () async => (await chatProfiles.getDefault()) != null);
+        () async => (await chatProfiles.getDefault()) != null,
+      );
     }
-    final profile = await profiles.getDefault() ??
+    final profile =
+        await profiles.getDefault() ??
         // 无已存 profile：有聊天配置走 MiMo，否则 Edge 开箱即用。
         ((await chatProfiles.getDefault()) != null
             ? profiles.builtinMimo()
@@ -57,17 +58,16 @@ class ResolvingTtsProvider implements TtsProvider {
     final voice = await resolveVoiceProfile();
     final TtsProvider primary = switch (profile.provider) {
       'mimo' => MimoTtsProvider(
-          baseUrl: voice?.baseUrl ?? '',
-          apiKey: voice?.apiKey ?? '',
-          model: profile.model,
-          chatProfilesRepo: chatProfiles,
-        ),
+        baseUrl: voice?.baseUrl ?? '',
+        apiKey: voice?.apiKey ?? '',
+        model: profile.model,
+      ),
       'openai' => OpenAiTtsProvider(
-          baseUrl: profile.baseUrl,
-          apiKey: profile.apiKey,
-          model: profile.model,
-          chatProfilesRepo: chatProfiles,
-        ),
+        baseUrl: profile.baseUrl,
+        apiKey: profile.apiKey,
+        model: profile.model,
+        chatProfilesRepo: chatProfiles,
+      ),
       'system' => SystemTtsProvider(),
       _ => EdgeTtsProvider(),
     };
@@ -96,7 +96,6 @@ class ResolvingTtsProvider implements TtsProvider {
         baseUrl: voice?.baseUrl ?? '',
         apiKey: voice?.apiKey ?? '',
         model: '',
-        chatProfilesRepo: chatProfiles,
       ),
       EdgeTtsProvider(),
       SystemTtsProvider(),
@@ -111,8 +110,9 @@ class ResolvingTtsProvider implements TtsProvider {
         : legs;
     // 按 providerId 去重保持顺序。
     final seen = <String>{};
-    final unique =
-        ordered.where((p) => seen.add(p.providerId)).toList(growable: false);
+    final unique = ordered
+        .where((p) => seen.add(p.providerId))
+        .toList(growable: false);
     Object? lastError;
     for (final p in unique) {
       try {
@@ -126,7 +126,9 @@ class ResolvingTtsProvider implements TtsProvider {
     // 只拼面向用户的 message；原始异常留在 cause，不进 UI。
     final detail = lastError is AppException ? lastError.message : '未知错误';
     throw UnknownException(
-        '语音合成失败（已尝试 ${unique.length} 个引擎）：$detail', lastError);
+      '语音合成失败（已尝试 ${unique.length} 个引擎）：$detail',
+      lastError,
+    );
   }
 
   static const customVoicePrefix = 'custom:';
@@ -135,11 +137,14 @@ class ResolvingTtsProvider implements TtsProvider {
   /// 查不到（已删除）时只复位 voiceId，按默认音色处理。
   /// 已带显式 voiceDesign（未保存的试听）时直接透传。
   static Future<TtsRequest> resolveCustomVoice(
-      CustomVoiceRepository repo, TtsRequest req) async {
+    CustomVoiceRepository repo,
+    TtsRequest req,
+  ) async {
     if (req.voiceDesign.trim().isNotEmpty) return req;
     if (!req.voiceId.startsWith(customVoicePrefix)) return req;
-    final voice =
-        await repo.getById(req.voiceId.substring(customVoicePrefix.length));
+    final voice = await repo.getById(
+      req.voiceId.substring(customVoicePrefix.length),
+    );
     return TtsRequest(
       text: req.text,
       voiceId: '',
@@ -170,6 +175,5 @@ class ResolvingTtsProvider implements TtsProvider {
   }
 
   @override
-  Future<List<TtsVoice>> listVoices() async =>
-      (await _primary()).listVoices();
+  Future<List<TtsVoice>> listVoices() async => (await _primary()).listVoices();
 }

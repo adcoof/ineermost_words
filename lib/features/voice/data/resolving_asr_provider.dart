@@ -1,4 +1,4 @@
-/// 按设置选择 ASR 引擎（'mimo' 复用聊天配置 / 'custom' 独立配置 / 'system' 本机），
+/// 按设置选择 ASR 引擎（'mimo' 语音供应商 / 'custom' 独立配置 / 'system' 本机），
 /// 启动失败且尚无结果时自动回退另一引擎；
 /// 回退只在 start 阶段发生（初始化失败场景），识别中途出错、
 /// stop/cancel 之后的错误直接上报，避免松手后再开一路僵尸识别会话。
@@ -13,7 +13,7 @@ class ResolvingAsrProvider implements AsrProvider {
   /// 读取设置里的 ASR 引擎（'mimo' | 'custom' | 'system'）。
   final Future<String> Function() engineGet;
 
-  /// 复用聊天配置的云端实例（'mimo' 档）。
+  /// 语音供应商的云端实例（'mimo' 档，默认自动 MiMo）。
   final MimoAsrProvider mimo;
 
   /// 独立配置的云端实例（'custom' 档）。
@@ -51,7 +51,7 @@ class ResolvingAsrProvider implements AsrProvider {
     final engine = await engineGet();
     late final AsrProvider primary;
     AsrProvider? secondary;
-    // 云端腿：按档位选实例（custom 档未配独立配置时自动回落聊天配置）。
+    // 云端腿：按档位选实例（custom 档未配独立配置时回落语音供应商）。
     final cloud = engine == 'custom' ? custom : mimo;
     if (engine == 'system') {
       primary = system;
@@ -114,12 +114,14 @@ class ResolvingAsrProvider implements AsrProvider {
   }
 
   /// 启动备引擎；备引擎再抛就透传给 onError（不向外抛）。
-  Future<void> _startSecondary(AsrProvider secondary, AsrCallbacks callbacks) async {
+  Future<void> _startSecondary(
+    AsrProvider secondary,
+    AsrCallbacks callbacks,
+  ) async {
     try {
       await secondary.start(callbacks);
     } catch (e) {
-      callbacks.onError(
-          e is AppException ? e : UnknownException('识别启动失败', e));
+      callbacks.onError(e is AppException ? e : UnknownException('识别启动失败', e));
     }
   }
 

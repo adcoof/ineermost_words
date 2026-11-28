@@ -10,7 +10,8 @@
 /// audio 只带 format（无 voice 参数）。实测（2026-10-24）该接口无需音色 ID，
 /// 描述即音色，每次合成独立采样。
 ///
-/// baseUrl/apiKey 为空时回落到默认聊天 API 配置（同源同 Key）。
+/// baseUrl/apiKey 由语音供应商解析器注入（默认优先 MiMo），
+/// 不回落到文本聊天配置——文本模型（如 DeepSeek）不支持语音接口。
 library;
 
 import 'dart:convert';
@@ -20,29 +21,30 @@ import 'package:dio/dio.dart';
 import '../../../core/errors/app_exception.dart';
 import '../../chat/data/chat_api_client.dart'
     show OpenAiChatApiClient, mapDioException;
-import '../../settings/data/api_profile_repository.dart';
 import '../../settings/domain/api_profile.dart';
 import '../domain/tts_provider.dart';
 
 class MimoTtsProvider implements TtsProvider {
   final Dio _dio;
 
-  /// 该 TTS 专用配置（可为空，回落到默认聊天配置）。
+  /// 语音供应商配置（由 [ResolvingTtsProvider] 解析后注入）。
   final String baseUrl;
   final String apiKey;
   final String model;
-  final ApiProfileRepository chatProfilesRepo;
 
   MimoTtsProvider({
     required this.baseUrl,
     required this.apiKey,
     required this.model,
-    required this.chatProfilesRepo,
     Dio? dio,
-  }) : _dio = dio ??
-            Dio(BaseOptions(
-                connectTimeout: const Duration(seconds: 15),
-                receiveTimeout: const Duration(seconds: 60)));
+  }) : _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               connectTimeout: const Duration(seconds: 15),
+               receiveTimeout: const Duration(seconds: 60),
+             ),
+           );
 
   @override
   String get providerId => 'mimo';
@@ -69,24 +71,20 @@ class MimoTtsProvider implements TtsProvider {
   /// 静态发音人清单。
   static List<TtsVoice> get staticVoices => _voices;
 
-  Future<ApiProfile> _resolveEndpoint() async {
-    if (baseUrl.trim().isNotEmpty) {
-      return ApiProfile(
-        id: '',
-        name: '',
-        baseUrl: baseUrl.trim(),
-        apiKey: apiKey.trim(),
-        model: model,
-        temperature: 1.0,
-        extraHeaders: '{}',
-        isDefault: false,
-      );
+  ApiProfile _resolveEndpoint() {
+    if (baseUrl.trim().isEmpty) {
+      throw const AuthException('请先在「语音」中选择 MiMo API 供应商');
     }
-    final chat = await chatProfilesRepo.getDefault();
-    if (chat == null) {
-      throw const AuthException('请先在设置中添加 API 供应商配置');
-    }
-    return chat;
+    return ApiProfile(
+      id: '',
+      name: '',
+      baseUrl: baseUrl.trim(),
+      apiKey: apiKey.trim(),
+      model: model,
+      temperature: 1.0,
+      extraHeaders: '{}',
+      isDefault: false,
+    );
   }
 
   /// 风格描述：基础对话语气 + 语速提示（audio 参数不支持 speed）。
@@ -111,7 +109,7 @@ class MimoTtsProvider implements TtsProvider {
 
   @override
   Future<TtsAudio> synthesize(TtsRequest req, {CancelToken? cancel}) async {
-    final endpoint = await _resolveEndpoint();
+    final endpoint = _resolveEndpoint();
     // 音色设计：描述进 user 消息、文本进 assistant 消息，无需 voice 参数。
     final design = req.voiceDesign.trim();
     final isDesign = design.isNotEmpty;
@@ -125,7 +123,9 @@ class MimoTtsProvider implements TtsProvider {
           'messages': [
             {
               'role': 'user',
-              'content': isDesign ? designFor(design, req.speed) : styleFor(req.speed),
+              'content': isDesign
+                  ? designFor(design, req.speed)
+                  : styleFor(req.speed),
             },
             {'role': 'assistant', 'content': req.text},
           ],

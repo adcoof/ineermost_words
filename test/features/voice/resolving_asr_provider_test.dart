@@ -47,8 +47,7 @@ class _FakeMimo implements MimoAsrProvider {
   Future<void> cancel() async {}
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _FakeSystem implements SpeechToTextAsrProvider {
@@ -75,8 +74,7 @@ class _FakeSystem implements SpeechToTextAsrProvider {
   Future<void> cancel() async {}
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 void main() {
@@ -125,8 +123,7 @@ void main() {
     expect(errors, isEmpty);
   });
 
-  test('stop 期间主引擎报错：直接上报真实错误，不得再开备引擎（僵尸会话回归）',
-      () async {
+  test('stop 期间主引擎报错：直接上报真实错误，不得再开备引擎（僵尸会话回归）', () async {
     final r = makeResolver();
     await r.start(cbs);
     expect(system.started, isFalse);
@@ -134,8 +131,7 @@ void main() {
     mimo.stopError = const ServerException('识别请求失败：audio too short', null, 400);
     await r.stop();
 
-    expect(system.started, isFalse,
-        reason: '松手/stop 之后不得再启动备引擎（僵尸识别会话）');
+    expect(system.started, isFalse, reason: '松手/stop 之后不得再启动备引擎（僵尸识别会话）');
     expect(errors, hasLength(1), reason: '真实错误必须可见，不得被吞');
     expect(errors.single.message, contains('识别请求失败'));
   });
@@ -160,8 +156,7 @@ void main() {
     expect(errors, hasLength(1));
   });
 
-  test('成功路径：stop 期间 onFinal 照常透传（chat_input_bar 无需改动的前提）',
-      () async {
+  test('成功路径：stop 期间 onFinal 照常透传（chat_input_bar 无需改动的前提）', () async {
     final r = makeResolver();
     await r.start(cbs);
     mimo.finalOnStop = '你好';

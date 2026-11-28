@@ -34,14 +34,13 @@ class SystemTtsProvider implements TtsProvider {
         // 引擎不支持指定语音时用默认。
       }
     }
-    final dir = Directory(
-        (await getTemporaryDirectory()).path);
+    final dir = Directory((await getTemporaryDirectory()).path);
     final file = File(
-        '${dir.path}/tts_${DateTime.now().millisecondsSinceEpoch}.wav');
+      '${dir.path}/tts_${DateTime.now().millisecondsSinceEpoch}.wav',
+    );
     try {
       final result = await _tts.synthesizeToFile(req.text, file.path);
-      if (result != 1 || !await file.exists() ||
-          await file.length() == 0) {
+      if (result != 1 || !await file.exists() || await file.length() == 0) {
         throw const UnknownException('系统 TTS 合成失败（设备可能未安装语音引擎）');
       }
       final Uint8List bytes = await file.readAsBytes();
@@ -61,8 +60,10 @@ class SystemTtsProvider implements TtsProvider {
         return [
           for (final v in voices)
             if (v is Map && v['name'] != null)
-              TtsVoice(v['name'].toString(),
-                  '${v['name']} (${v['locale'] ?? ''})'),
+              TtsVoice(
+                v['name'].toString(),
+                '${v['name']} (${v['locale'] ?? ''})',
+              ),
         ];
       }
     } catch (_) {}

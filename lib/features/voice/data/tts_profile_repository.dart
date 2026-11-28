@@ -41,18 +41,17 @@ class TtsProfile {
     String? apiKey,
     String? baseUrl,
     bool? isDefault,
-  }) =>
-      TtsProfile(
-        id: id,
-        name: name ?? this.name,
-        provider: provider ?? this.provider,
-        voiceId: voiceId ?? this.voiceId,
-        speed: speed ?? this.speed,
-        model: model ?? this.model,
-        apiKey: apiKey ?? this.apiKey,
-        baseUrl: baseUrl ?? this.baseUrl,
-        isDefault: isDefault ?? this.isDefault,
-      );
+  }) => TtsProfile(
+    id: id,
+    name: name ?? this.name,
+    provider: provider ?? this.provider,
+    voiceId: voiceId ?? this.voiceId,
+    speed: speed ?? this.speed,
+    model: model ?? this.model,
+    apiKey: apiKey ?? this.apiKey,
+    baseUrl: baseUrl ?? this.baseUrl,
+    isDefault: isDefault ?? this.isDefault,
+  );
 }
 
 class TtsProfileRepository {
@@ -76,34 +75,41 @@ class TtsProfileRepository {
 
   /// 无配置时返回 Edge 默认（开箱即用）。
   TtsProfile builtinEdge() => const TtsProfile(
-        id: 'builtin-edge',
-        name: 'Edge 免费语音',
-        provider: 'edge',
-        voiceId: 'zh-CN-XiaoxiaoNeural',
-        isDefault: true,
-      );
+    id: 'builtin-edge',
+    name: 'Edge 免费语音',
+    provider: 'edge',
+    voiceId: 'zh-CN-XiaoxiaoNeural',
+    isDefault: true,
+  );
 
   /// 内置 MiMo 默认（云端，默认引擎）。
   TtsProfile builtinMimo() => const TtsProfile(
-        id: 'builtin-mimo',
-        name: 'MiMo 语音',
-        provider: 'mimo',
-        voiceId: 'mimo_default',
-        model: 'mimo-v2.5-tts',
-        isDefault: true,
-      );
+    id: 'builtin-mimo',
+    name: 'MiMo 语音',
+    provider: 'mimo',
+    voiceId: 'mimo_default',
+    model: 'mimo-v2.5-tts',
+    isDefault: true,
+  );
 
   /// 一次性迁移：把默认 TTS 覆盖为 MiMo（用户明确指示“使用 mimo-v2.5-tts”）。
   /// 用 settings KV 'tts_mimo_migrated' 做标记，只迁移这一次，
   /// 之后用户在设置里改什么就尊重什么。
-  Future<void> ensureMimoDefault(Future<bool> Function() chatProfileExists) async {
-    final q = db.select(db.settings)..where((t) => t.key.equals('tts_mimo_migrated'));
+  Future<void> ensureMimoDefault(
+    Future<bool> Function() chatProfileExists,
+  ) async {
+    final q = db.select(db.settings)
+      ..where((t) => t.key.equals('tts_mimo_migrated'));
     if (await q.getSingleOrNull() != null) return;
     // 先写标记：迁移只跑一次，中途失败也不重复覆盖用户选择。
-    await db.into(db.settings).insertOnConflictUpdate(const SettingsCompanion(
-          key: Value('tts_mimo_migrated'),
-          value: Value('1'),
-        ));
+    await db
+        .into(db.settings)
+        .insertOnConflictUpdate(
+          const SettingsCompanion(
+            key: Value('tts_mimo_migrated'),
+            value: Value('1'),
+          ),
+        );
     final existing = await getDefault();
     if (existing == null) {
       if (await chatProfileExists()) {
@@ -113,18 +119,21 @@ class TtsProfileRepository {
     }
     if (existing.provider == 'mimo') return;
     // 之前因没声音被迫选的 system/edge：覆盖为 MiMo。
-    await save(existing.copyWith(
-      provider: 'mimo',
-      voiceId: 'mimo_default',
-      model: 'mimo-v2.5-tts',
-      name: 'MiMo 语音',
-      isDefault: true,
-    ));
+    await save(
+      existing.copyWith(
+        provider: 'mimo',
+        voiceId: 'mimo_default',
+        model: 'mimo-v2.5-tts',
+        name: 'MiMo 语音',
+        isDefault: true,
+      ),
+    );
   }
 
   Future<void> save(TtsProfile profile) async {
     if (profile.isDefault) {
-      await (db.update(db.ttsProfiles)..where((t) => t.id.equals(profile.id).not()))
+      await (db.update(db.ttsProfiles)
+            ..where((t) => t.id.equals(profile.id).not()))
           .write(const TtsProfilesCompanion(isDefault: Value(false)));
     }
     await db.into(db.ttsProfiles).insertOnConflictUpdate(_toRow(profile));
@@ -144,10 +153,14 @@ class TtsProfileRepository {
   }
 
   Future<void> setVoiceEnabled(bool enabled) async {
-    await db.into(db.settings).insertOnConflictUpdate(SettingsCompanion(
-      key: Value(kVoiceEnabledSetting),
-      value: Value(enabled ? '1' : '0'),
-    ));
+    await db
+        .into(db.settings)
+        .insertOnConflictUpdate(
+          SettingsCompanion(
+            key: Value(kVoiceEnabledSetting),
+            value: Value(enabled ? '1' : '0'),
+          ),
+        );
   }
 
   Future<double> voiceSpeed() async {
@@ -157,10 +170,14 @@ class TtsProfileRepository {
   }
 
   Future<void> setVoiceSpeed(double speed) async {
-    await db.into(db.settings).insertOnConflictUpdate(SettingsCompanion(
-      key: const Value('voice_speed'),
-      value: Value(speed.toStringAsFixed(2)),
-    ));
+    await db
+        .into(db.settings)
+        .insertOnConflictUpdate(
+          SettingsCompanion(
+            key: const Value('voice_speed'),
+            value: Value(speed.toStringAsFixed(2)),
+          ),
+        );
   }
 
   Future<String> asrLocale() async {
@@ -170,14 +187,18 @@ class TtsProfileRepository {
   }
 
   Future<void> setAsrLocale(String locale) async {
-    await db.into(db.settings).insertOnConflictUpdate(SettingsCompanion(
-      key: const Value('asr_locale'),
-      value: Value(locale),
-    ));
+    await db
+        .into(db.settings)
+        .insertOnConflictUpdate(
+          SettingsCompanion(
+            key: const Value('asr_locale'),
+            value: Value(locale),
+          ),
+        );
   }
 
-  /// ASR 引擎：'mimo'（复用聊天配置）| 'custom'（独立配置）| 'system'，
-  /// 缺省 'mimo'。
+  /// ASR 引擎：'mimo'（语音供应商，默认自动 MiMo）| 'custom'（独立配置）|
+  /// 'system'，缺省 'mimo'。
   Future<String> asrEngine() async {
     final q = db.select(db.settings)..where((t) => t.key.equals('asr_engine'));
     final row = await q.getSingleOrNull();
@@ -185,17 +206,23 @@ class TtsProfileRepository {
   }
 
   Future<void> setAsrEngine(String engine) async {
-    await db.into(db.settings).insertOnConflictUpdate(SettingsCompanion(
-      key: const Value('asr_engine'),
-      value: Value(engine),
-    ));
+    await db
+        .into(db.settings)
+        .insertOnConflictUpdate(
+          SettingsCompanion(
+            key: const Value('asr_engine'),
+            value: Value(engine),
+          ),
+        );
   }
 
   /// ASR 独立配置（asr_engine='custom' 时生效；与 TTS 的 profile 字段分离）。
-  Future<({String baseUrl, String apiKey, String model})> asrCustomConfig() async {
+  Future<({String baseUrl, String apiKey, String model})>
+  asrCustomConfig() async {
     final q = db.select(db.settings)
-      ..where((t) =>
-          t.key.isIn(const ['asr_base_url', 'asr_api_key', 'asr_model']));
+      ..where(
+        (t) => t.key.isIn(const ['asr_base_url', 'asr_api_key', 'asr_model']),
+      );
     final rows = await q.get();
     final map = {for (final r in rows) r.key: r.value};
     return (
@@ -210,27 +237,39 @@ class TtsProfileRepository {
     required String apiKey,
     required String model,
   }) async {
-    await db.into(db.settings).insertOnConflictUpdate(SettingsCompanion(
-      key: const Value('asr_base_url'),
-      value: Value(baseUrl.trim()),
-    ));
-    await db.into(db.settings).insertOnConflictUpdate(SettingsCompanion(
-      key: const Value('asr_api_key'),
-      value: Value(apiKey.trim()),
-    ));
-    await db.into(db.settings).insertOnConflictUpdate(SettingsCompanion(
-      key: const Value('asr_model'),
-      value: Value(model.trim()),
-    ));
+    await db
+        .into(db.settings)
+        .insertOnConflictUpdate(
+          SettingsCompanion(
+            key: const Value('asr_base_url'),
+            value: Value(baseUrl.trim()),
+          ),
+        );
+    await db
+        .into(db.settings)
+        .insertOnConflictUpdate(
+          SettingsCompanion(
+            key: const Value('asr_api_key'),
+            value: Value(apiKey.trim()),
+          ),
+        );
+    await db
+        .into(db.settings)
+        .insertOnConflictUpdate(
+          SettingsCompanion(
+            key: const Value('asr_model'),
+            value: Value(model.trim()),
+          ),
+        );
   }
 
-  /// TTS MiMo 使用的 API 供应商 id；空=跟随聊天默认。
+  /// TTS MiMo 使用的 API 供应商 id；空=自动挑 MiMo（不跟聊天默认）。
   Future<String> ttsApiProfileId() => _settingValue('tts_api_profile_id');
 
   Future<void> setTtsApiProfileId(String id) =>
       _setSettingValue('tts_api_profile_id', id);
 
-  /// ASR MiMo 使用的 API 供应商 id；空=跟随聊天默认。
+  /// ASR MiMo 使用的 API 供应商 id；空=自动挑 MiMo（不跟聊天默认）。
   Future<String> asrApiProfileId() => _settingValue('asr_api_profile_id');
 
   Future<void> setAsrApiProfileId(String id) =>
@@ -243,36 +282,37 @@ class TtsProfileRepository {
   }
 
   Future<void> _setSettingValue(String key, String value) async {
-    await db.into(db.settings).insertOnConflictUpdate(SettingsCompanion(
-      key: Value(key),
-      value: Value(value.trim()),
-    ));
+    await db
+        .into(db.settings)
+        .insertOnConflictUpdate(
+          SettingsCompanion(key: Value(key), value: Value(value.trim())),
+        );
   }
 
   /// 新 id（编辑页新建用）。
   String newProfileId() => newId();
 
   TtsProfile _fromRow(TtsProfileRow row) => TtsProfile(
-        id: row.id,
-        name: row.name,
-        provider: row.provider,
-        voiceId: row.voiceId,
-        speed: row.speed,
-        model: row.model,
-        apiKey: row.apiKey,
-        baseUrl: row.baseUrl,
-        isDefault: row.isDefault,
-      );
+    id: row.id,
+    name: row.name,
+    provider: row.provider,
+    voiceId: row.voiceId,
+    speed: row.speed,
+    model: row.model,
+    apiKey: row.apiKey,
+    baseUrl: row.baseUrl,
+    isDefault: row.isDefault,
+  );
 
   TtsProfilesCompanion _toRow(TtsProfile p) => TtsProfilesCompanion(
-        id: Value(p.id),
-        name: Value(p.name),
-        provider: Value(p.provider),
-        voiceId: Value(p.voiceId),
-        speed: Value(p.speed),
-        model: Value(p.model),
-        apiKey: Value(p.apiKey),
-        baseUrl: Value(p.baseUrl),
-        isDefault: Value(p.isDefault),
-      );
+    id: Value(p.id),
+    name: Value(p.name),
+    provider: Value(p.provider),
+    voiceId: Value(p.voiceId),
+    speed: Value(p.speed),
+    model: Value(p.model),
+    apiKey: Value(p.apiKey),
+    baseUrl: Value(p.baseUrl),
+    isDefault: Value(p.isDefault),
+  );
 }

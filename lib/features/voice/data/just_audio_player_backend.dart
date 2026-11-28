@@ -41,18 +41,18 @@ class JustAudioPlayerBackend implements AudioPlayerBackend {
     // 落临时文件播放（兼容所有 just_audio 版本）。
     final dir = await getTemporaryDirectory();
     final ext = mimeType.contains('wav') ? 'wav' : 'mp3';
-    final file =
-        File('${dir.path}/tts_play_${DateTime.now().microsecondsSinceEpoch}.$ext');
+    final file = File(
+      '${dir.path}/tts_play_${DateTime.now().microsecondsSinceEpoch}.$ext',
+    );
     await file.writeAsBytes(bytes, flush: true);
     try {
       await _player.setFilePath(file.path);
       // play() 完成于播放结束/停止；时长+余量兜底防内部挂起。
       final duration = _player.duration ?? const Duration(seconds: 30);
       await _player.play().timeout(
-            duration + const Duration(seconds: 5),
-            onTimeout: () =>
-                throw const UnknownException('播放超时（音频会话可能被其他应用占用）'),
-          );
+        duration + const Duration(seconds: 5),
+        onTimeout: () => throw const UnknownException('播放超时（音频会话可能被其他应用占用）'),
+      );
     } finally {
       // just_audio 的坑：playing 在自然播完后保持 true（直到 pause/stop），
       // 而 play() 在 playing==true 时立即返回；setFilePath/load 都不复位它。

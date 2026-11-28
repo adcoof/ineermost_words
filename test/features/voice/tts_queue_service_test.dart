@@ -126,8 +126,9 @@ void main() {
     await pumpEventQueue();
     // 首句合成已发出并解决 → 播放开始。
     expect(provider.calls.length, 1);
-    provider.calls[0].completer
-        .complete(TtsAudio(mimeType: 'mp3', bytes: Uint8List.fromList([1])));
+    provider.calls[0].completer.complete(
+      TtsAudio(mimeType: 'mp3', bytes: Uint8List.fromList([1])),
+    );
     await pumpEventQueue();
     expect(player.played.length, 1); // 第一句在播（阻塞中）
 
@@ -136,8 +137,9 @@ void main() {
     expect(provider.calls[1].req.text, '第二句。');
 
     // 第二句合成解决；第一句播完 → 第二句立即接上播放，无需再等合成。
-    provider.calls[1].completer
-        .complete(TtsAudio(mimeType: 'mp3', bytes: Uint8List.fromList([2])));
+    provider.calls[1].completer.complete(
+      TtsAudio(mimeType: 'mp3', bytes: Uint8List.fromList([2])),
+    );
     await pumpEventQueue();
     player.current!.complete(); // 第一句播完
     await pumpEventQueue(times: 3);
@@ -201,8 +203,9 @@ void main() {
     queue.enqueue('第一句。');
     queue.enqueue('第二句。');
     await pumpEventQueue();
-    provider.calls[0].completer
-        .complete(TtsAudio(mimeType: 'mp3', bytes: Uint8List.fromList([1])));
+    provider.calls[0].completer.complete(
+      TtsAudio(mimeType: 'mp3', bytes: Uint8List.fromList([1])),
+    );
     await pumpEventQueue();
     // 第一句在播、第二句预合成仍在飞。
     expect(provider.calls.length, 2);
@@ -214,8 +217,9 @@ void main() {
     expect(queue.isBusy, isFalse);
 
     // 迟到的成功结果：被 generation 检查丢弃，绝不播放。
-    provider.calls[1].completer
-        .complete(TtsAudio(mimeType: 'mp3', bytes: Uint8List.fromList([2])));
+    provider.calls[1].completer.complete(
+      TtsAudio(mimeType: 'mp3', bytes: Uint8List.fromList([2])),
+    );
     await pumpEventQueue(times: 3);
     expect(player.played.length, 1);
     expect(queue.isBusy, isFalse);
@@ -230,8 +234,9 @@ void main() {
     queue.enqueue('第一句。');
     queue.enqueue('第二句。');
     await pumpEventQueue();
-    provider.calls[0].completer
-        .complete(TtsAudio(mimeType: 'mp3', bytes: Uint8List.fromList([1])));
+    provider.calls[0].completer.complete(
+      TtsAudio(mimeType: 'mp3', bytes: Uint8List.fromList([1])),
+    );
     await pumpEventQueue();
     queue.clear();
     await pumpEventQueue(times: 3);

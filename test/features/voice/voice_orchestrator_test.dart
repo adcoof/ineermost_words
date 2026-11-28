@@ -97,8 +97,9 @@ void main() {
     });
 
     test('流式增量里的裸标签不进 TTS，句子剥后朗读', () async {
-      await orchestrator
-          .onAssistantDelta('<shake_head>你好呀。<emotion:angry>你走开。');
+      await orchestrator.onAssistantDelta(
+        '<shake_head>你好呀。<emotion:angry>你走开。',
+      );
       await pumpEventQueue(times: 3);
 
       expect(provider.synthesized, ['你好呀。', '你走开。']);
@@ -251,7 +252,10 @@ void main() {
       await pumpEventQueue(times: 3);
       // 若丢句时 _scrub 停摆，'href="x">嗯。' 会原样漏进合成文本。
       expect(provider.synthesized, ['嗯。']);
-      expect(provider.synthesized.any((t) => t.contains('<') || t.contains('>')), isFalse);
+      expect(
+        provider.synthesized.any((t) => t.contains('<') || t.contains('>')),
+        isFalse,
+      );
     });
 
     test('away 时 onAssistantDone 尾句丢弃', () async {

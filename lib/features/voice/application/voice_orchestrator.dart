@@ -60,13 +60,15 @@ class VoiceOrchestrator implements AssistantSpeechSink {
   /// 标签标记正则：形如 `<shake_head>`、`<emotion:happy>`、`</emotion>`、`<br/>`；
   /// 也保守剥掉带属性的标记（如 `<a href="x">`）——TTS 读 markup 无意义。
   /// `<` 后必须紧跟字母才匹配，因此 'a < b'、'2<3>4'、'x<3' 不会被误伤。
-  static final _tagMarkup =
-      RegExp(r'</?[A-Za-z][A-Za-z0-9_:/.-]*(?:\s+[^<>]*)?/?>');
+  static final _tagMarkup = RegExp(
+    r'</?[A-Za-z][A-Za-z0-9_:/.-]*(?:\s+[^<>]*)?/?>',
+  );
 
   /// 末尾未闭合的标签残段：流在标签中截断留下的 `<shake_`，或带换行的属性
   /// 标记被句切分劈开的前半截（如 `<a`）。同样要求 `<` 后紧跟字母。
-  static final _tagTail =
-      RegExp(r'</?[A-Za-z][A-Za-z0-9_:/.-]*(?:\s+[^<>]*)?$');
+  static final _tagTail = RegExp(
+    r'</?[A-Za-z][A-Za-z0-9_:/.-]*(?:\s+[^<>]*)?$',
+  );
 
   /// 可朗读内容判定：含任意文字/数字才算正文。
   /// 剥后仅剩空白与句读的残句（如 `<shake_head>。` → `。`）不值得送 TTS。

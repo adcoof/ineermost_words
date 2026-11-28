@@ -19,7 +19,6 @@ import 'package:record/record.dart';
 import '../../../core/errors/app_exception.dart';
 import '../../chat/data/chat_api_client.dart'
     show OpenAiChatApiClient, mapDioException;
-import '../../settings/data/api_profile_repository.dart';
 import '../../settings/domain/api_profile.dart';
 import '../domain/asr_provider.dart';
 
@@ -29,18 +28,17 @@ class MimoAsrProvider implements AsrProvider {
   /// 录音器懒加载：构造时不实例化（测试环境无平台通道会炸），start 时再建。
   AudioRecorder? _rec;
 
-  /// 该 ASR 专用配置（可为空，回落到默认聊天配置）。
+  /// 该 ASR 专用配置（由语音供应商解析器注入）。
   final String baseUrl;
   final String apiKey;
   final String model;
-  final ApiProfileRepository chatProfilesRepo;
 
-  /// 独立配置（语音界面「独立配置」档）：非空时优先于聊天配置。
+  /// 独立配置（语音界面「独立配置」档）。
   /// custom 档实例注入；mimo 档不注入。
   final Future<({String baseUrl, String apiKey, String model})?> Function()?
-      customConfigGet;
+  customConfigGet;
 
-  /// 「语音 API 供应商」选择（mimo 档注入）：非空时优先于聊天默认。
+  /// 「语音 API 供应商」选择（mimo 档注入）：显式选择或自动 MiMo。
   final Future<ApiProfile?> Function()? apiProfileGet;
 
   AsrCallbacks? _callbacks;
@@ -51,16 +49,19 @@ class MimoAsrProvider implements AsrProvider {
     required this.baseUrl,
     required this.apiKey,
     required this.model,
-    required this.chatProfilesRepo,
     this.customConfigGet,
     this.apiProfileGet,
     Dio? dio,
     AudioRecorder? recorder,
-  })  : _dio = dio ??
-            Dio(BaseOptions(
-                connectTimeout: const Duration(seconds: 15),
-                receiveTimeout: const Duration(seconds: 60))),
-        _rec = recorder;
+  }) : _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               connectTimeout: const Duration(seconds: 15),
+               receiveTimeout: const Duration(seconds: 60),
+             ),
+           ),
+       _rec = recorder;
 
   static const String defaultModel = 'mimo-v2.5-asr';
 
@@ -99,20 +100,15 @@ class MimoAsrProvider implements AsrProvider {
     if (custom != null) return custom;
     final selected = await apiProfileGet?.call();
     if (selected != null) return selected;
-    final chat = await chatProfilesRepo.getDefault();
-    if (chat == null) {
-      throw const AuthException('请先在设置中添加 API 供应商配置');
-    }
-    return chat;
+    throw const AuthException('请先在「语音」中选择 MiMo API 供应商');
   }
 
   /// 该 ASR 能否启用：专用 baseUrl 非空，或独立配置非空，
-  /// 或存在默认聊天配置可回落。
+  /// 或存在可用的 MiMo 语音供应商。
   Future<bool> canUse() async {
     if (baseUrl.trim().isNotEmpty) return true;
     if (await _customEndpoint() != null) return true;
-    if (await apiProfileGet?.call() != null) return true;
-    return (await chatProfilesRepo.getDefault()) != null;
+    return await apiProfileGet?.call() != null;
   }
 
   @override

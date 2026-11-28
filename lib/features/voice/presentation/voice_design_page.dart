@@ -34,8 +34,10 @@ class VoiceDesignPage extends ConsumerWidget {
           final voices = snapshot.data ?? const [];
           if (voices.isEmpty) {
             return const Center(
-              child: Text('还没有自定义音色\n用一句话描述想要的声音，点下方按钮新建',
-                  textAlign: TextAlign.center),
+              child: Text(
+                '还没有自定义音色\n用一句话描述想要的声音，点下方按钮新建',
+                textAlign: TextAlign.center,
+              ),
             );
           }
           return ListView.separated(
@@ -45,9 +47,16 @@ class VoiceDesignPage extends ConsumerWidget {
               final v = voices[index];
               return ListTile(
                 leading: const Icon(Icons.graphic_eq),
-                title: Text(v.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                subtitle: Text(v.description,
-                    maxLines: 2, overflow: TextOverflow.ellipsis),
+                title: Text(
+                  v.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  v.description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 trailing: IconButton(
                   tooltip: '删除',
                   icon: const Icon(Icons.delete_outline),
@@ -55,7 +64,8 @@ class VoiceDesignPage extends ConsumerWidget {
                 ),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
-                      builder: (_) => VoiceDesignEditPage(voice: v)),
+                    builder: (_) => VoiceDesignEditPage(voice: v),
+                  ),
                 ),
               );
             },
@@ -64,9 +74,9 @@ class VoiceDesignPage extends ConsumerWidget {
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'fab-voice-design',
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const VoiceDesignEditPage()),
-        ),
+        onPressed: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const VoiceDesignEditPage())),
         icon: const Icon(Icons.add),
         label: const Text('新建音色'),
       ),
@@ -74,7 +84,10 @@ class VoiceDesignPage extends ConsumerWidget {
   }
 
   Future<void> _confirmDelete(
-      BuildContext context, WidgetRef ref, CustomVoice voice) async {
+    BuildContext context,
+    WidgetRef ref,
+    CustomVoice voice,
+  ) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -121,8 +134,9 @@ class _VoiceDesignEditPageState extends ConsumerState<VoiceDesignEditPage> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.voice?.name ?? '');
-    _descController =
-        TextEditingController(text: widget.voice?.description ?? '');
+    _descController = TextEditingController(
+      text: widget.voice?.description ?? '',
+    );
     _sampleController = TextEditingController(text: _defaultSample);
   }
 
@@ -147,8 +161,11 @@ class _VoiceDesignEditPageState extends ConsumerState<VoiceDesignEditPage> {
     final sample = _sampleController.text.trim();
     final queue = ref.read(voiceOrchestratorProvider).queue;
     queue.clear();
-    queue.enqueue(sample.isEmpty ? _defaultSample : sample,
-        speed: speed, voiceDesign: desc);
+    queue.enqueue(
+      sample.isEmpty ? _defaultSample : sample,
+      speed: speed,
+      voiceDesign: desc,
+    );
   }
 
   Future<void> _save() async {
@@ -164,13 +181,15 @@ class _VoiceDesignEditPageState extends ConsumerState<VoiceDesignEditPage> {
       final repo = ref.read(customVoiceRepositoryProvider);
       final existing = widget.voice;
       final now = DateTime.now();
-      await repo.save(CustomVoice(
-        id: existing?.id ?? repo.newVoiceId(),
-        name: name,
-        description: desc,
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
-      ));
+      await repo.save(
+        CustomVoice(
+          id: existing?.id ?? repo.newVoiceId(),
+          name: name,
+          description: desc,
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+        ),
+      );
       if (mounted) Navigator.of(context).pop();
     } finally {
       if (mounted) setState(() => _saving = false);

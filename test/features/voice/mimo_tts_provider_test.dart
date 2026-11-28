@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:ai_roleplay_chat/core/errors/app_exception.dart';
 import 'package:ai_roleplay_chat/data/local/app_database.dart';
 import 'package:ai_roleplay_chat/features/settings/data/api_profile_repository.dart';
+import 'package:ai_roleplay_chat/features/settings/domain/api_profile.dart';
 import 'package:ai_roleplay_chat/features/voice/data/mimo_tts_provider.dart';
 import 'package:ai_roleplay_chat/features/voice/domain/tts_provider.dart';
 import 'package:dio/dio.dart';
@@ -65,23 +66,27 @@ void main() {
       baseUrl: 'https://example.com/v1',
       apiKey: 'sk-test',
       model: 'mimo-v2.5-tts',
-      chatProfilesRepo: repo,
       dio: dio,
     );
   }
 
   group('MimoTtsProvider.synthesize', () {
-    test('请求形状：URL/model/messages/audio/鉴权头，voice 缺省 mimo_default',
-        () async {
-      final adapter = _FakeAdapter(utf8.encode(jsonEncode({
-        'choices': [
-          {
-            'message': {
-              'audio': {'data': base64Encode([1, 2, 3])}
-            }
-          }
-        ],
-      })));
+    test('请求形状：URL/model/messages/audio/鉴权头，voice 缺省 mimo_default', () async {
+      final adapter = _FakeAdapter(
+        utf8.encode(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {
+                  'audio': {
+                    'data': base64Encode([1, 2, 3]),
+                  },
+                },
+              },
+            ],
+          }),
+        ),
+      );
       await provider(adapter).synthesize(const TtsRequest(text: '你好，世界'));
 
       final req = adapter.lastRequest!;
@@ -102,15 +107,21 @@ void main() {
     });
 
     test('显式 voiceId 透传', () async {
-      final adapter = _FakeAdapter(utf8.encode(jsonEncode({
-        'choices': [
-          {
-            'message': {
-              'audio': {'data': base64Encode([1])}
-            }
-          }
-        ],
-      })));
+      final adapter = _FakeAdapter(
+        utf8.encode(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {
+                  'audio': {
+                    'data': base64Encode([1]),
+                  },
+                },
+              },
+            ],
+          }),
+        ),
+      );
       await provider(adapter)
           .synthesize(const TtsRequest(text: 'hi', voiceId: '茉莉'));
 
@@ -120,18 +131,22 @@ void main() {
 
     test('audio.data base64 解码为 bytes，mimeType=mp3', () async {
       final bytes = [0x49, 0x44, 0x33, 0x00, 0xff, 0x10];
-      final adapter = _FakeAdapter(utf8.encode(jsonEncode({
-        'choices': [
-          {
-            'message': {
-              'audio': {'data': base64Encode(bytes)}
-            }
-          }
-        ],
-      })));
+      final adapter = _FakeAdapter(
+        utf8.encode(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {
+                  'audio': {'data': base64Encode(bytes)},
+                },
+              },
+            ],
+          }),
+        ),
+      );
 
-      final audio =
-          await provider(adapter).synthesize(const TtsRequest(text: 'x'));
+      final audio = await provider(adapter)
+          .synthesize(const TtsRequest(text: 'x'));
       expect(audio.mimeType, 'mp3');
       expect(audio.bytes, bytes);
     });
@@ -154,19 +169,46 @@ void main() {
       );
       await expectLater(
         provider(adapter).synthesize(const TtsRequest(text: 'x')),
-        throwsA(isA<ServerException>()
-            .having((e) => e.message, 'message', contains('voice not found'))),
+        throwsA(
+          isA<ServerException>().having(
+            (e) => e.message,
+            'message',
+            contains('voice not found'),
+          ),
+        ),
       );
     });
 
     test('200 缺 audio.data 转 ServerException', () async {
-      final adapter =
-          _FakeAdapter(utf8.encode('{"choices":[{"message":{"content":"x"}}]}'));
+      final adapter = _FakeAdapter(
+        utf8.encode('{"choices":[{"message":{"content":"x"}}]}'),
+      );
       await expectLater(
         provider(adapter).synthesize(const TtsRequest(text: 'x')),
         throwsA(isA<ServerException>()),
       );
     });
+  });
+
+  test('没有语音供应商时不回落聊天默认，直接报配置错误', () async {
+    // 聊天默认是 DeepSeek：文本供应商不能被拿去请求 TTS。
+    await repo.save(
+      const ApiProfile(
+        id: 'ds',
+        name: 'DeepSeek',
+        baseUrl: 'https://api.deepseek.com/v1',
+        apiKey: 'sk-ds',
+        model: 'deepseek-chat',
+        temperature: 1.0,
+        extraHeaders: '{}',
+        isDefault: true,
+      ),
+    );
+    final p = MimoTtsProvider(baseUrl: '', apiKey: '', model: '', dio: Dio());
+    await expectLater(
+      p.synthesize(const TtsRequest(text: '你好')),
+      throwsA(isA<AuthException>()),
+    );
   });
 
   group('MimoTtsProvider.styleFor', () {
@@ -190,22 +232,29 @@ void main() {
   });
 
   group('MimoTtsProvider 音色设计（voiceDesign）', () {
-    test('voiceDesign 非空：model=voicedesign，user=描述，audio 无 voice',
-        () async {
-      final adapter = _FakeAdapter(utf8.encode(jsonEncode({
-        'choices': [
-          {
-            'message': {
-              'audio': {'data': base64Encode([1, 2])}
-            }
-          }
-        ],
-      })));
-      await provider(adapter).synthesize(const TtsRequest(
-        text: '你好呀',
-        voiceDesign: '温柔甜美的年轻女声',
-        voiceId: '茉莉', // 应被忽略：设计模式不带 voice 参数
-      ));
+    test('voiceDesign 非空：model=voicedesign，user=描述，audio 无 voice', () async {
+      final adapter = _FakeAdapter(
+        utf8.encode(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {
+                  'audio': {
+                    'data': base64Encode([1, 2]),
+                  },
+                },
+              },
+            ],
+          }),
+        ),
+      );
+      await provider(adapter).synthesize(
+        const TtsRequest(
+          text: '你好呀',
+          voiceDesign: '温柔甜美的年轻女声',
+          voiceId: '茉莉', // 应被忽略：设计模式不带 voice 参数
+        ),
+      );
 
       final body = adapter.lastRequest!.data as Map;
       expect(body['model'], 'mimo-v2.5-tts-voicedesign');
@@ -221,17 +270,24 @@ void main() {
     });
 
     test('voiceDesign + 语速：描述后追加语速提示', () async {
-      final adapter = _FakeAdapter(utf8.encode(jsonEncode({
-        'choices': [
-          {
-            'message': {
-              'audio': {'data': base64Encode([1])}
-            }
-          }
-        ],
-      })));
-      await provider(adapter).synthesize(const TtsRequest(
-          text: 'x', voiceDesign: '低沉的男声', speed: 1.5));
+      final adapter = _FakeAdapter(
+        utf8.encode(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {
+                  'audio': {
+                    'data': base64Encode([1]),
+                  },
+                },
+              },
+            ],
+          }),
+        ),
+      );
+      await provider(adapter).synthesize(
+        const TtsRequest(text: 'x', voiceDesign: '低沉的男声', speed: 1.5),
+      );
 
       final body = adapter.lastRequest!.data as Map;
       final content = (body['messages'] as List)[0]['content'] as String;

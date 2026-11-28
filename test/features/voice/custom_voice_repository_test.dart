@@ -20,17 +20,17 @@ void main() {
 
   tearDown(() => db.close());
 
-  CustomVoice voice(
-          {String id = 'v1',
-          String name = '萝莉音',
-          DateTime? createdAt}) =>
-      CustomVoice(
-        id: id,
-        name: name,
-        description: '软糯可爱的幼女声线，语调上扬',
-        createdAt: createdAt ?? DateTime(2026, 10, 24),
-        updatedAt: DateTime(2026, 10, 24),
-      );
+  CustomVoice voice({
+    String id = 'v1',
+    String name = '萝莉音',
+    DateTime? createdAt,
+  }) => CustomVoice(
+    id: id,
+    name: name,
+    description: '软糯可爱的幼女声线，语调上扬',
+    createdAt: createdAt ?? DateTime(2026, 10, 24),
+    updatedAt: DateTime(2026, 10, 24),
+  );
 
   group('CustomVoiceRepository', () {
     test('保存后可读回，listAll 按创建时间倒序', () async {
@@ -51,13 +51,17 @@ void main() {
       // Drift dateTime() 按秒存时间戳，同秒两次 save 时间戳相同——
       // 故直接插旧时间戳作对照，验证 save 后 updatedAt 被刷新。
       final stale = DateTime(2020);
-      await db.into(db.customVoices).insert(CustomVoicesCompanion(
-            id: const Value('v1'),
-            name: const Value('旧名'),
-            description: const Value('软糯可爱的幼女声线，语调上扬'),
-            createdAt: Value(stale),
-            updatedAt: Value(stale),
-          ));
+      await db
+          .into(db.customVoices)
+          .insert(
+            CustomVoicesCompanion(
+              id: const Value('v1'),
+              name: const Value('旧名'),
+              description: const Value('软糯可爱的幼女声线，语调上扬'),
+              createdAt: Value(stale),
+              updatedAt: Value(stale),
+            ),
+          );
       final before = (await repo.getById('v1'))!;
 
       // 与编辑页一致：二次保存沿用原 createdAt（save 会按入参写回）。
@@ -115,7 +119,11 @@ void main() {
     test('显式 voiceDesign（未保存试听）直接透传，不查库', () async {
       final resolved = await ResolvingTtsProvider.resolveCustomVoice(
         repo,
-        const TtsRequest(text: 'hi', voiceId: 'custom:gone', voiceDesign: '磁性男声'),
+        const TtsRequest(
+          text: 'hi',
+          voiceId: 'custom:gone',
+          voiceDesign: '磁性男声',
+        ),
       );
       expect(resolved.voiceDesign, '磁性男声');
     });

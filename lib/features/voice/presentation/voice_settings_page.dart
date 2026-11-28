@@ -1,9 +1,9 @@
 /// 语音设置：语音回复开关/语速、TTS 引擎与发音人（MiMo 默认）、
 /// ASR 引擎与语言、试听。
 ///
-/// API 配置跟着引擎选项走：TTS 的 OpenAI 档挂 URL/Key/模型名表单
-///（存 tts_profiles 行，空则回落聊天配置）；ASR 的「独立配置」档挂
-/// 同样表单（存 settings KV）。MiMo 档永远复用聊天配置。
+/// 语音与文本聊天解耦：TTS/ASR 各自选择 MiMo API 供应商，默认自动挑
+/// MiMo，不回落到聊天默认。TTS 的 OpenAI 档挂独立 URL/Key/模型名表单；
+/// ASR 的「独立配置」档挂同样表单。
 library;
 
 import 'dart:async';
@@ -18,6 +18,7 @@ import '../data/edge_tts_provider.dart';
 import '../data/mimo_tts_provider.dart';
 import '../data/openai_tts_provider.dart';
 import '../data/system_tts_provider.dart';
+import '../data/voice_profile_resolution.dart';
 import '../domain/tts_provider.dart';
 import 'voice_design_page.dart';
 
@@ -35,7 +36,8 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
   String _voiceId = 'zh-CN-XiaoxiaoNeural';
   String _model = 'tts-1';
 
-  /// ASR 引擎：'mimo'（复用聊天配置）| 'custom'（独立配置）| 'system'（本机）。
+  /// ASR 引擎：'mimo'（语音供应商，默认 MiMo）| 'custom'（独立配置）|
+  /// 'system'（本机）。
   String _asrEngine = 'mimo';
   String _asrLocale = 'zh_CN';
 
@@ -52,7 +54,7 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
   late final TextEditingController _asrKeyController;
   late final TextEditingController _asrModelController;
 
-  /// TTS/ASR 各自选择的 API 供应商（空=跟随聊天默认）。
+  /// TTS/ASR 各自选择的 API 供应商（空=自动挑 MiMo）。
   List<ApiProfile> _apiProfiles = const [];
   String _ttsApiProfileId = '';
   String _asrApiProfileId = '';
@@ -93,19 +95,21 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
     final customs = await ref.read(customVoiceRepositoryProvider).listAll();
     return [
       ...base,
-      for (final v in customs)
-        TtsVoice('custom:${v.id}', '${v.name}（自定义）'),
+      for (final v in customs) TtsVoice('custom:${v.id}', '${v.name}（自定义）'),
     ];
   }
 
   Future<void> _load() async {
     final repo = ref.read(ttsProfileRepositoryProvider);
     // 一次性把默认 TTS 迁移为 MiMo（Key/地址为空时回落默认聊天配置）。
-    await repo.ensureMimoDefault(() async =>
-        (await ref.read(apiProfileRepositoryProvider).getDefault()) != null);
+    await repo.ensureMimoDefault(
+      () async =>
+          (await ref.read(apiProfileRepositoryProvider).getDefault()) != null,
+    );
     // 缺省档与运行时 ResolvingTtsProvider._primary() 一致：
     // 无已存 profile 时按有无聊天配置决定 MiMo/Edge，避免设置页与运行时所指不一。
-    final profile = await repo.getDefault() ??
+    final profile =
+        await repo.getDefault() ??
         ((await ref.read(apiProfileRepositoryProvider).getDefault()) != null
             ? repo.builtinMimo()
             : repo.builtinEdge());
@@ -115,9 +119,18 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
     final asrEngine = await repo.asrEngine();
     final asrLocale = await repo.asrLocale();
     final asrCustom = await repo.asrCustomConfig();
-    final apiProfiles = await ref.read(apiProfileRepositoryProvider).getAll();
-    final ttsApiProfileId = await repo.ttsApiProfileId();
-    final asrApiProfileId = await repo.asrApiProfileId();
+    final apiProfileRepo = ref.read(apiProfileRepositoryProvider);
+    final apiProfiles = await apiProfileRepo.getAll();
+    // 展示实际生效的供应商：用户显式选择优先，否则自动挑 MiMo。
+    // 这样聊天换成 DeepSeek 后，语音设置不会误显示「跟随聊天」。
+    final effectiveTts = await resolveVoiceApiProfile(
+      repo: apiProfileRepo,
+      selectedId: await repo.ttsApiProfileId(),
+    );
+    final effectiveAsr = await resolveVoiceApiProfile(
+      repo: apiProfileRepo,
+      selectedId: await repo.asrApiProfileId(),
+    );
     final ids = apiProfiles.map((p) => p.id).toSet();
     if (!mounted) return;
     setState(() {
@@ -131,7 +144,9 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
           : profile.voiceId;
       // 模型缺省值按引擎取：MiMo 用 mimo-v2.5-tts，其余用 tts-1。
       _model = profile.model.isEmpty
-          ? (profile.provider == 'mimo' ? MimoTtsProvider.defaultModel : 'tts-1')
+          ? (profile.provider == 'mimo'
+                ? MimoTtsProvider.defaultModel
+                : 'tts-1')
           : profile.model;
       _modelController.text = _model;
       _openaiUrlController.text = profile.baseUrl;
@@ -140,8 +155,8 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
       _asrKeyController.text = asrCustom.apiKey;
       _asrModelController.text = asrCustom.model;
       _apiProfiles = apiProfiles;
-      _ttsApiProfileId = ids.contains(ttsApiProfileId) ? ttsApiProfileId : '';
-      _asrApiProfileId = ids.contains(asrApiProfileId) ? asrApiProfileId : '';
+      _ttsApiProfileId = ids.contains(effectiveTts?.id) ? effectiveTts!.id : '';
+      _asrApiProfileId = ids.contains(effectiveAsr?.id) ? effectiveAsr!.id : '';
       _voices = voices;
       _loaded = true;
     });
@@ -175,8 +190,9 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
       _voiceId = voices.isNotEmpty ? voices.first.id : '';
       // 模型框里残留的其他引擎默认值换成当前引擎默认；自定义模型名保留。
       final text = _modelController.text.trim();
-      final fallback =
-          provider == 'mimo' ? MimoTtsProvider.defaultModel : 'tts-1';
+      final fallback = provider == 'mimo'
+          ? MimoTtsProvider.defaultModel
+          : 'tts-1';
       if (text.isEmpty ||
           text == 'tts-1' ||
           text == MimoTtsProvider.defaultModel) {
@@ -189,25 +205,30 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
   Future<void> _save() async {
     final repo = ref.read(ttsProfileRepositoryProvider);
     final existing = await repo.getDefault();
-    final profile = (existing ??
-            (_provider == 'mimo' ? repo.builtinMimo() : repo.builtinEdge()))
-        .copyWith(
-      provider: _provider,
-      voiceId: _voiceId,
-      speed: _speed,
-      model: _modelController.text.trim(),
-      // 独立 API 只在 OpenAI 档生效（存 profile 行）；其余引擎清空，
-      // 保持「MiMo 永远复用聊天配置」的语义。
-      baseUrl: _provider == 'openai' ? _openaiUrlController.text.trim() : '',
-      apiKey: _provider == 'openai' ? _openaiKeyController.text.trim() : '',
-      isDefault: true,
-      name: switch (_provider) {
-        'mimo' => 'MiMo 语音',
-        'openai' => 'OpenAI 兼容 TTS',
-        'system' => '系统语音',
-        _ => 'Edge 免费语音',
-      },
-    );
+    final profile =
+        (existing ??
+                (_provider == 'mimo' ? repo.builtinMimo() : repo.builtinEdge()))
+            .copyWith(
+              provider: _provider,
+              voiceId: _voiceId,
+              speed: _speed,
+              model: _modelController.text.trim(),
+              // 独立 API 只在 OpenAI 档生效（存 profile 行）；其余引擎清空，
+              // 保持「MiMo 永远复用聊天配置」的语义。
+              baseUrl: _provider == 'openai'
+                  ? _openaiUrlController.text.trim()
+                  : '',
+              apiKey: _provider == 'openai'
+                  ? _openaiKeyController.text.trim()
+                  : '',
+              isDefault: true,
+              name: switch (_provider) {
+                'mimo' => 'MiMo 语音',
+                'openai' => 'OpenAI 兼容 TTS',
+                'system' => '系统语音',
+                _ => 'Edge 免费语音',
+              },
+            );
     // 一律落库（含 builtin-edge 首次配置），否则用户选的引擎/发音人
     // 重启后丢失，会静默回落到 Edge 默认 —— 「没声音」的元凶之一。
     await repo.save(profile);
@@ -256,17 +277,11 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
               isExpanded: true,
               value: value,
               items: [
-                const DropdownMenuItem(
-                  value: '',
-                  child: Text('跟随聊天默认'),
-                ),
+                const DropdownMenuItem(value: '', child: Text('自动（优先 MiMo）')),
                 for (final profile in _apiProfiles)
                   DropdownMenuItem(
                     value: profile.id,
-                    child: Text(
-                      profile.name,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    child: Text(profile.name, overflow: TextOverflow.ellipsis),
                   ),
               ],
               onChanged: (v) => onChanged(v ?? ''),
@@ -281,8 +296,7 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
     await _save();
     final queue = ref.read(voiceOrchestratorProvider).queue;
     queue.clear();
-    queue.enqueue('你好，我是你的桌宠搭档，试听效果如何？',
-        speed: _speed, voiceId: _voiceId);
+    queue.enqueue('你好，我是你的桌宠搭档，试听效果如何？', speed: _speed, voiceId: _voiceId);
   }
 
   @override
@@ -313,33 +327,39 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
           ),
           const Divider(),
           const ListTile(
-            title: Text('TTS 引擎', style: TextStyle(fontWeight: FontWeight.bold)),
+            title: Text(
+              'TTS 引擎',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: SegmentedButton<String>(
               segments: const [
-                ButtonSegment(value: 'mimo', label: Text('MiMo')),
+                ButtonSegment(
+                  value: 'mimo',
+                  label: FittedBox(fit: BoxFit.scaleDown, child: Text('MiMo')),
+                ),
                 ButtonSegment(value: 'edge', label: Text('Edge')),
                 ButtonSegment(value: 'openai', label: Text('OpenAI')),
                 ButtonSegment(value: 'system', label: Text('系统')),
               ],
               selected: {_provider},
+              style: SegmentedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                textStyle: const TextStyle(fontSize: 13),
+              ),
               onSelectionChanged: (s) => unawaited(_providerChanged(s.first)),
             ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-            child: Text(
-              switch (_provider) {
-                'mimo' =>
-                  '小米 MiMo 云端语音（chat/completions + audio），使用独立选择的 API 供应商，推荐',
-                'openai' => '走中转站或官方 /audio/speech 接口，可配独立 API（留空回落聊天配置）',
-                'system' => '离线兜底，依赖设备自带 TTS 引擎',
-                _ => '微软神经语音，免费，需联网',
-              },
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            child: Text(switch (_provider) {
+              'mimo' => '小米 MiMo 云端语音，默认自动使用 MiMo 供应商，与聊天模型解耦',
+              'openai' => '走中转站或官方 /audio/speech 接口，可配独立 API（留空回落聊天配置）',
+              'system' => '离线兜底，依赖设备自带 TTS 引擎',
+              _ => '微软神经语音，免费，需联网',
+            }, style: Theme.of(context).textTheme.bodySmall),
           ),
           if (_provider == 'mimo') ...[
             ListTile(
@@ -354,7 +374,7 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
             ),
             _apiProfilePicker(
               label: '语音接口供应商',
-              helper: 'MiMo 语音使用该供应商的地址与 Key；DeepSeek 不支持语音',
+              helper: '独立于聊天模型；默认自动选 MiMo，DeepSeek 不支持语音',
               value: _ttsApiProfileId,
               onChanged: (v) => setState(() => _ttsApiProfileId = v),
             ),
@@ -407,8 +427,7 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
                   for (final v in _voices)
                     DropdownMenuItem(value: v.id, child: Text(v.name)),
                 ],
-                onChanged: (v) =>
-                    setState(() => _voiceId = v ?? _voiceId),
+                onChanged: (v) => setState(() => _voiceId = v ?? _voiceId),
               ),
             ),
           ListTile(
@@ -426,36 +445,45 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
           ),
           const Divider(),
           const ListTile(
-            title: Text('按住说话 · 识别引擎',
-                style: TextStyle(fontWeight: FontWeight.bold)),
+            title: Text(
+              '按住说话 · 识别引擎',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: SegmentedButton<String>(
               segments: const [
-                ButtonSegment(value: 'mimo', label: Text('MiMo 云端')),
+                ButtonSegment(
+                  value: 'mimo',
+                  label: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('MiMo 云端'),
+                  ),
+                ),
                 ButtonSegment(value: 'custom', label: Text('独立配置')),
                 ButtonSegment(value: 'system', label: Text('系统本机')),
               ],
               selected: {_asrEngine},
+              style: SegmentedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                textStyle: const TextStyle(fontSize: 13),
+              ),
               onSelectionChanged: (s) => setState(() => _asrEngine = s.first),
             ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-            child: Text(
-              switch (_asrEngine) {
-                'custom' => '识别走下方独立的接口配置，失败自动回退本机',
-                'system' => '系统识别依赖设备自带服务',
-                _ => '云端识别使用选择的 API 供应商（默认跟随聊天配置），失败自动回退本机',
-              },
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            child: Text(switch (_asrEngine) {
+              'custom' => '识别走下方独立的接口配置，失败自动回退本机',
+              'system' => '系统识别依赖设备自带服务',
+              _ => '云端识别使用 MiMo 供应商（与聊天模型解耦），失败自动回退本机',
+            }, style: Theme.of(context).textTheme.bodySmall),
           ),
           if (_asrEngine == 'mimo')
             _apiProfilePicker(
               label: '识别接口供应商',
-              helper: 'MiMo ASR 使用该供应商的地址与 Key；DeepSeek 不支持识别',
+              helper: '独立于聊天模型；默认自动选 MiMo，DeepSeek 不支持识别',
               value: _asrApiProfileId,
               onChanged: (v) => setState(() => _asrApiProfileId = v),
             ),

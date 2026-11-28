@@ -46,15 +46,25 @@ class TtsQueueService {
   TtsQueueService({required this.provider, required this.player});
 
   /// 入队一句话；空文本忽略。
-  void enqueue(String text,
-      {double speed = 1.0, String voiceId = '', String voiceDesign = ''}) {
+  void enqueue(
+    String text, {
+    double speed = 1.0,
+    String voiceId = '',
+    String voiceDesign = '',
+  }) {
     // 已 dispose：静默忽略。否则 _drain 里未守卫的 _busy.add 会抛
     // StateError 且落在 try 之外，把 _draining 永久闩死成僵尸队列。
     if (_lip.isClosed) return;
     final t = text.trim();
     if (t.isEmpty) return;
-    _queue.add(TtsRequest(
-        text: t, speed: speed, voiceId: voiceId, voiceDesign: voiceDesign));
+    _queue.add(
+      TtsRequest(
+        text: t,
+        speed: speed,
+        voiceId: voiceId,
+        voiceDesign: voiceDesign,
+      ),
+    );
     if (!_draining) unawaited(_drain());
   }
 
@@ -97,8 +107,9 @@ class TtsQueueService {
       if (_queue.isEmpty || _generation != gen) return;
       final next = _queue.removeAt(0);
       final f = provider.synthesize(next);
-      unawaited(f.catchError(
-          (_) => TtsAudio(mimeType: 'mp3', bytes: const <int>[])));
+      unawaited(
+        f.catchError((_) => TtsAudio(mimeType: 'mp3', bytes: const <int>[])),
+      );
       lookahead = f;
     }
 
@@ -130,11 +141,12 @@ class TtsQueueService {
         _startLip();
         try {
           await player.playAudio(
-              Uint8List.fromList(audio.bytes), audio.mimeType);
+            Uint8List.fromList(audio.bytes),
+            audio.mimeType,
+          );
         } catch (e) {
           if (_generation == gen && !_errors.isClosed) {
-            _errors.add(
-                '语音播放失败：${e is AppException ? e.message : '未知错误'}');
+            _errors.add('语音播放失败：${e is AppException ? e.message : '未知错误'}');
           }
         } finally {
           _stopLip();
@@ -152,8 +164,7 @@ class TtsQueueService {
   /// 合成失败上报：只带面向用户的 message，原始异常 toString 不进 UI。
   void _reportSynthError(int gen, Object e) {
     if (gen == _generation && !_errors.isClosed) {
-      _errors.add(
-          '语音合成失败：${e is AppException ? e.message : '未知错误'}');
+      _errors.add('语音合成失败：${e is AppException ? e.message : '未知错误'}');
     }
   }
 
@@ -165,7 +176,8 @@ class TtsQueueService {
     _lipTimer = Timer.periodic(const Duration(milliseconds: 80), (_) {
       _t += 0.12;
       // 两组正弦叠加 + 高频微扰，模拟说话开合。
-      final v = 0.5 +
+      final v =
+          0.5 +
           0.3 * math.sin(_t * 2.3) * math.sin(_t * 0.7) +
           0.12 * math.sin(_t * 11.0);
       _lip.add(v.clamp(0.0, 1.0));

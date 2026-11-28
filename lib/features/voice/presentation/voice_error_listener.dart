@@ -17,8 +17,7 @@ class VoiceErrorListener extends ConsumerStatefulWidget {
   const VoiceErrorListener({super.key, required this.child});
 
   @override
-  ConsumerState<VoiceErrorListener> createState() =>
-      _VoiceErrorListenerState();
+  ConsumerState<VoiceErrorListener> createState() => _VoiceErrorListenerState();
 }
 
 class _VoiceErrorListenerState extends ConsumerState<VoiceErrorListener> {

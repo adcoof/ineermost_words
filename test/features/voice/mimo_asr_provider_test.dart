@@ -81,21 +81,23 @@ void main() {
       baseUrl: baseUrl,
       apiKey: 'sk-test',
       model: '',
-      chatProfilesRepo: repo,
       dio: dio,
     );
   }
 
   group('MimoAsrProvider.transcribe', () {
-    test('请求形状：model/input_audio/data-url/wav，且整个 body 无 text 键',
-        () async {
-      final adapter = _FakeAdapter(utf8.encode(jsonEncode({
-        'choices': [
-          {
-            'message': {'content': '你好'}
-          }
-        ],
-      })));
+    test('请求形状：model/input_audio/data-url/wav，且整个 body 无 text 键', () async {
+      final adapter = _FakeAdapter(
+        utf8.encode(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {'content': '你好'},
+              },
+            ],
+          }),
+        ),
+      );
       final wav = [0x52, 0x49, 0x46, 0x46, 0x00, 0x01]; // 假 WAV 字节
       await provider(adapter).transcribe(wav);
 
@@ -119,19 +121,22 @@ void main() {
     });
 
     test('选择的 API 供应商优先，ASR 模型仍用 mimo-v2.5-asr', () async {
-      final adapter = _FakeAdapter(utf8.encode(jsonEncode({
-        'choices': [
-          {
-            'message': {'content': '收到'}
-          }
-        ],
-      })));
+      final adapter = _FakeAdapter(
+        utf8.encode(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {'content': '收到'},
+              },
+            ],
+          }),
+        ),
+      );
       final dio = Dio()..httpClientAdapter = adapter;
       final provider = MimoAsrProvider(
         baseUrl: '',
         apiKey: '',
         model: '',
-        chatProfilesRepo: repo,
         apiProfileGet: () async => const ApiProfile(
           id: 'p-mimo',
           name: 'MiMo',
@@ -156,29 +161,37 @@ void main() {
     });
 
     test('content 为字符串时原样返回', () async {
-      final adapter = _FakeAdapter(utf8.encode(jsonEncode({
-        'choices': [
-          {
-            'message': {'content': '今天天气不错'}
-          }
-        ],
-      })));
+      final adapter = _FakeAdapter(
+        utf8.encode(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {'content': '今天天气不错'},
+              },
+            ],
+          }),
+        ),
+      );
       expect(await provider(adapter).transcribe([0x00]), '今天天气不错');
     });
 
     test('content 为 [{"text":"a"},{"text":"b"}] 时拼接为 ab', () async {
-      final adapter = _FakeAdapter(utf8.encode(jsonEncode({
-        'choices': [
-          {
-            'message': {
-              'content': [
-                {'text': 'a'},
-                {'text': 'b'},
-              ]
-            }
-          }
-        ],
-      })));
+      final adapter = _FakeAdapter(
+        utf8.encode(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {
+                  'content': [
+                    {'text': 'a'},
+                    {'text': 'b'},
+                  ],
+                },
+              },
+            ],
+          }),
+        ),
+      );
       expect(await provider(adapter).transcribe([0x00]), 'ab');
     });
 
@@ -200,8 +213,13 @@ void main() {
       );
       await expectLater(
         provider(adapter).transcribe([0x00]),
-        throwsA(isA<ServerException>()
-            .having((e) => e.message, 'message', contains('audio too short'))),
+        throwsA(
+          isA<ServerException>().having(
+            (e) => e.message,
+            'message',
+            contains('audio too short'),
+          ),
+        ),
       );
     });
   });
@@ -215,22 +233,44 @@ void main() {
       expect(await provider(_FakeAdapter([])).canUse(), isTrue);
     });
 
-    test('canUse：baseUrl 为空时回落到默认聊天配置', () async {
+    test('canUse：baseUrl 为空时只认语音供应商，不回落聊天配置', () async {
       final p = provider(_FakeAdapter([]), baseUrl: '');
-      // 空库：无默认聊天配置，不可用。
+      // 空库：不可用。
       expect(await p.canUse(), isFalse);
-      await repo.save(const ApiProfile(
-        id: 'c1',
-        name: 'chat',
-        baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
-        apiKey: 'sk-test',
-        model: 'm',
-        temperature: 1.0,
-        extraHeaders: '{}',
-        isDefault: true,
-      ));
-      // 有默认聊天配置：可用。
-      expect(await p.canUse(), isTrue);
+
+      // 即使有默认聊天配置，也不能拿文本供应商当语音供应商。
+      await repo.save(
+        const ApiProfile(
+          id: 'c1',
+          name: 'DeepSeek',
+          baseUrl: 'https://api.deepseek.com/v1',
+          apiKey: 'sk-test',
+          model: 'deepseek-chat',
+          temperature: 1.0,
+          extraHeaders: '{}',
+          isDefault: true,
+        ),
+      );
+      expect(await p.canUse(), isFalse);
+
+      // 注入 MiMo 语音供应商后可用。
+      final withVoice = MimoAsrProvider(
+        baseUrl: '',
+        apiKey: '',
+        model: '',
+        apiProfileGet: () async => const ApiProfile(
+          id: 'v1',
+          name: 'MiMo',
+          baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+          apiKey: 'sk-voice',
+          model: 'mimo-v2.6-flash',
+          temperature: 1.0,
+          extraHeaders: '{}',
+          isDefault: false,
+        ),
+        dio: Dio(),
+      );
+      expect(await withVoice.canUse(), isTrue);
     });
   });
 
@@ -246,7 +286,6 @@ void main() {
         baseUrl: '',
         apiKey: '',
         model: '',
-        chatProfilesRepo: repo,
         customConfigGet: () async => config,
         dio: dio,
       );
@@ -254,59 +293,64 @@ void main() {
 
     test('独立配置非空：优先于聊天配置，canUse 为真，模型名用配置值', () async {
       // 只有独立配置，没有任何聊天配置。
-      final p = customProvider(_FakeAdapter([]), config: (
-        baseUrl: 'https://voice.example.com/v1',
-        apiKey: 'sk-voice',
-        model: 'my-asr-1',
-      ));
+      final p = customProvider(
+        _FakeAdapter([]),
+        config: (
+          baseUrl: 'https://voice.example.com/v1',
+          apiKey: 'sk-voice',
+          model: 'my-asr-1',
+        ),
+      );
       expect(await p.canUse(), isTrue);
 
       // 转写请求应打到独立配置的地址，带独立 Key 与模型名。
-      final adapter = _FakeAdapter(utf8.encode(jsonEncode({
-        'choices': [
-          {
-            'message': {'content': 'hi'}
-          }
-        ],
-      })));
-      await customProvider(adapter, config: (
-        baseUrl: 'https://voice.example.com/v1',
-        apiKey: 'sk-voice',
-        model: 'my-asr-1',
-      )).transcribe([0x00]);
+      final adapter = _FakeAdapter(
+        utf8.encode(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {'content': 'hi'},
+              },
+            ],
+          }),
+        ),
+      );
+      await customProvider(
+        adapter,
+        config: (
+          baseUrl: 'https://voice.example.com/v1',
+          apiKey: 'sk-voice',
+          model: 'my-asr-1',
+        ),
+      ).transcribe([0x00]);
       final req = adapter.lastRequest!;
-      expect(req.uri.toString(), 'https://voice.example.com/v1/chat/completions');
+      expect(
+        req.uri.toString(),
+        'https://voice.example.com/v1/chat/completions',
+      );
       expect(_header(req, 'authorization'), 'Bearer sk-voice');
       expect((req.data as Map)['model'], 'my-asr-1');
     });
 
-    test('独立配置为空：回落聊天配置；两者皆无：canUse 为假', () async {
+    test('独立配置为空且无语音供应商：canUse 为假，不回落聊天配置', () async {
       final p = customProvider(_FakeAdapter([]));
       expect(await p.canUse(), isFalse);
 
-      await repo.save(const ApiProfile(
-        id: 'c1',
-        name: 'chat',
-        baseUrl: 'https://chat.example.com/v1',
-        apiKey: 'sk-chat',
-        model: 'm',
-        temperature: 1.0,
-        extraHeaders: '{}',
-        isDefault: true,
-      ));
-      expect(await p.canUse(), isTrue);
-      final adapter = _FakeAdapter(utf8.encode(jsonEncode({
-        'choices': [
-          {
-            'message': {'content': 'hi'}
-          }
-        ],
-      })));
-      await customProvider(adapter).transcribe([0x00]);
-      expect(adapter.lastRequest!.uri.toString(),
-          'https://chat.example.com/v1/chat/completions');
-      // 聊天回落档不拿聊天模型名当 ASR 模型。
-      expect((adapter.lastRequest!.data as Map)['model'], 'mimo-v2.5-asr');
+      await repo.save(
+        const ApiProfile(
+          id: 'c1',
+          name: 'DeepSeek',
+          baseUrl: 'https://api.deepseek.com/v1',
+          apiKey: 'sk-chat',
+          model: 'deepseek-chat',
+          temperature: 1.0,
+          extraHeaders: '{}',
+          isDefault: true,
+        ),
+      );
+      // 文本聊天供应商不会被拿去请求 ASR。
+      expect(await p.canUse(), isFalse);
+      await expectLater(p.transcribe([0x00]), throwsA(isA<AuthException>()));
     });
   });
 }

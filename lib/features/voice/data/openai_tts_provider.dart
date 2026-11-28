@@ -26,10 +26,14 @@ class OpenAiTtsProvider implements TtsProvider {
     required this.model,
     required this.chatProfilesRepo,
     Dio? dio,
-  }) : _dio = dio ??
-            Dio(BaseOptions(
-                connectTimeout: const Duration(seconds: 15),
-                receiveTimeout: const Duration(seconds: 60)));
+  }) : _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               connectTimeout: const Duration(seconds: 15),
+               receiveTimeout: const Duration(seconds: 60),
+             ),
+           );
 
   @override
   String get providerId => 'openai';

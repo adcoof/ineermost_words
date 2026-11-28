@@ -29,12 +29,12 @@ class CustomVoice {
   });
 
   CustomVoice copyWith({String? name, String? description}) => CustomVoice(
-        id: id,
-        name: name ?? this.name,
-        description: description ?? this.description,
-        createdAt: createdAt,
-        updatedAt: updatedAt,
-      );
+    id: id,
+    name: name ?? this.name,
+    description: description ?? this.description,
+    createdAt: createdAt,
+    updatedAt: updatedAt,
+  );
 }
 
 class CustomVoiceRepository {
@@ -65,13 +65,17 @@ class CustomVoiceRepository {
   /// 新建或更新（按 id upsert）；updatedAt 刷新为当前时间。
   Future<void> save(CustomVoice voice) async {
     final now = DateTime.now();
-    await db.into(db.customVoices).insertOnConflictUpdate(CustomVoicesCompanion(
-          id: Value(voice.id),
-          name: Value(voice.name),
-          description: Value(voice.description),
-          createdAt: Value(voice.createdAt),
-          updatedAt: Value(now),
-        ));
+    await db
+        .into(db.customVoices)
+        .insertOnConflictUpdate(
+          CustomVoicesCompanion(
+            id: Value(voice.id),
+            name: Value(voice.name),
+            description: Value(voice.description),
+            createdAt: Value(voice.createdAt),
+            updatedAt: Value(now),
+          ),
+        );
   }
 
   Future<void> delete(String id) async {
@@ -82,10 +86,10 @@ class CustomVoiceRepository {
   String newVoiceId() => newId();
 
   CustomVoice _fromRow(CustomVoiceRow row) => CustomVoice(
-        id: row.id,
-        name: row.name,
-        description: row.description,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-      );
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  );
 }
