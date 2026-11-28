@@ -35,7 +35,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -152,6 +152,15 @@ class AppDatabase extends _$AppDatabase {
       if (from < 19) {
         await m.addColumn(conversations, conversations.groupAutoReply);
         await m.addColumn(conversations, conversations.groupBanterRounds);
+      }
+      // v20：群成员独立 API 供应商。from<16 时 createTable 已带该列。
+      if (from < 20) {
+        if (from >= 16) {
+          await m.addColumn(
+            conversationParticipants,
+            conversationParticipants.apiProfileId,
+          );
+        }
       }
     },
   );

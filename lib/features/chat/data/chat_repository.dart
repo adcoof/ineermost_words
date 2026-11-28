@@ -17,10 +17,7 @@ class CrossSessionGroup {
   final Conversation conversation;
   final List<ChatMessage> messages;
 
-  const CrossSessionGroup({
-    required this.conversation,
-    required this.messages,
-  });
+  const CrossSessionGroup({required this.conversation, required this.messages});
 }
 
 class ChatRepository {
@@ -92,19 +89,21 @@ class ChatRepository {
     List<String> characterIds,
   ) async {
     await db.transaction(() async {
-      await (db.delete(db.conversationParticipants)
-            ..where((t) => t.conversationId.equals(conversationId)))
-          .go();
+      await (db.delete(
+        db.conversationParticipants,
+      )..where((t) => t.conversationId.equals(conversationId))).go();
       for (var i = 0; i < characterIds.length; i++) {
-        await db.into(db.conversationParticipants).insert(
-          ConversationParticipantsCompanion.insert(
-            id: newId(),
-            conversationId: conversationId,
-            characterId: characterIds[i],
-            sortOrder: Value(i),
-            createdAt: DateTime.now(),
-          ),
-        );
+        await db
+            .into(db.conversationParticipants)
+            .insert(
+              ConversationParticipantsCompanion.insert(
+                id: newId(),
+                conversationId: conversationId,
+                characterId: characterIds[i],
+                sortOrder: Value(i),
+                createdAt: DateTime.now(),
+              ),
+            );
       }
     });
   }
@@ -137,35 +136,33 @@ class ChatRepository {
     String characterId,
     bool enabled,
   ) async {
-    await (db.update(db.conversationParticipants)
-          ..where(
-            (t) =>
-                t.conversationId.equals(conversationId) &
-                t.characterId.equals(characterId),
-          ))
+    await (db.update(db.conversationParticipants)..where(
+          (t) =>
+              t.conversationId.equals(conversationId) &
+              t.characterId.equals(characterId),
+        ))
         .write(ConversationParticipantsCompanion(enabled: Value(enabled)));
   }
 
   /// 添加群聊成员（最多 3 人）；自动排到末尾。
-  Future<void> addParticipant(
-    String conversationId,
-    String characterId,
-  ) async {
+  Future<void> addParticipant(String conversationId, String characterId) async {
     final existing = await listParticipants(conversationId);
     if (existing.any((p) => p.characterId == characterId)) return;
     if (existing.length >= 3) {
       throw StateError('群聊最多三位角色');
     }
     final nextOrder = existing.isEmpty ? 0 : existing.last.sortOrder + 1;
-    await db.into(db.conversationParticipants).insert(
-      ConversationParticipantsCompanion.insert(
-        id: newId(),
-        conversationId: conversationId,
-        characterId: characterId,
-        sortOrder: Value(nextOrder),
-        createdAt: DateTime.now(),
-      ),
-    );
+    await db
+        .into(db.conversationParticipants)
+        .insert(
+          ConversationParticipantsCompanion.insert(
+            id: newId(),
+            conversationId: conversationId,
+            characterId: characterId,
+            sortOrder: Value(nextOrder),
+            createdAt: DateTime.now(),
+          ),
+        );
     await _setPrimaryCharacter(
       conversationId,
       existing.isEmpty ? characterId : existing.first.characterId,
@@ -177,18 +174,37 @@ class ChatRepository {
     String conversationId,
     String characterId,
   ) async {
-    await (db.delete(db.conversationParticipants)
-          ..where(
-            (t) =>
-                t.conversationId.equals(conversationId) &
-                t.characterId.equals(characterId),
-          ))
+    await (db.delete(db.conversationParticipants)..where(
+          (t) =>
+              t.conversationId.equals(conversationId) &
+              t.characterId.equals(characterId),
+        ))
         .go();
     final remaining = await listParticipants(conversationId);
     await _setPrimaryCharacter(
       conversationId,
       remaining.isEmpty ? null : remaining.first.characterId,
     );
+  }
+
+  /// 设置群成员使用的 API 供应商；null=跟随会话/默认。
+  Future<void> setParticipantApiProfile(
+    String conversationId,
+    String characterId,
+    String? apiProfileId,
+  ) async {
+    await (db.update(db.conversationParticipants)..where(
+          (t) =>
+              t.conversationId.equals(conversationId) &
+              t.characterId.equals(characterId),
+        ))
+        .write(
+          ConversationParticipantsCompanion(
+            apiProfileId: apiProfileId == null || apiProfileId.isEmpty
+                ? const Value(null)
+                : Value(apiProfileId),
+          ),
+        );
   }
 
   /// 按给定顺序重排群聊成员；主角色同步为第一位。
@@ -275,21 +291,23 @@ class ChatRepository {
         await db.into(db.messages).insert(_msgToRow(copy));
       }
       for (var i = 0; i < participants.length; i++) {
-        await db.into(db.conversationParticipants).insert(
-          ConversationParticipantsCompanion.insert(
-            id: newId(),
-            conversationId: branch.id,
-            characterId: participants[i].characterId,
-            sortOrder: Value(participants[i].sortOrder),
-            enabled: Value(participants[i].enabled),
-            createdAt: DateTime.now(),
-          ),
-        );
+        await db
+            .into(db.conversationParticipants)
+            .insert(
+              ConversationParticipantsCompanion.insert(
+                id: newId(),
+                conversationId: branch.id,
+                characterId: participants[i].characterId,
+                sortOrder: Value(participants[i].sortOrder),
+                enabled: Value(participants[i].enabled),
+                apiProfileId: Value(participants[i].apiProfileId),
+                createdAt: DateTime.now(),
+              ),
+            );
       }
     });
     return branch;
   }
-
 
   /// 群聊行为：用户发言后是否全员回复、自动拌嘴轮数。
   Future<void> setGroupSettings(
@@ -297,15 +315,18 @@ class ChatRepository {
     bool? autoReply,
     int? banterRounds,
   }) async {
-    await (db.update(db.conversations)
-          ..where((t) => t.id.equals(conversationId)))
-        .write(ConversationsCompanion(
-      groupAutoReply:
-          autoReply == null ? const Value.absent() : Value(autoReply),
-      groupBanterRounds: banterRounds == null
-          ? const Value.absent()
-          : Value(banterRounds.clamp(0, 3)),
-    ));
+    await (db.update(
+      db.conversations,
+    )..where((t) => t.id.equals(conversationId))).write(
+      ConversationsCompanion(
+        groupAutoReply: autoReply == null
+            ? const Value.absent()
+            : Value(autoReply),
+        groupBanterRounds: banterRounds == null
+            ? const Value.absent()
+            : Value(banterRounds.clamp(0, 3)),
+      ),
+    );
   }
 
   Future<void> setConversationPetModel(String id, String? petModelId) async {
@@ -349,16 +370,16 @@ class ChatRepository {
               .map((row) => row.read(db.messages.id)!)
               .get();
       if (messageIds.isNotEmpty) {
-        await (db.delete(db.messageVariants)
-              ..where((t) => t.messageId.isIn(messageIds)))
-            .go();
+        await (db.delete(
+          db.messageVariants,
+        )..where((t) => t.messageId.isIn(messageIds))).go();
       }
       await (db.delete(
         db.messages,
       )..where((t) => t.conversationId.equals(id))).go();
-      await (db.delete(db.conversationParticipants)
-            ..where((t) => t.conversationId.equals(id)))
-          .go();
+      await (db.delete(
+        db.conversationParticipants,
+      )..where((t) => t.conversationId.equals(id))).go();
       await (db.delete(db.conversations)..where((t) => t.id.equals(id))).go();
     });
   }
@@ -428,16 +449,18 @@ class ChatRepository {
   /// 追加候选并把它设为当前候选。
   Future<void> addVariant(MessageVariant variant) async {
     await db.transaction(() async {
-      await db.into(db.messageVariants).insertOnConflictUpdate(
-        MessageVariantsCompanion(
-          id: Value(variant.id),
-          messageId: Value(variant.messageId),
-          content: Value(variant.content),
-          rawContent: Value(variant.rawContent),
-          emotionEvents: Value(variant.emotionEvents),
-          createdAt: Value(variant.createdAt),
-        ),
-      );
+      await db
+          .into(db.messageVariants)
+          .insertOnConflictUpdate(
+            MessageVariantsCompanion(
+              id: Value(variant.id),
+              messageId: Value(variant.messageId),
+              content: Value(variant.content),
+              rawContent: Value(variant.rawContent),
+              emotionEvents: Value(variant.emotionEvents),
+              createdAt: Value(variant.createdAt),
+            ),
+          );
       await (db.update(db.messages)
             ..where((t) => t.id.equals(variant.messageId)))
           .write(MessagesCompanion(activeVariantId: Value(variant.id)));
@@ -722,14 +745,14 @@ class ChatRepository {
     createdAt: Value(m.createdAt),
   );
 
-  ConversationParticipant _participantFromRow(
-    ConversationParticipantRow row,
-  ) => ConversationParticipant(
-    id: row.id,
-    conversationId: row.conversationId,
-    characterId: row.characterId,
-    sortOrder: row.sortOrder,
-    enabled: row.enabled,
-    createdAt: row.createdAt,
-  );
+  ConversationParticipant _participantFromRow(ConversationParticipantRow row) =>
+      ConversationParticipant(
+        id: row.id,
+        conversationId: row.conversationId,
+        characterId: row.characterId,
+        sortOrder: row.sortOrder,
+        enabled: row.enabled,
+        apiProfileId: row.apiProfileId,
+        createdAt: row.createdAt,
+      );
 }

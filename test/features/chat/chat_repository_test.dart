@@ -20,7 +20,11 @@ void main() {
   tearDown(() => db.close());
 
   Future<Conversation> newConv({String? characterId, String id = 'c'}) =>
-      repo.createConversation(apiProfileId: 'p1', characterId: characterId, title: id);
+      repo.createConversation(
+        apiProfileId: 'p1',
+        characterId: characterId,
+        title: id,
+      );
 
   /// 直接插入消息并指定 createdAt（drift dateTime 按秒存，
   /// 依赖 insertMessage 的 DateTime.now() 无法构造确定时序）。
@@ -35,17 +39,21 @@ void main() {
     required DateTime createdAt,
   }) async {
     final text = content ?? '内容$id';
-    await db.into(db.messages).insert(MessagesCompanion(
-          id: Value(id),
-          conversationId: Value(conversationId),
-          role: Value(role.wire),
-          content: Value(text),
-          rawContent: Value(text),
-          status: Value(status.wire),
-          kind: Value(kind.wire),
-          imageSummary: Value(imageSummary),
-          createdAt: Value(createdAt),
-        ));
+    await db
+        .into(db.messages)
+        .insert(
+          MessagesCompanion(
+            id: Value(id),
+            conversationId: Value(conversationId),
+            role: Value(role.wire),
+            content: Value(text),
+            rawContent: Value(text),
+            status: Value(status.wire),
+            kind: Value(kind.wire),
+            imageSummary: Value(imageSummary),
+            createdAt: Value(createdAt),
+          ),
+        );
   }
 
   group('setConversationVoiceEnabled', () {
@@ -68,37 +76,66 @@ void main() {
 
       await insertMsg(id: 'a1', conversationId: c1.id, createdAt: t);
       await insertMsg(
-          id: 'a2', conversationId: c1.id, role: ChatRole.assistant, createdAt: t.add(const Duration(minutes: 1)));
-      await insertMsg(id: 'b1', conversationId: c2.id, createdAt: t.add(const Duration(minutes: 2)));
+        id: 'a2',
+        conversationId: c1.id,
+        role: ChatRole.assistant,
+        createdAt: t.add(const Duration(minutes: 1)),
+      );
       await insertMsg(
-          id: 'b2', conversationId: c2.id, role: ChatRole.assistant, createdAt: t.add(const Duration(minutes: 3)));
+        id: 'b1',
+        conversationId: c2.id,
+        createdAt: t.add(const Duration(minutes: 2)),
+      );
       await insertMsg(
-          id: 'b3',
-          conversationId: c2.id,
-          status: MessageStatus.streaming,
-          createdAt: t.add(const Duration(minutes: 4))); // 非 done：排除
+        id: 'b2',
+        conversationId: c2.id,
+        role: ChatRole.assistant,
+        createdAt: t.add(const Duration(minutes: 3)),
+      );
       await insertMsg(
-          id: 'b4',
-          conversationId: c2.id,
-          content: '',
-          createdAt: t.add(const Duration(minutes: 5))); // 空内容：排除
-      await insertMsg(id: 'x1', conversationId: cOther.id, createdAt: t.add(const Duration(minutes: 6)));
+        id: 'b3',
+        conversationId: c2.id,
+        status: MessageStatus.streaming,
+        createdAt: t.add(const Duration(minutes: 4)),
+      ); // 非 done：排除
+      await insertMsg(
+        id: 'b4',
+        conversationId: c2.id,
+        content: '',
+        createdAt: t.add(const Duration(minutes: 5)),
+      ); // 空内容：排除
+      await insertMsg(
+        id: 'x1',
+        conversationId: cOther.id,
+        createdAt: t.add(const Duration(minutes: 6)),
+      );
 
       final got = await repo.getRecentOtherMessages(
-          characterId: 'ch1', excludeConversationId: c1.id);
+        characterId: 'ch1',
+        excludeConversationId: c1.id,
+      );
       expect(got.map((m) => m.id), ['b1', 'b2']); // 时序升序；c1/非 done/空/他角色均排除
 
       final limited = await repo.getRecentOtherMessages(
-          characterId: 'ch1', excludeConversationId: c1.id, limit: 1);
+        characterId: 'ch1',
+        excludeConversationId: c1.id,
+        limit: 1,
+      );
       expect(limited.map((m) => m.id), ['b2']); // 只取最近 1 条
     });
 
     test('同角色无其他会话：空返回（isIn 短路）', () async {
       final c1 = await newConv(characterId: 'ch1');
-      await insertMsg(id: 'a1', conversationId: c1.id, createdAt: DateTime(2026));
+      await insertMsg(
+        id: 'a1',
+        conversationId: c1.id,
+        createdAt: DateTime(2026),
+      );
       expect(
         await repo.getRecentOtherMessages(
-            characterId: 'ch1', excludeConversationId: c1.id),
+          characterId: 'ch1',
+          excludeConversationId: c1.id,
+        ),
         isEmpty,
       );
     });
@@ -110,23 +147,32 @@ void main() {
       final t = DateTime(2026, 1, 1);
       await insertMsg(id: 'm1', conversationId: c.id, createdAt: t);
       await insertMsg(
-          id: 'm2', conversationId: c.id, createdAt: t.add(const Duration(minutes: 1)));
+        id: 'm2',
+        conversationId: c.id,
+        createdAt: t.add(const Duration(minutes: 1)),
+      );
       await insertMsg(
-          id: 'm3',
-          conversationId: c.id,
-          status: MessageStatus.error,
-          createdAt: t.add(const Duration(minutes: 2))); // 非 done：排除
+        id: 'm3',
+        conversationId: c.id,
+        status: MessageStatus.error,
+        createdAt: t.add(const Duration(minutes: 2)),
+      ); // 非 done：排除
       await insertMsg(
-          id: 'm4',
-          conversationId: c.id,
-          content: '',
-          createdAt: t.add(const Duration(minutes: 3))); // 空内容：排除
+        id: 'm4',
+        conversationId: c.id,
+        content: '',
+        createdAt: t.add(const Duration(minutes: 3)),
+      ); // 空内容：排除
 
       expect(await repo.countDoneMessagesSince(c.id, null), 2);
       expect(await repo.countDoneMessagesSince(c.id, t), 1); // 只有 m2
       expect(
-          await repo.countDoneMessagesSince(c.id, t.add(const Duration(minutes: 5))),
-          0);
+        await repo.countDoneMessagesSince(
+          c.id,
+          t.add(const Duration(minutes: 5)),
+        ),
+        0,
+      );
     });
   });
 
@@ -152,16 +198,16 @@ void main() {
 
     test('imageFilePaths：坏 JSON 解析失败按无图处理', () {
       ChatMessage msg(String imagePaths) => ChatMessage(
-            id: 'm',
-            conversationId: 'c',
-            role: ChatRole.user,
-            content: 'x',
-            rawContent: 'x',
-            emotionEvents: '[]',
-            imagePaths: imagePaths,
-            status: MessageStatus.done,
-            createdAt: DateTime(2026),
-          );
+        id: 'm',
+        conversationId: 'c',
+        role: ChatRole.user,
+        content: 'x',
+        rawContent: 'x',
+        emotionEvents: '[]',
+        imagePaths: imagePaths,
+        status: MessageStatus.done,
+        createdAt: DateTime(2026),
+      );
       expect(msg('not-json').imageFilePaths, isEmpty);
       expect(msg('{"a":1}').imageFilePaths, isEmpty); // 非数组
     });
@@ -171,29 +217,32 @@ void main() {
         String content = '正文',
         String imagePaths = '["/a.jpg"]',
         String imageSummary = '',
-      }) =>
-          ChatMessage(
-            id: 'm',
-            conversationId: 'c',
-            role: ChatRole.user,
-            content: content,
-            rawContent: content,
-            emotionEvents: '[]',
-            imagePaths: imagePaths,
-            imageSummary: imageSummary,
-            status: MessageStatus.done,
-            createdAt: DateTime(2026),
-          );
+      }) => ChatMessage(
+        id: 'm',
+        conversationId: 'c',
+        role: ChatRole.user,
+        content: content,
+        rawContent: content,
+        emotionEvents: '[]',
+        imagePaths: imagePaths,
+        imageSummary: imageSummary,
+        status: MessageStatus.done,
+        createdAt: DateTime(2026),
+      );
       // 无图：原样返回正文。
       expect(msg(imagePaths: '[]').contentWithImageNote, '正文');
       // 有图有概括：正文 + [图片：概括]。
-      expect(msg(imageSummary: '湖边的两只猫').contentWithImageNote,
-          '正文\n[图片：湖边的两只猫]');
+      expect(
+        msg(imageSummary: '湖边的两只猫').contentWithImageNote,
+        '正文\n[图片：湖边的两只猫]',
+      );
       // 有图无概括：[图片] 占位。
       expect(msg().contentWithImageNote, '正文\n[图片]');
       // 纯图空文：备注本身。
-      expect(msg(content: '', imageSummary: '一只猫').contentWithImageNote,
-          '[图片：一只猫]');
+      expect(
+        msg(content: '', imageSummary: '一只猫').contentWithImageNote,
+        '[图片：一只猫]',
+      );
       expect(msg(content: '').contentWithImageNote, '[图片]');
     });
 
@@ -215,14 +264,22 @@ void main() {
 
     test('countUserMessages：只数 role=user', () async {
       final c = await newConv();
-      await insertMsg(id: 'u1', conversationId: c.id, createdAt: DateTime(2026));
       await insertMsg(
-          id: 'a1',
-          conversationId: c.id,
-          role: ChatRole.assistant,
-          createdAt: DateTime(2026, 1, 1, 0, 1));
+        id: 'u1',
+        conversationId: c.id,
+        createdAt: DateTime(2026),
+      );
       await insertMsg(
-          id: 'u2', conversationId: c.id, createdAt: DateTime(2026, 1, 1, 0, 2));
+        id: 'a1',
+        conversationId: c.id,
+        role: ChatRole.assistant,
+        createdAt: DateTime(2026, 1, 1, 0, 1),
+      );
+      await insertMsg(
+        id: 'u2',
+        conversationId: c.id,
+        createdAt: DateTime(2026, 1, 1, 0, 2),
+      );
       expect(await repo.countUserMessages(c.id), 2);
     });
   });
@@ -231,7 +288,10 @@ void main() {
     test('insertMessage kind 默认 text、sticker 写读回环', () async {
       final c = await newConv();
       final textMsg = await repo.insertMessage(
-          conversationId: c.id, role: ChatRole.assistant, content: '你好');
+        conversationId: c.id,
+        role: ChatRole.assistant,
+        content: '你好',
+      );
       expect(textMsg.kind, MessageKind.text);
       expect((await repo.getMessage(textMsg.id))!.kind, MessageKind.text);
 
@@ -247,14 +307,14 @@ void main() {
       expect(got.imageFilePaths, ['/tmp/s.jpg']);
     });
 
-    test('getRecentOtherMessages / countDoneMessagesSince 排除贴纸行',
-        () async {
+    test('getRecentOtherMessages / countDoneMessagesSince 排除贴纸行', () async {
       final c1 = await newConv(characterId: 'ch1', id: 'c1');
       final c2 = await newConv(characterId: 'ch1', id: 'c2');
       await repo.insertMessage(
-          conversationId: c2.id,
-          role: ChatRole.assistant,
-          content: '普通回复');
+        conversationId: c2.id,
+        role: ChatRole.assistant,
+        content: '普通回复',
+      );
       await repo.insertMessage(
         conversationId: c2.id,
         role: ChatRole.assistant,
@@ -264,7 +324,9 @@ void main() {
       );
 
       final recent = await repo.getRecentOtherMessages(
-          characterId: 'ch1', excludeConversationId: c1.id);
+        characterId: 'ch1',
+        excludeConversationId: c1.id,
+      );
       expect(recent, hasLength(1));
       expect(recent.single.kind, MessageKind.text);
 
@@ -276,8 +338,7 @@ void main() {
       final c = await newConv();
       expect(c.backgroundPath, isNull);
       await repo.setConversationBackground(c.id, '/bg/a.jpg');
-      expect(
-          (await repo.getConversation(c.id))!.backgroundPath, '/bg/a.jpg');
+      expect((await repo.getConversation(c.id))!.backgroundPath, '/bg/a.jpg');
       await repo.setConversationBackground(c.id, null);
       expect((await repo.getConversation(c.id))!.backgroundPath, isNull);
     });
@@ -287,7 +348,11 @@ void main() {
     test('getDoneMessagesAfter：含纯图摘要、排除贴纸/空行/流式/旧消息', () async {
       final c = await newConv(characterId: 'ch1', id: 'c1');
       final t = DateTime(2026, 1, 1, 12);
-      await insertMsg(id: 'old', conversationId: c.id, createdAt: t.subtract(const Duration(hours: 1)));
+      await insertMsg(
+        id: 'old',
+        conversationId: c.id,
+        createdAt: t.subtract(const Duration(hours: 1)),
+      );
       await insertMsg(id: 'text1', conversationId: c.id, createdAt: t);
       await insertMsg(
         id: 'img',
@@ -338,7 +403,11 @@ void main() {
           );
       await setUpdated(c1.id, now.subtract(const Duration(minutes: 2)));
       await setUpdated(c2.id, now);
-      await setUpdated(archived.id, now.add(const Duration(minutes: 5)), archived: true);
+      await setUpdated(
+        archived.id,
+        now.add(const Duration(minutes: 5)),
+        archived: true,
+      );
       await setUpdated(current.id, now.add(const Duration(minutes: 6)));
       await setUpdated(other.id, now.add(const Duration(minutes: 7)));
 
@@ -390,18 +459,28 @@ void main() {
       final archived = await newConv(characterId: 'ch1', id: 'x');
       await (db.update(db.conversations)..where((t) => t.id.equals(a.id)))
           .write(ConversationsCompanion(updatedAt: Value(now)));
-      await (db.update(db.conversations)..where((t) => t.id.equals(b.id)))
-          .write(ConversationsCompanion(updatedAt: Value(now.add(const Duration(minutes: 1)))));
-      await (db.update(db.conversations)..where((t) => t.id.equals(archived.id)))
-          .write(ConversationsCompanion(
-            updatedAt: Value(now.add(const Duration(minutes: 2))),
-            archived: const Value(true),
-          ));
+      await (db.update(
+        db.conversations,
+      )..where((t) => t.id.equals(b.id))).write(
+        ConversationsCompanion(
+          updatedAt: Value(now.add(const Duration(minutes: 1))),
+        ),
+      );
+      await (db.update(
+        db.conversations,
+      )..where((t) => t.id.equals(archived.id))).write(
+        ConversationsCompanion(
+          updatedAt: Value(now.add(const Duration(minutes: 2))),
+          archived: const Value(true),
+        ),
+      );
 
       final list = await repo.getConversationsForCharacter('ch1');
       expect(list.map((c) => c.id), [b.id, a.id]);
-      expect(await repo.getConversationsForCharacter('ch1', limit: 1),
-          hasLength(1));
+      expect(
+        await repo.getConversationsForCharacter('ch1', limit: 1),
+        hasLength(1),
+      );
     });
   });
 
@@ -412,14 +491,18 @@ void main() {
     });
 
     test('种入 haru 行后：新会话自动绑定', () async {
-      await db.into(db.petModels).insert(PetModelsCompanion.insert(
-            id: 'haru',
-            name: 'Haru',
-            dirPath: '/x/pets/haru',
-            entryJsonPath: '/x/pets/haru/Haru.model3.json',
-            createdAt: DateTime(2026),
-            updatedAt: DateTime(2026),
-          ));
+      await db
+          .into(db.petModels)
+          .insert(
+            PetModelsCompanion.insert(
+              id: 'haru',
+              name: 'Haru',
+              dirPath: '/x/pets/haru',
+              entryJsonPath: '/x/pets/haru/Haru.model3.json',
+              createdAt: DateTime(2026),
+              updatedAt: DateTime(2026),
+            ),
+          );
       final c = await newConv();
       expect(c.petModelId, 'haru');
     });
@@ -549,10 +632,7 @@ void main() {
 
     test('createGroupConversation 至少需要两位角色', () async {
       await expectLater(
-        repo.createGroupConversation(
-          apiProfileId: 'p1',
-          characterIds: ['a'],
-        ),
+        repo.createGroupConversation(apiProfileId: 'p1', characterIds: ['a']),
         throwsArgumentError,
       );
     });
@@ -583,17 +663,51 @@ void main() {
       expect((await repo.getConversation(c.id))!.characterId, 'a');
     });
 
+    test('群成员独立供应商写读回环，并可清除/分支复制', () async {
+      final c = await repo.createGroupConversation(
+        apiProfileId: 'p1',
+        characterIds: ['a', 'b'],
+      );
+      await repo.setParticipantApiProfile(c.id, 'a', 'p2');
+      var ps = await repo.listParticipants(c.id);
+      expect(ps.firstWhere((p) => p.characterId == 'a').apiProfileId, 'p2');
+      expect(ps.firstWhere((p) => p.characterId == 'b').apiProfileId, isNull);
+
+      // 传 null = 恢复跟随会话默认。
+      await repo.setParticipantApiProfile(c.id, 'a', null);
+      ps = await repo.listParticipants(c.id);
+      expect(ps.firstWhere((p) => p.characterId == 'a').apiProfileId, isNull);
+
+      await repo.setParticipantApiProfile(c.id, 'a', 'p2');
+      await insertMsg(
+        id: 'm1',
+        conversationId: c.id,
+        content: 'hi',
+        createdAt: DateTime(2026, 1, 1, 10),
+      );
+      final branch = await repo.branchConversation(
+        sourceConversationId: c.id,
+        messageId: 'm1',
+      );
+      final branchParticipants = await repo.listParticipants(branch.id);
+      expect(
+        branchParticipants.firstWhere((p) => p.characterId == 'a').apiProfileId,
+        'p2',
+      );
+    });
+
     test('branchConversation 只复制目标及之前消息，并复制参与者', () async {
       final c = await newConv(characterId: 'a', id: 'src');
       await repo.replaceParticipants(c.id, ['a', 'b']);
       await repo.setParticipantEnabled(c.id, 'a', false);
-      await repo.setGroupSettings(
-        c.id,
-        autoReply: false,
-        banterRounds: 1,
-      );
+      await repo.setGroupSettings(c.id, autoReply: false, banterRounds: 1);
       final t = DateTime(2026, 1, 1, 10);
-      await insertMsg(id: 's1', conversationId: c.id, content: 'one', createdAt: t);
+      await insertMsg(
+        id: 's1',
+        conversationId: c.id,
+        content: 'one',
+        createdAt: t,
+      );
       await insertMsg(
         id: 's2',
         conversationId: c.id,
@@ -601,7 +715,12 @@ void main() {
         content: 'two',
         createdAt: t.add(const Duration(minutes: 1)),
       );
-      await insertMsg(id: 's3', conversationId: c.id, content: 'three', createdAt: t.add(const Duration(minutes: 2)));
+      await insertMsg(
+        id: 's3',
+        conversationId: c.id,
+        content: 'three',
+        createdAt: t.add(const Duration(minutes: 2)),
+      );
 
       final branch = await repo.branchConversation(
         sourceConversationId: c.id,

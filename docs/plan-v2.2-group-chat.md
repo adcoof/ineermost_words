@@ -1,8 +1,8 @@
 # v2.2 群聊方案（P0 已实施）
 
-> 状态：P0 已实施（2026-11-27）；schema v19；483 项测试\
+> 状态：P0 + 群成员独立供应商已实施（2026-11-28）；schema v20；484 项测试\
 > 基线：v2.1.0+15 / schema v17\
-> 目标：用户一句话后全员回复 + 可配置拌嘴轮数；再对齐成熟开源项目的发言策略
+> 目标：用户一句话后全员回复 + 可配置拌嘴轮数；群成员可各用不同模型；再对齐成熟开源项目的发言策略
 
 ---
 
@@ -33,11 +33,12 @@ v2.0 的群聊是「每轮一位角色、按参与者顺序轮转」的最小实
 
 ## 3. P0 已实施内容
 
-### 数据层（schema v19）
+### 数据层（schema v19 → v20）
 
 - `conversation_participants.enabled`：静音成员不参与自动轮转，但仍可被 Force Talk。
-- 仓储新增：`setParticipantEnabled`、`addParticipant`、`removeParticipant`、`reorderParticipants`；增删/排序同步会话主角色。
-- `createGroupConversation` 校验 2–3 位成员；分支复制保留静音状态。
+- `conversation_participants.api_profile_id`（v20）：成员独立 API 供应商；null=跟随会话。
+- 仓储新增：`setParticipantEnabled`、`setParticipantApiProfile`、`addParticipant`、`removeParticipant`、`reorderParticipants`；增删/排序同步会话主角色。
+- `createGroupConversation` 校验 2–3 位成员；分支复制保留静音状态与独立供应商。
 - `conversations.group_auto_reply`（默认开）：用户发言后是否全员依次回复。
 - `conversations.group_banter_rounds`（默认 2，0–3）：全员回复后自动拌嘴的额外轮数。
 
@@ -49,6 +50,7 @@ v2.0 的群聊是「每轮一位角色、按参与者顺序轮转」的最小实
 - `continueGroup(rounds)`：角色之间连续对话的核心；每轮重新读取历史、选下一位、追加群聊指令（你是 X，最近一条来自 Y，只回应对方，不替别人说话）。
 - 分段回复（`[P]` 与兜底补切）的每一段都写入当前 `speakerCharacterId`；表情包消息同样带发言者。
 - 记忆、世界书、上下文用量按当前发言者计算。
+- **多模型同群**：每次回复按「成员独立供应商 > 会话供应商 > 全局默认」解析；供应商被删除或未填 Key 时自动回退，不会卡住整个群。
 
 ### UI
 
@@ -57,20 +59,20 @@ v2.0 的群聊是「每轮一位角色、按参与者顺序轮转」的最小实
 - 会话页 AppBar 增加「创建群聊」入口；新会话 FAB 入口保留。
 - 消息气泡显示角色/用户头像；群聊按 speaker 取头像。
 - 成员面板增加群聊行为：全员回复开关、自动拌嘴轮数（0–3）、手动「让 TA 们聊 N 轮」。
+- 成员行副标题显示「参与轮转 / 已静音 · 供应商名」；溢出菜单「选择模型」可为该角色单独指定 API 供应商。
 
 ## 4. P1 待做
 
-1. **每个角色独立模型/供应商**：participants 增加 `api_profile_id`，成员面板选择；回复时用该成员的 API profile，实现「多个模型同群」。
-2. 发言策略：List（现状）、Manual（手动选人）、Natural（名字提及 + Talkativeness）、Selector（模型选下一位，参考 AutoGen SelectorGroupChat）。
-3. 每角色 Talkativeness 滑杆；Allow Self Responses；终止条件（max_turns / 关键词 / 模型判断）。
-4. 群聊场景 / 群备注；Swap vs Join 角色卡提示词策略；Join Prefix/Suffix。
-5. 每个角色的独立记忆摘要归属（当前按发言人加载已有记忆）。
-6. 角色专属 TTS 音色 / Live2D 模型绑定（资产工坊阶段）。
-7. 群聊关系网络、剧情状态、按发言人分支。
+1. 发言策略：List（现状）、Manual（手动选人）、Natural（名字提及 + Talkativeness）、Selector（模型选下一位，参考 AutoGen SelectorGroupChat）。
+2. 每角色 Talkativeness 滑杆；Allow Self Responses；终止条件（max_turns / 关键词 / 模型判断）。
+3. 群聊场景 / 群备注；Swap vs Join 角色卡提示词策略；Join Prefix/Suffix。
+4. 每个角色的独立记忆摘要归属（当前按发言人加载已有记忆）。
+5. 角色专属 TTS 音色 / Live2D 模型绑定（资产工坊阶段）；自动拌嘴目前不朗读，后续接入按角色音色。
+6. 群聊关系网络、剧情状态、按发言人分支。
 
 ## 5. 验证
 
 - `flutter analyze` 0。
-- 全量 **483 项测试**通过。
-- 新增覆盖：成员启停/排序/增删、主角色同步、分支保留静音、静音跳过轮转、Force Talk 只生效一轮且覆盖静音、全员回复 + 拌嘴轮数、关闭全员回复、分段 speaker、v17→v19 迁移、v18→v19 迁移、成员面板 widget。
+- 全量 **484 项测试**通过。
+- 新增覆盖：成员启停/排序/增删、主角色同步、分支保留静音/独立供应商、静音跳过轮转、Force Talk 只生效一轮且覆盖静音、全员回复 + 拌嘴轮数、关闭全员回复、分段 speaker、成员独立供应商与回退、v17→v19 迁移、v18→v19 迁移、v19→v20 迁移、成员面板 widget。
 - 真机（MuMu 360dp）：创建两人群聊、群标题/头像、成员面板、Force Talk、用户一句「hello」后两角色都回复并连续拌嘴、头像与发言者正确。

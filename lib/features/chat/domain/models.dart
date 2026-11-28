@@ -223,6 +223,9 @@ class ConversationParticipant {
   /// 是否参与自动轮转；静音成员仍可被强制发言。
   final bool enabled;
 
+  /// 该成员使用的 API 供应商 id；null=跟随会话/默认。
+  final String? apiProfileId;
+
   final DateTime createdAt;
 
   const ConversationParticipant({
@@ -231,6 +234,7 @@ class ConversationParticipant {
     required this.characterId,
     required this.sortOrder,
     this.enabled = true,
+    this.apiProfileId,
     required this.createdAt,
   });
 }

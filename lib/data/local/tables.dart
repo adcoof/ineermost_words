@@ -124,6 +124,9 @@ class ConversationParticipants extends Table {
   /// 是否参与自动轮转（v18）。静音成员仍可被“让 TA 回复”强制发言。
   BoolColumn get enabled => boolean().withDefault(const Constant(true))();
 
+  /// 该成员使用的 API 供应商 id（v20）；null=跟随会话/默认。
+  TextColumn get apiProfileId => text().nullable()();
+
   DateTimeColumn get createdAt => dateTime()();
 
   @override

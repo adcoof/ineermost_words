@@ -34,6 +34,7 @@ class _ScriptedApi implements ChatApiClient {
   int calls = 0;
   final List<int?> maxTokensHistory = [];
   final List<List<ApiMessage>> sentMessages = [];
+  final List<ApiProfile> profileHistory = [];
 
   @override
   Stream<ChatDelta> streamChat({
@@ -46,6 +47,7 @@ class _ScriptedApi implements ChatApiClient {
   }) {
     maxTokensHistory.add(maxTokens);
     sentMessages.add(List<ApiMessage>.from(messages));
+    profileHistory.add(profile);
     final index = calls < responses.length ? calls : responses.length - 1;
     calls++;
     return responses[index]();
@@ -104,15 +106,14 @@ void main() {
     isDefault: true,
   );
 
-  _Responder text(String value, {String finish = 'stop'}) => () =>
-      Stream.fromIterable([
+  _Responder text(String value, {String finish = 'stop'}) =>
+      () => Stream.fromIterable([
         ChatDelta(content: value),
         ChatDelta(finishReason: finish),
       ]);
 
-  _Responder empty({String? finish}) => () => Stream.fromIterable([
-    ChatDelta(finishReason: finish),
-  ]);
+  _Responder empty({String? finish}) =>
+      () => Stream.fromIterable([ChatDelta(finishReason: finish)]);
 
   setUp(() async {
     db = AppDatabase.forTesting(NativeDatabase.memory());
@@ -250,7 +251,10 @@ void main() {
     expect(all, hasLength(1));
     expect(all.single.role, ChatRole.user);
     expect(container.read(chatControllerProvider).errorText, isNotNull);
-    expect(container.read(chatControllerProvider).errorText, contains('没有返回内容'));
+    expect(
+      container.read(chatControllerProvider).errorText,
+      contains('没有返回内容'),
+    );
   });
 
   test('关闭自动重试：空流只调用一次', () async {
@@ -274,10 +278,11 @@ void main() {
   });
 
   test('reasoning-only：正文不误写推理内容，提示检查输出预算', () async {
-    _Responder reasoningOnly() => () => Stream.fromIterable([
-      const ChatDelta(reasoning: '让我想想'),
-      const ChatDelta(finishReason: 'stop'),
-    ]);
+    _Responder reasoningOnly() =>
+        () => Stream.fromIterable([
+          const ChatDelta(reasoning: '让我想想'),
+          const ChatDelta(finishReason: 'stop'),
+        ]);
     api.responses = [reasoningOnly(), reasoningOnly()];
     await controller.send('hi');
 
@@ -331,9 +336,7 @@ void main() {
   });
 
   test('模型输出 [P] 分段：落两条消息，不触发兜底补切', () async {
-    api.responses = [
-      text('第一段\n[P]\n第二段\n'),
-    ];
+    api.responses = [text('第一段\n[P]\n第二段\n')];
     await controller.send('hi');
 
     final replies = await assistantMessages();
@@ -461,6 +464,127 @@ void main() {
       expect(assistants.map((m) => m.speakerCharacterId), ['a', 'b']);
     });
 
+    test('群成员独立供应商优先于会话供应商', () async {
+      const other = ApiProfile(
+        id: 'p2',
+        name: '另一个供应商',
+        baseUrl: 'https://example.com/v1',
+        apiKey: 'sk-test-2',
+        model: 'm2',
+        temperature: 0.8,
+        maxTokens: 512,
+        extraHeaders: '{}',
+        isDefault: false,
+      );
+      await profileRepo.save(other);
+      await seedChar('a', '角色A');
+      await seedChar('b', '角色B');
+      final conv = await chatRepo.createGroupConversation(
+        apiProfileId: 'p1',
+        characterIds: ['a', 'b'],
+      );
+      await chatRepo.setParticipantApiProfile(conv.id, 'b', 'p2');
+      controller.bindConversation(conv.id);
+      api.responses = [text('from A'), text('from B')];
+
+      await controller.send('hi');
+      await controller.send('again');
+
+      // A 跟随会话 p1，B 使用自己的 p2。
+      expect(api.profileHistory.map((p) => p.id).toList(), ['p1', 'p2']);
+    });
+
+    test('群成员供应商被删除时回退会话供应商', () async {
+      await seedChar('a', '角色A');
+      await seedChar('b', '角色B');
+      final conv = await chatRepo.createGroupConversation(
+        apiProfileId: 'p1',
+        characterIds: ['a', 'b'],
+      );
+      await chatRepo.setParticipantApiProfile(conv.id, 'b', 'ghost');
+      controller.bindConversation(conv.id);
+      api.responses = [text('from A'), text('from B')];
+
+      await controller.send('hi');
+      await controller.send('again');
+
+      expect(api.profileHistory.map((p) => p.id).toList(), ['p1', 'p1']);
+    });
+
+    test('continueGroup 每一轮使用当前发言角色的供应商', () async {
+      const other = ApiProfile(
+        id: 'p2',
+        name: '另一个供应商',
+        baseUrl: 'https://example.com/v1',
+        apiKey: 'sk-test-2',
+        model: 'm2',
+        temperature: 0.8,
+        maxTokens: 512,
+        extraHeaders: '{}',
+        isDefault: false,
+      );
+      await profileRepo.save(other);
+      await seedChar('a', '角色A');
+      await seedChar('b', '角色B');
+      final conv = await chatRepo.createGroupConversation(
+        apiProfileId: 'p1',
+        characterIds: ['a', 'b'],
+      );
+      await chatRepo.setParticipantApiProfile(conv.id, 'b', 'p2');
+      controller.bindConversation(conv.id);
+      api.responses = [text('A 对 B 说'), text('B 回 A')];
+
+      await controller.continueGroup(rounds: 2);
+
+      expect(api.profileHistory.map((p) => p.id).toList(), ['p1', 'p2']);
+    });
+
+    test('重新生成群消息沿用该发言人的角色卡与供应商', () async {
+      const other = ApiProfile(
+        id: 'p2',
+        name: '另一个供应商',
+        baseUrl: 'https://example.com/v1',
+        apiKey: 'sk-test-2',
+        model: 'm2',
+        temperature: 0.8,
+        maxTokens: 512,
+        extraHeaders: '{}',
+        isDefault: false,
+      );
+      await profileRepo.save(other);
+      await seedChar('a', '角色A');
+      await seedChar('b', '角色B');
+      final conv = await chatRepo.createGroupConversation(
+        apiProfileId: 'p1',
+        characterIds: ['a', 'b'],
+      );
+      await chatRepo.setParticipantApiProfile(conv.id, 'b', 'p2');
+      controller.bindConversation(conv.id);
+      await chatRepo.insertMessage(
+        conversationId: conv.id,
+        role: ChatRole.user,
+        content: 'hi',
+        rawContent: 'hi',
+      );
+      final message = await chatRepo.insertMessage(
+        conversationId: conv.id,
+        role: ChatRole.assistant,
+        content: 'B 旧回复',
+        rawContent: 'B 旧回复',
+        status: MessageStatus.done,
+        speakerCharacterId: 'b',
+      );
+      api.responses = [text('B 新回复')];
+
+      expect(await controller.regenerateMessage(message.id), isTrue);
+
+      // 用的是 B 自己的供应商，而不是会话的 p1。
+      expect(api.profileHistory.single.id, 'p2');
+      // 系统提示按 B 的角色卡组装，而不是会话主角色 A。
+      expect(api.sentMessages.single.first.content.contains('名字：角色B'), isTrue);
+      expect((await chatRepo.getMessage(message.id))!.speakerCharacterId, 'b');
+    });
+
     test('静音成员跳过自动轮转', () async {
       await seedChar('a', '角色A');
       await seedChar('b', '角色B');
@@ -495,18 +619,12 @@ void main() {
       var assistants = await assistantMessages();
       expect(assistants.single.speakerCharacterId, 'b');
       // 强制标记在发送后清空。
-      expect(
-        container.read(chatControllerProvider).forcedSpeakerId,
-        isNull,
-      );
+      expect(container.read(chatControllerProvider).forcedSpeakerId, isNull);
 
       await controller.send('again');
       assistants = await assistantMessages();
       // B 被静音，强制只作用一轮；下一轮自动轮转回到 A。
-      expect(
-        assistants.map((m) => m.speakerCharacterId).toList(),
-        ['b', 'a'],
-      );
+      expect(assistants.map((m) => m.speakerCharacterId).toList(), ['b', 'a']);
     });
 
     test('群聊分段回复的每一段都带当前 speaker', () async {
@@ -524,10 +642,7 @@ void main() {
 
       final assistants = await assistantMessages();
       expect(assistants, hasLength(2));
-      expect(
-        assistants.map((m) => m.speakerCharacterId).toList(),
-        ['b', 'b'],
-      );
+      expect(assistants.map((m) => m.speakerCharacterId).toList(), ['b', 'b']);
     });
 
     test('maybeAutoContinueGroup：用户一句后补齐全员回复 + 拌嘴轮数', () async {
@@ -538,23 +653,21 @@ void main() {
         characterIds: ['a', 'b'],
       );
       controller.bindConversation(conv.id);
-      api.responses = [
-        text('A 首条'),
-        text('B 回复'),
-        text('A 拌嘴'),
-        text('B 拌嘴'),
-      ];
+      api.responses = [text('A 首条'), text('B 回复'), text('A 拌嘴'), text('B 拌嘴')];
 
       await controller.send('hi');
       await controller.maybeAutoContinueGroup();
 
       final all = await chatRepo.watchMessages(conv.id).first;
-      final assistants =
-          all.where((m) => m.role == ChatRole.assistant).toList();
-      expect(
-        assistants.map((m) => m.speakerCharacterId).toList(),
-        ['a', 'b', 'a', 'b'],
-      );
+      final assistants = all
+          .where((m) => m.role == ChatRole.assistant)
+          .toList();
+      expect(assistants.map((m) => m.speakerCharacterId).toList(), [
+        'a',
+        'b',
+        'a',
+        'b',
+      ]);
       expect(all.where((m) => m.role == ChatRole.user), hasLength(1));
     });
 
@@ -590,12 +703,10 @@ void main() {
 
       final all = await chatRepo.watchMessages(conv.id).first;
       expect(all.where((m) => m.role == ChatRole.user), isEmpty);
-      final assistants =
-          all.where((m) => m.role == ChatRole.assistant).toList();
-      expect(
-        assistants.map((m) => m.speakerCharacterId).toList(),
-        ['a', 'b'],
-      );
+      final assistants = all
+          .where((m) => m.role == ChatRole.assistant)
+          .toList();
+      expect(assistants.map((m) => m.speakerCharacterId).toList(), ['a', 'b']);
       // 第二次请求带群聊指令，并要求回应上一角色。
       final secondPrompt = api.sentMessages[1];
       expect(
@@ -626,10 +737,7 @@ void main() {
 
       final assistants = await assistantMessages();
       expect(assistants, hasLength(2));
-      expect(
-        assistants.map((m) => m.speakerCharacterId).toList(),
-        ['a', 'a'],
-      );
+      expect(assistants.map((m) => m.speakerCharacterId).toList(), ['a', 'a']);
     });
 
     test('群聊历史把其他角色发言转成带名字的 user', () async {
@@ -673,5 +781,4 @@ void main() {
       expect(msgs.map((m) => m.content), ['起点']);
     });
   });
-
 }

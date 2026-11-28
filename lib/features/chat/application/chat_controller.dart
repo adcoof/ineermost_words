@@ -18,6 +18,8 @@ import '../../characters/application/lore_recall.dart';
 import '../../characters/application/prompt_assembler.dart';
 import '../../characters/domain/character.dart';
 import '../../characters/domain/memory_fact.dart';
+import '../../settings/data/api_profile_repository.dart';
+import '../../settings/domain/api_profile.dart';
 import '../data/chat_api_client.dart';
 import '../domain/models.dart';
 import 'emotion_tag_parser.dart';
@@ -238,12 +240,18 @@ class ChatController extends Notifier<ChatUiState> {
           '请只以【${character.name}】的身份自然回应对方，推动对话；'
           '不要替其他角色说话，不要复述，不要写旁白总结。';
 
-      var profile = conv.apiProfileId.isEmpty
-          ? null
-          : await profileRepo.getById(conv.apiProfileId);
-      if (profile == null || profile.apiKey.trim().isEmpty) {
-        profile = await profileRepo.getDefault();
+      String? participantProfileId;
+      for (final participant in participants) {
+        if (participant.characterId == character.id) {
+          participantProfileId = participant.apiProfileId;
+          break;
+        }
       }
+      final profile = await _resolveProfile(
+        conversationProfileId: conv.apiProfileId,
+        participantProfileId: participantProfileId,
+        profileRepo: profileRepo,
+      );
       if (profile == null || profile.apiKey.trim().isEmpty) {
         if (_sendSeq == seq) {
           state = state.copyWith(
@@ -288,8 +296,7 @@ class ChatController extends Notifier<ChatUiState> {
           if (text == null || text.isEmpty) continue;
           raw.write(text);
           final now = DateTime.now();
-          if (now.difference(lastFlush) >=
-              const Duration(milliseconds: 150)) {
+          if (now.difference(lastFlush) >= const Duration(milliseconds: 150)) {
             lastFlush = now;
             await chatRepo.updateMessage(
               assistant.id,
@@ -382,8 +389,7 @@ class ChatController extends Notifier<ChatUiState> {
     final messages = await chatRepo.watchMessages(conversationId).first;
     if (messages.isEmpty) return;
     final last = messages.last;
-    if (last.role != ChatRole.assistant ||
-        last.status != MessageStatus.done) {
+    if (last.role != ChatRole.assistant || last.status != MessageStatus.done) {
       return;
     }
     final extra = (enabled - 1) + conv.groupBanterRounds.clamp(0, 3);
@@ -471,6 +477,28 @@ class ChatController extends Notifier<ChatUiState> {
         else
           m,
     ];
+  }
+
+  /// 解析某次回复使用的 API 供应商：
+  /// 群成员独立供应商 > 会话供应商 > 全局默认。
+  Future<ApiProfile?> _resolveProfile({
+    required String conversationProfileId,
+    String? participantProfileId,
+    required ApiProfileRepository profileRepo,
+  }) async {
+    if (participantProfileId != null && participantProfileId.isNotEmpty) {
+      final selected = await profileRepo.getById(participantProfileId);
+      if (selected != null && selected.apiKey.trim().isNotEmpty) {
+        return selected;
+      }
+    }
+    var profile = conversationProfileId.isEmpty
+        ? null
+        : await profileRepo.getById(conversationProfileId);
+    if (profile == null || profile.apiKey.trim().isEmpty) {
+      profile = await profileRepo.getDefault();
+    }
+    return profile;
   }
 
   /// 按当前会话/角色/历史组装提示词，返回消息与分类用量。
@@ -717,18 +745,22 @@ class ChatController extends Notifier<ChatUiState> {
       ),
     );
 
-    // 5. 解析 profile。旧会话可能 pin 了已删除/未填 Key 的供应商，回退默认。
-    final pinnedId = conv?.apiProfileId ?? '';
-    var profile = pinnedId.isEmpty ? null : await profileRepo.getById(pinnedId);
-    if (profile == null || profile.apiKey.trim().isEmpty) {
-      final fallback = await profileRepo.getDefault();
-      if (fallback != null) {
-        if (pinnedId.isNotEmpty && fallback.id != pinnedId) {
-          debugPrint('会话 $activeConvId 的供应商 $pinnedId 不可用，改用默认 ${fallback.id}');
+    // 5. 解析 profile：群成员独立供应商 > 会话供应商 > 默认。
+    //    旧会话可能 pin 了已删除/未填 Key 的供应商，回退默认。
+    String? speakerProfileId;
+    if (character != null) {
+      for (final participant in participants) {
+        if (participant.characterId == character.id) {
+          speakerProfileId = participant.apiProfileId;
+          break;
         }
-        profile = fallback;
       }
     }
+    final profile = await _resolveProfile(
+      conversationProfileId: conv?.apiProfileId ?? '',
+      participantProfileId: speakerProfileId,
+      profileRepo: profileRepo,
+    );
     if (profile == null || profile.apiKey.trim().isEmpty) {
       await chatRepo.updateMessage(
         assistant.id,
@@ -914,12 +946,9 @@ class ChatController extends Notifier<ChatUiState> {
 
     /// 消费一轮流，返回正文/原始标签/推理/结束原因，供空回复兜底判断。
     Future<
-        ({
-          bool gotContent,
-          bool gotRaw,
-          bool gotReasoning,
-          String? finishReason,
-        })> consumeOnce({int? maxTokens}) async {
+      ({bool gotContent, bool gotRaw, bool gotReasoning, String? finishReason})
+    >
+    consumeOnce({int? maxTokens}) async {
       resetAttempt();
       String? finishReason;
       var gotReasoning = false;
@@ -977,7 +1006,8 @@ class ChatController extends Notifier<ChatUiState> {
         bool gotRaw,
         bool gotReasoning,
         String? finishReason,
-      }) outcome;
+      })
+      outcome;
 
       while (true) {
         outcome = await consumeOnce(
@@ -1000,8 +1030,9 @@ class ChatController extends Notifier<ChatUiState> {
             _sendSeq == seq &&
             !cancelToken.isCancelled;
         if (canRetry) {
-          canRetry =
-              await ref.read(appSettingsRepositoryProvider).autoRetryEnabled();
+          canRetry = await ref
+              .read(appSettingsRepositoryProvider)
+              .autoRetryEnabled();
         }
         if (!canRetry) break;
 
@@ -1181,17 +1212,30 @@ class ChatController extends Notifier<ChatUiState> {
     final windowTokens = await settings.contextWindowTokens();
     final otherTokens = await settings.contextWindowOtherTokens();
 
-    final Character? character = conversation.characterId == null
+    // 群聊重新生成要沿用这条消息的发言人，而不是会话主角色。
+    final speakerId = message.speakerCharacterId ?? conversation.characterId;
+    final Character? character = speakerId == null
         ? null
-        : await ref
-              .read(characterRepositoryProvider)
-              .getById(conversation.characterId!);
+        : await ref.read(characterRepositoryProvider).getById(speakerId);
+    final participants = await repo.listParticipants(conversation.id);
+    final participantCharacters = <String, Character>{};
+    for (final participant in participants) {
+      final c = await ref
+          .read(characterRepositoryProvider)
+          .getById(participant.characterId);
+      if (c != null) participantCharacters[c.id] = c;
+    }
+    final promptHistory = _transformGroupHistory(
+      before,
+      participants: participants,
+      character: character,
+      participantCharacters: participantCharacters,
+    );
     final List<ApiMessage> apiMessages;
     if (character == null) {
-      apiMessages = PromptAssembler().assembleBare(
-        history: before,
-        tokenBudget: windowTokens,
-      ).messages;
+      apiMessages = PromptAssembler()
+          .assembleBare(history: promptHistory, tokenBudget: windowTokens)
+          .messages;
     } else {
       var memorySummary = '';
       var userSummary = '';
@@ -1225,25 +1269,35 @@ class ChatController extends Notifier<ChatUiState> {
             .listForCharacter(character.id, enabledOnly: true),
         query: recallQuery,
       );
-      apiMessages = PromptAssembler().assembleDetailed(
-        character: character,
-        history: before,
-        memorySummary: memorySummary,
-        pastSessions: pastSessions,
-        facts: facts,
-        lore: lore,
-        userSummary: userSummary,
-        tokenBudget: windowTokens,
-        otherTokenBudget: otherTokens,
-      ).messages;
+      apiMessages = PromptAssembler()
+          .assembleDetailed(
+            character: character,
+            history: promptHistory,
+            memorySummary: memorySummary,
+            pastSessions: pastSessions,
+            facts: facts,
+            lore: lore,
+            userSummary: userSummary,
+            tokenBudget: windowTokens,
+            otherTokenBudget: otherTokens,
+          )
+          .messages;
     }
 
-    var profile = conversation.apiProfileId.isEmpty
-        ? null
-        : await profileRepo.getById(conversation.apiProfileId);
-    if (profile == null || profile.apiKey.trim().isEmpty) {
-      profile = await profileRepo.getDefault();
+    String? speakerProfileId;
+    if (character != null) {
+      for (final participant in participants) {
+        if (participant.characterId == character.id) {
+          speakerProfileId = participant.apiProfileId;
+          break;
+        }
+      }
     }
+    final profile = await _resolveProfile(
+      conversationProfileId: conversation.apiProfileId,
+      participantProfileId: speakerProfileId,
+      profileRepo: profileRepo,
+    );
     if (profile == null || profile.apiKey.trim().isEmpty) {
       if (state.conversationId == conversation.id) {
         state = state.copyWith(errorText: '请先在设置中添加 API 供应商配置');
@@ -1267,10 +1321,7 @@ class ChatController extends Notifier<ChatUiState> {
       status: MessageStatus.streaming,
     );
     if (state.conversationId == conversation.id) {
-      state = state.copyWith(
-        streamingMessageId: messageId,
-        clearError: true,
-      );
+      state = state.copyWith(streamingMessageId: messageId, clearError: true);
     }
 
     final buf = StringBuffer();
@@ -1501,12 +1552,7 @@ bool _isRetryableFinish(String? finish) =>
 
 /// 空回复的面向用户提示。
 String _emptyReplyText(
-  ({
-    bool gotContent,
-    bool gotRaw,
-    bool gotReasoning,
-    String? finishReason,
-  })
+  ({bool gotContent, bool gotRaw, bool gotReasoning, String? finishReason})
   outcome,
 ) {
   if (outcome.finishReason == 'content_filter') {

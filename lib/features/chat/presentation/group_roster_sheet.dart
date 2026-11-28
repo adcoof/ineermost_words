@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/providers.dart';
 import '../../characters/domain/character.dart';
 import '../../characters/presentation/character_avatar.dart';
+import '../../settings/domain/api_profile.dart';
 import '../domain/models.dart';
 
 Future<bool> showGroupRosterSheet(
@@ -51,6 +52,7 @@ class GroupRosterSheet extends ConsumerStatefulWidget {
 class _GroupRosterSheetState extends ConsumerState<GroupRosterSheet> {
   List<ConversationParticipant> _participants = const [];
   Map<String, Character> _characters = const {};
+  List<ApiProfile> _apiProfiles = const [];
   bool _autoReply = true;
   int _banterRounds = 2;
   bool _loading = true;
@@ -66,13 +68,14 @@ class _GroupRosterSheetState extends ConsumerState<GroupRosterSheet> {
   Future<void> _load() async {
     final chatRepo = ref.read(chatRepositoryProvider);
     final participants = await chatRepo.listParticipants(widget.conversationId);
-    final conversation =
-        await chatRepo.getConversation(widget.conversationId);
+    final conversation = await chatRepo.getConversation(widget.conversationId);
     final all = await ref.read(characterRepositoryProvider).listCharacters();
+    final apiProfiles = await ref.read(apiProfileRepositoryProvider).getAll();
     if (!mounted) return;
     setState(() {
       _participants = participants;
       _characters = {for (final c in all) c.id: c};
+      _apiProfiles = apiProfiles;
       _autoReply = conversation?.groupAutoReply ?? true;
       _banterRounds = conversation?.groupBanterRounds ?? 2;
       _loading = false;
@@ -152,9 +155,9 @@ class _GroupRosterSheetState extends ConsumerState<GroupRosterSheet> {
     reordered.insert(target, item);
     await _run(() async {
       await ref.read(chatRepositoryProvider).reorderParticipants(
-            widget.conversationId,
-            [for (final p in reordered) p.characterId],
-          );
+        widget.conversationId,
+        [for (final p in reordered) p.characterId],
+      );
       await _afterChange();
     });
   }
@@ -191,16 +194,70 @@ class _GroupRosterSheetState extends ConsumerState<GroupRosterSheet> {
     });
   }
 
+  Future<void> _pickModel(ConversationParticipant participant) async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(title: Text('选择角色模型')),
+            ListTile(
+              title: const Text('跟随会话默认'),
+              subtitle: const Text('不单独指定，使用会话绑定的供应商'),
+              trailing: participant.apiProfileId == null
+                  ? const Icon(Icons.check)
+                  : null,
+              onTap: () => Navigator.pop(context, ''),
+            ),
+            for (final profile in _apiProfiles)
+              ListTile(
+                title: Text(profile.name),
+                subtitle: Text(
+                  '${profile.model} · ${profile.baseUrl}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: participant.apiProfileId == profile.id
+                    ? const Icon(Icons.check)
+                    : null,
+                onTap: () => Navigator.pop(context, profile.id),
+              ),
+            if (_apiProfiles.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('还没有 API 供应商，请先在设置中添加'),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null) return;
+    final id = selected.isEmpty ? null : selected;
+    if (id == participant.apiProfileId) return;
+    await _run(() async {
+      await ref
+          .read(chatRepositoryProvider)
+          .setParticipantApiProfile(
+            widget.conversationId,
+            participant.characterId,
+            id,
+          );
+      _changed = true;
+      await _load();
+    });
+  }
+
   Future<void> _add() async {
     if (_participants.length >= 3) {
       _snack('群聊最多三位角色');
       return;
     }
     final existing = {for (final p in _participants) p.characterId};
-    final candidates = _characters.values
-        .where((c) => !existing.contains(c.id))
-        .toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
+    final candidates =
+        _characters.values.where((c) => !existing.contains(c.id)).toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
     if (candidates.isEmpty) {
       _snack('没有可添加的角色');
       return;
@@ -265,8 +322,7 @@ class _GroupRosterSheetState extends ConsumerState<GroupRosterSheet> {
                 ),
                 const Spacer(),
                 TextButton.icon(
-                  onPressed:
-                      _busy || _participants.length >= 3 ? null : _add,
+                  onPressed: _busy || _participants.length >= 3 ? null : _add,
                   icon: const Icon(Icons.person_add_alt_1, size: 18),
                   label: const Text('添加'),
                 ),
@@ -322,6 +378,13 @@ class _GroupRosterSheetState extends ConsumerState<GroupRosterSheet> {
                   itemBuilder: (context, index) {
                     final participant = _participants[index];
                     final character = _characters[participant.characterId];
+                    String? modelName;
+                    for (final profile in _apiProfiles) {
+                      if (profile.id == participant.apiProfileId) {
+                        modelName = profile.name;
+                        break;
+                      }
+                    }
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: CharacterAvatar(
@@ -333,7 +396,10 @@ class _GroupRosterSheetState extends ConsumerState<GroupRosterSheet> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       subtitle: Text(
-                        participant.enabled ? '参与轮转' : '已静音（仍可强制发言）',
+                        '${participant.enabled ? '参与轮转' : '已静音（仍可强制发言）'}'
+                        ' · ${modelName ?? '跟随会话'}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: participant.enabled
                               ? theme.colorScheme.onSurfaceVariant
@@ -356,11 +422,16 @@ class _GroupRosterSheetState extends ConsumerState<GroupRosterSheet> {
                           PopupMenuButton<String>(
                             enabled: !_busy,
                             onSelected: (value) {
+                              if (value == 'model') _pickModel(participant);
                               if (value == 'up') _reorder(index, -1);
                               if (value == 'down') _reorder(index, 1);
                               if (value == 'remove') _remove(participant);
                             },
                             itemBuilder: (_) => [
+                              const PopupMenuItem(
+                                value: 'model',
+                                child: Text('选择模型'),
+                              ),
                               if (index > 0)
                                 const PopupMenuItem(
                                   value: 'up',
